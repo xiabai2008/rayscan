@@ -1,19 +1,21 @@
-# WVS - Web Vulnerability Scanner 🚀
+# RayScan 1.0 🚀
 
-> **最新版本：v19.2** | 一个功能强大的 Web 漏洞扫描器
+> **前身：WVS v19.2** | 一个功能强大的 Web 漏洞扫描器
+>
+> *RayScan 是 WVS 系列正式开源后的新名字，致敬过去 19 个版本的迭代积累。*
 
 ## 📋 功能特性
 
-- **SQL 注入检测** - 支持多种注入类型和payload
-- **XSS 检测** - 反射型/存储型/DOM型
+- **SQL 注入检测** — error-based / union / boolean-blind / time-based / stacked
+- **XSS 检测** — 反射型 / 存储型 / DOM 型
 - **命令注入 (CMDi) 检测**
-- **文件包含 (LFI/RFI) 检测**
-- **SSRF/XXE 检测**
-- **敏感信息泄露检测**
-- **WAF 绕过**
-- **API 扫描**
-- **JSPathFinder** - JavaScript 端点发现
+- **文件包含 (LFI) 检测**
+- **SSRF / XXE 检测**
 - **RCE 检测**
+- **敏感信息泄露检测**
+- **WAF 检测与绕过**
+- **API 安全扫描**
+- **JSPathFinder** — JavaScript 端点发现
 - **第三方工具集成**（Nuclei, sqlmap, ffuf, Wappalyzer）
 - **多种报告格式**（HTML, JSON, CSV, Markdown, Console）
 
@@ -36,31 +38,27 @@ python wvs_gui.py
 ## 📂 项目结构
 
 ```
-WVS_all/
-├── wvs/                       # 核心扫描库（v19.2）
+RayScan/
+├── wvs/                       # 核心扫描库
 ├── scripts/                   # 扫描脚本
 ├── scan_reports/              # 扫描报告
 ├── examples/                  # 示例代码
 ├── analysis/                  # 项目分析文档
 ├── docs/                      # 技术文档
-├── archive/                   # 📦 历史版本归档
+├── archive/                   # 📦 WVS 历史版本归档
 │   ├── v19/
 │   ├── v18.4/
 │   ├── v18/
-│   ├── v17/
-│   ├── v16/
-│   ├── v15.0/
-│   ├── v1_v15_complete/
-│   └── ...
+│   ├── ...
 ├── shared_components/         # 共享组件
 ├── tools/                     # 工具脚本
 ├── version_diffs/             # 版本差异分析
 ├── full_scan.py               # 全量扫描入口
 ├── quick_scan.py              # 快速扫描入口
-├── scan_dvwa.py               # DVWA 靶场扫描
-├── scan_dvwa_v19.2.py         # DVWA 扫描（v19.2 优化版）
 ├── wvs_gui.py                 # GUI 界面
 ├── pyproject.toml             # 项目配置
+├── LICENSE                    # MIT 许可证
+├── RENAMED_TO_RAYSCAN.md      # 更名记
 └── .gitignore
 ```
 
@@ -68,30 +66,31 @@ WVS_all/
 
 | 能力 | 状态 |
 |------|------|
-| SQL 注入 | ✅ 高精度 |
-| XSS | ✅ 高精度 |
+| SQL 注入 | ✅ error-based / union / boolean-blind / time-based |
+| XSS | ✅ 反射型 / 存储型 |
 | 命令注入 | ✅ 高精度 |
-| LFI/RFI | ✅ 高精度 |
+| LFI | ✅ 支持 |
 | SSRF | ✅ 支持 |
 | XXE | ✅ 支持 |
-| 敏感信息 | ✅ 高覆盖 |
+| RCE | ✅ 支持 |
+| 敏感信息泄露 | ✅ 高覆盖 |
 | WAF 绕过 | ✅ 多策略 |
 | API 扫描 | ✅ 支持 |
-| RCE | ✅ 支持 |
-| 第三方集成 | ✅ Nuclei, sqlmap, ffuf |
+| 第三方集成 | ✅ Nuclei, sqlmap, ffuf, Wappalyzer |
 
 ## ⚙️ 版本历史
 
 | 版本 | 说明 |
 |------|------|
-| **v19.2** | **当前最新版** - 性能优化 + bug修复 + 新检测模块 |
-| v19 | 扫描引擎重构，集成框架升级 |
-| v18.4 | 企业级扫描能力完善 |
-| v18 | 高级检测模块 + 性能优化 |
-| v17 | 模块化架构重构 |
-| v16 | 插件系统 + 多报告格式 |
-| v15 | 基础扫描框架搭建 |
-| v1~14 | 早期版本开发迭代 |
+| **RayScan 1.0** | **正式开源版（基于 WVS v19.2）** |
+| WVS v19 / v19.2 | 扫描引擎重构，集成框架升级 |
+| WVS v18 / v18.4 | 高级检测模块 + 企业级扫描能力 |
+| WVS v17 | 模块化架构重构 |
+| WVS v16 | 插件系统 + 多报告格式 |
+| WVS v15 | 基础扫描框架搭建 |
+| WVS v1~14 | 早期版本开发迭代 |
+
+详见 [更名记](RENAMED_TO_RAYSCAN.md)
 
 ## ⚠️ 免责声明
 
@@ -102,4 +101,4 @@ WVS_all/
 
 ## 📄 License
 
-MIT License
+MIT License — Copyright (c) 2026 xiabai2004

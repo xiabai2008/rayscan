@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wvs"
-version = "19.2.0"
-description = "A practical, well-architected web vulnerability scanner"
+name = "rayscan"
+version = "1.0.0"
+description = "RayScan 1.0 — A practical web vulnerability scanner (based on WVS v19.2)"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "WVS Team", email = "wvs@example.com"}
+    {name = "xiabai2004"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -62,10 +62,9 @@ integrations = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/wvs-v19"
-Repository = "https://github.com/yourusername/wvs-v19"
-Documentation = "https://wvs-v19.readthedocs.io"
-Issues = "https://github.com/yourusername/wvs-v19/issues"
+Homepage = "https://github.com/xiabai2004/RayScan"
+Repository = "https://github.com/xiabai2004/RayScan"
+Issues = "https://github.com/xiabai2004/RayScan/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -76,20 +75,6 @@ exclude = ["tests*", "docs*", "examples*"]
 line-length = 88
 target-version = ['py38']
 include = '\.pyi?$'
-extend-exclude = '''
-/(
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
 
 [tool.isort]
 profile = "black"
@@ -121,43 +106,6 @@ module = [
 ]
 disallow_untyped_defs = false
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--tb=short",
-]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "network: marks tests that require network access",
-]
-
-[tool.coverage.run]
-source = ["wvs"]
-omit = [
-    "wvs/tests/*",
-    "*/__pycache__/*",
-    "*/test_*.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
-
 [project.scripts]
 wvs = "wvs.cli:main"
+rayscan = "wvs.cli:main"
