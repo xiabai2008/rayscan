@@ -1,8 +1,19 @@
-# RayScan 1.0 🚀
+# 🔬 RayScan 1.0
 
-> **前身：WVS v19.2** | 一个功能强大的 Web 漏洞扫描器
->
-> *RayScan 是 WVS 系列正式开源后的新名字，致敬过去 19 个版本的迭代积累。*
+<div align="center">
+
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-1.0.0-orange)
+![Status](https://img.shields.io/badge/Status-Beta-yellow)
+
+**一个功能强大的 Web 漏洞扫描器 · 11 个检测模块 · 即开即用**
+
+*RayScan 是 WVS 系列正式开源后的新名字，致敬过去 19 个版本的迭代积累。*
+
+[快速开始](#-快速开始) · [功能特性](#-功能特性) · [检测能力](#-检测能力) · [使用示例](#-详细使用说明) · [更名记](RENAMED_TO_RAYSCAN.md)
+
+</div>
 
 ## 📋 功能特性
 
