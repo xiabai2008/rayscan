@@ -1,0 +1,108 @@
+{
+  "scan_time": "2026-04-20T00:36:23.564579",
+  "directories": {
+    "wvs": {
+      "file_count": 179,
+      "size_mb": 1.3729019165039062,
+      "modified": "2026-04-17 18:37"
+    },
+    "wvs-v16": {
+      "file_count": 29,
+      "size_mb": 0.2629528045654297,
+      "modified": "2026-04-17 19:19"
+    },
+    "wvs-v17": {
+      "file_count": 21,
+      "size_mb": 0.18843650817871094,
+      "modified": "2026-04-17 20:32"
+    },
+    "wvs-v18": {
+      "file_count": 301,
+      "size_mb": 2.343107223510742,
+      "modified": "2026-04-20 00:00"
+    },
+    "wvs-versions": {
+      "file_count": 233,
+      "size_mb": 1.392155647277832,
+      "modified": "2026-04-20 00:36"
+    }
+  },
+  "progress_files_count": 34,
+  "version_groups": {
+    "unknown": 7,
+    "v9.x": 4,
+    "v10.x": 3,
+    "v11.x": 3,
+    "v12-v15": 1,
+    "v2.x": 2,
+    "v3.x": 2,
+    "v4.x": 2,
+    "v5.x": 2,
+    "v6.x": 2,
+    "v7.x": 2,
+    "v8.x": 3,
+    "v17.x": 1
+  },
+  "reconstructed_history": [
+    {
+      "version": "v1.0 - v15.0",
+      "location": "wvs/",
+      "description": "初始版本到v15.0的完整开发历程",
+      "evidence": "179 个文件",
+      "time": "2026-04-17 18:37"
+    },
+    {
+      "version": "v16.x",
+      "location": "wvs-v16/",
+      "description": "架构规划和设计文档版本",
+      "evidence": "CHANGELOG.md, README.md",
+      "time": "2026-04-17 19:19"
+    },
+    {
+      "version": "v17.x",
+      "location": "wvs-v17/",
+      "description": "过渡版本，建立基础架构",
+      "evidence": "PROGRESS.md, 基础文档",
+      "time": "2026-04-17 20:32"
+    },
+    {
+      "version": "v18.x (当前)",
+      "location": "wvs-v18/",
+      "description": "活跃开发版本，包含完整功能体系",
+      "evidence": "301 个文件，包含:",
+      "time": "2026-04-20 00:00",
+      "features": [
+        "验证增强算法优化",
+        "并发扫描引擎 (6.21x加速)",
+        "智能缓存系统 (68%命中率)",
+        "智能限速系统 (WAF规避)",
+        "四大高级检测模块",
+        "Web管理界面 (FastAPI+Vue.js)",
+        "报告可视化系统",
+        "版本档案系统"
+      ]
+    }
+  ],
+  "recommended_actions": [
+    [
+      "备份所有历史版本",
+      "将 wvs/, wvs-v16/, wvs-v17/ 备份到 wvs-versions/"
+    ],
+    [
+      "创建完整CHANGELOG",
+      "基于progress文档创建详细的版本变更记录"
+    ],
+    [
+      "分析早期代码",
+      "检查 wvs/ 目录中的代码，了解v1-v15的功能"
+    ],
+    [
+      "统一版本管理",
+      "建立标准的版本命名和发布流程"
+    ],
+    [
+      "生成历史文档",
+      "创建WVS发展史和技术演进文档"
+    ]
+  ]
+}

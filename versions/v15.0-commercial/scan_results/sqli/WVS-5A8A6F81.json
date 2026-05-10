@@ -1,0 +1,17 @@
+{
+  "scan_info": {
+    "scan_id": "WVS-5A8A6F81",
+    "target": "http://47.95.192.41:8083",
+    "scan_time": "2026-04-17T18:36:08.216631",
+    "vulnerability_count": 0
+  },
+  "summary": {
+    "total": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "vulnerabilities": []
+}

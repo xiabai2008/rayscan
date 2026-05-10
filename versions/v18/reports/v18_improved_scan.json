@@ -1,0 +1,57 @@
+[
+  {
+    "type": "XSS",
+    "url": "http://192.168.18.131/twiki/bin/view/Main/",
+    "payload": "javascript:alert(1)",
+    "confidence": 0.95,
+    "severity": "high"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "high",
+    "name": "phpMyAdmin Accessible",
+    "matched_at": "http://192.168.18.131//phpMyAdmin/"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "critical",
+    "name": "phpMyAdmin Setup Accessible",
+    "matched_at": "http://192.168.18.131//phpMyAdmin/setup/"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "info",
+    "name": "DVWA - Damn Vulnerable Web App",
+    "matched_at": "http://192.168.18.131//dvwa/"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "info",
+    "name": "DVWA - Damn Vulnerable Web App",
+    "matched_at": "http://192.168.18.131//dvwa/login.php"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "info",
+    "name": "Mutillidae - OWASP WebGoat",
+    "matched_at": "http://192.168.18.131//mutillidae/"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "info",
+    "name": "Mutillidae - OWASP WebGoat",
+    "matched_at": "http://192.168.18.131//mutillidae/index.php"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "info",
+    "name": "TWiki Detected",
+    "matched_at": "http://192.168.18.131//twiki/"
+  },
+  {
+    "type": "Nuclei",
+    "severity": "info",
+    "name": "TWiki Detected",
+    "matched_at": "http://192.168.18.131//twiki/bin/view/Main/"
+  }
+]

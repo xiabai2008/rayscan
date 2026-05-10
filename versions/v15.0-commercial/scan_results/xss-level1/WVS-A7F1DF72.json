@@ -1,0 +1,42 @@
+{
+  "scan_info": {
+    "scan_id": "WVS-A7F1DF72",
+    "target": "http://47.95.192.41:8085/level1.php?name=test",
+    "scan_time": "2026-04-17T18:37:14.822977",
+    "vulnerability_count": 2
+  },
+  "summary": {
+    "total": 2,
+    "critical": 0,
+    "high": 2,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "vulnerabilities": [
+    {
+      "name": "反射型 XSS (参数: name)",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8085/level1.php?name=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
+      "payload": "<script>alert(1)</script>",
+      "description": "URL 参数 `name` 存在反射型 XSS",
+      "remediation": "对 URL 参数进行 HTML 实体编码",
+      "confidence": 0.85,
+      "cve_ids": []
+    },
+    {
+      "name": "敏感路径泄露: .git/HEAD",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8085/level1.php?name=test/.git/HEAD",
+      "payload": ".git/HEAD",
+      "description": "发现敏感路径 .git/HEAD 可被直接访问",
+      "remediation": "禁止敏感路径的外部访问",
+      "confidence": 0.9,
+      "cve_ids": []
+    }
+  ]
+}

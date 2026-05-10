@@ -1,0 +1,3 @@
+﻿序号,漏洞名称,严重等级,URL,Payload,描述,修复建议,置信度
+1,反射型 XSS (参数: name),高危,http://47.95.192.41:8085/level1.php?name=%3Cscript%3Ealert%281%29%3C%2Fscript%3E,<script>alert(1)</script>,URL 参数 `name` 存在反射型 XSS,对 URL 参数进行 HTML 实体编码,85%
+2,敏感路径泄露: .git/HEAD,高危,http://47.95.192.41:8085/level1.php?name=test/.git/HEAD,.git/HEAD,发现敏感路径 .git/HEAD 可被直接访问,禁止敏感路径的外部访问,90%

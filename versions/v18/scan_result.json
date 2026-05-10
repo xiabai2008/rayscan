@@ -1,0 +1,198 @@
+{
+  "target": "http://192.168.18.131",
+  "urls": 0,
+  "forms": 0,
+  "duration": 5.351452350616455,
+  "sources": [
+    "basic",
+    "nuclei",
+    "cmdi",
+    "lfi"
+  ],
+  "vulns": [
+    {
+      "type": "PHP Info Disclosure",
+      "severity": "high",
+      "url": "http://192.168.18.131/phpinfo.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "PHP configuration information exposed"
+    },
+    {
+      "type": "phpMyAdmin Accessible",
+      "severity": "high",
+      "url": "http://192.168.18.131/phpMyAdmin/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "phpMyAdmin database management interface accessible"
+    },
+    {
+      "type": "phpMyAdmin Setup Accessible",
+      "severity": "critical",
+      "url": "http://192.168.18.131/phpMyAdmin/setup/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "phpMyAdmin setup wizard accessible - possible RCE"
+    },
+    {
+      "type": "DVWA Login Page",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/login.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerable web application detected"
+    },
+    {
+      "type": "DVWA Login Page",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerable web application detected"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/sqli/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/xss_r/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/csrf/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/brute/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/fi/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Vulnerable Paths",
+      "severity": "info",
+      "url": "http://192.168.18.131/dvwa/vulnerabilities/upload/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA vulnerability modules accessible"
+    },
+    {
+      "type": "DVWA Setup Page",
+      "severity": "high",
+      "url": "http://192.168.18.131/dvwa/setup.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "DVWA setup page accessible"
+    },
+    {
+      "type": "Mutillidae Vulnerable App",
+      "severity": "info",
+      "url": "http://192.168.18.131/mutillidae/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "Mutillidae vulnerable application detected"
+    },
+    {
+      "type": "Mutillidae Vulnerable App",
+      "severity": "info",
+      "url": "http://192.168.18.131/mutillidae/index.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "Mutillidae vulnerable application detected"
+    },
+    {
+      "type": "Mutillidae Vulnerability Pages",
+      "severity": "info",
+      "url": "http://192.168.18.131/mutillidae/dns-lookup.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "Mutillidae specific vulnerability pages accessible"
+    },
+    {
+      "type": "Mutillidae Vulnerability Pages",
+      "severity": "info",
+      "url": "http://192.168.18.131/mutillidae/user-info.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "Mutillidae specific vulnerability pages accessible"
+    },
+    {
+      "type": "Mutillidae Vulnerability Pages",
+      "severity": "info",
+      "url": "http://192.168.18.131/mutillidae/captured-data.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "Mutillidae specific vulnerability pages accessible"
+    },
+    {
+      "type": "Mutillidae Vulnerability Pages",
+      "severity": "info",
+      "url": "http://192.168.18.131/mutillidae/html5-storage.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "Mutillidae specific vulnerability pages accessible"
+    },
+    {
+      "type": "TWiki Detected",
+      "severity": "info",
+      "url": "http://192.168.18.131/twiki/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "TWiki wiki platform detected"
+    },
+    {
+      "type": "TWiki Detected",
+      "severity": "info",
+      "url": "http://192.168.18.131/twiki/bin/view/Main/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "TWiki wiki platform detected"
+    },
+    {
+      "type": "TWiki Detected",
+      "severity": "info",
+      "url": "http://192.168.18.131/twiki/bin/view/TWiki/",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "TWiki wiki platform detected"
+    },
+    {
+      "type": "PHP CGI RCE (CVE-2012-1823)",
+      "severity": "critical",
+      "url": "http://192.168.18.131/index.php",
+      "source": "nuclei",
+      "confidence": 0.95,
+      "evidence": "PHP CGI argument injection - RCE if exposing PHP as CGI"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "version": "v15.0",
+  "description": "初始版本到v15.0完整开发历程",
+  "backup_time": "2026-04-20T00:36:48.007346",
+  "source_directory": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-v18",
+  "system_info": {
+    "platform": "win32",
+    "python_version": "3.12.9 (tags/v3.12.9:fdb8142, Feb  4 2025, 15:27:58) [MSC v.1942 64 bit (AMD64)]",
+    "hostname": "DESKTOP-RN8PIKK"
+  },
+  "file_stats": {
+    "total_files": 301,
+    "total_size": 2456926,
+    "by_extension": {
+      ".py": 190,
+      ".md": 14,
+      ".json": 16,
+      ".txt": 8,
+      ".db": 1,
+      ".log": 1,
+      ".html": 17,
+      ".pyc": 43,
+      ".yml": 1,
+      ".backend": 1,
+      ".frontend": 1,
+      ".js": 6,
+      ".vue": 1,
+      ".conf": 1
+    },
+    "largest_files": []
+  }
+}

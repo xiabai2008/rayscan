@@ -1,0 +1,42 @@
+{
+  "scan_info": {
+    "scan_id": "WVS-AFE39FAB",
+    "target": "http://47.95.192.41:8083/Less-1/?id=1",
+    "scan_time": "2026-04-17T18:36:25.692088",
+    "vulnerability_count": 2
+  },
+  "summary": {
+    "total": 2,
+    "critical": 1,
+    "high": 1,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "vulnerabilities": [
+    {
+      "name": "SQL 注入 (参数: id)",
+      "severity": "CRITICAL",
+      "severity_cn": "严重",
+      "color": "#C0392B",
+      "url": "http://47.95.192.41:8083/Less-1/?id=%27+OR+%271%27%3D%271",
+      "payload": "' OR '1'='1",
+      "description": "检测到 SQL 错误信息，参数 `id` 存在 SQL 注入",
+      "remediation": "使用参数化查询（Prepared Statements），禁止拼接 SQL 字符串",
+      "confidence": 0.95,
+      "cve_ids": []
+    },
+    {
+      "name": "敏感路径泄露: .git/HEAD",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8083/Less-1/?id=1/.git/HEAD",
+      "payload": ".git/HEAD",
+      "description": "发现敏感路径 .git/HEAD 可被直接访问",
+      "remediation": "禁止敏感路径的外部访问",
+      "confidence": 0.9,
+      "cve_ids": []
+    }
+  ]
+}

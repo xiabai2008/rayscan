@@ -1,0 +1,13 @@
+{
+  "vulns": [
+    {
+      "type": "LFI",
+      "url": "http://192.168.18.132/view.php",
+      "param": "page",
+      "evidence": "File content detected: Linux passwd"
+    }
+  ],
+  "start": "2026-04-18 01:05:54",
+  "total": 1,
+  "end": "2026-04-18 01:06:04"
+}

@@ -1,0 +1,11 @@
+{
+  "time_based_validation": {
+    "test_count": 3,
+    "concurrent_tests": 2,
+    "min_effective_delay": 1.5,
+    "stddev_threshold": 0.3,
+    "confidence_threshold": 0.7,
+    "use_iqr_outlier_detection": true,
+    "dynamic_baseline_measurement": true
+  }
+}

@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: wvs-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - wvs-network
+
+  # PostgreSQL数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: wvs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wvsdb
+      POSTGRES_USER: wvsuser
+      POSTGRES_PASSWORD: wvspassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - wvs-network
+
+  # 后端API服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: wvs-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://wvsuser:wvspassword@postgres:5432/wvsdb
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+    volumes:
+      - ./backend:/app
+      - uploads-data:/app/uploads
+      - reports-data:/app/reports
+      - wvs-reports-data:/app/wvs_reports
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - wvs-network
+
+  # Celery Worker服务
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: wvs-celery-worker
+    restart: unless-stopped
+    command: celery -A worker.celery worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://wvsuser:wvspassword@postgres:5432/wvsdb
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+      - uploads-data:/app/uploads
+      - reports-data:/app/reports
+      - wvs-reports-data:/app/wvs_reports
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - wvs-network
+
+  # Celery Beat服务（定时任务）
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: wvs-celery-beat
+    restart: unless-stopped
+    command: celery -A worker.celery beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://wvsuser:wvspassword@postgres:5432/wvsdb
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    networks:
+      - wvs-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: wvs-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - VUE_APP_API_BASE_URL=/api
+    depends_on:
+      - backend
+    networks:
+      - wvs-network
+
+  # Nginx反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: wvs-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./frontend/dist:/usr/share/nginx/html
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - wvs-network
+
+  # WVS扫描器服务（模拟）
+  wvs-scanner:
+    build:
+      context: ./scanner
+      dockerfile: Dockerfile.scanner
+    container_name: wvs-scanner
+    restart: unless-stopped
+    environment:
+      - SCANNER_PATH=/usr/local/bin/wvs
+      - CONFIG_PATH=/app/config/wvs_config.json
+    volumes:
+      - ./scanner:/app
+      - wvs-reports-data:/app/reports
+    networks:
+      - wvs-network
+
+volumes:
+  redis-data:
+  postgres-data:
+  uploads-data:
+  reports-data:
+  wvs-reports-data:
+
+networks:
+  wvs-network:
+    driver: bridge

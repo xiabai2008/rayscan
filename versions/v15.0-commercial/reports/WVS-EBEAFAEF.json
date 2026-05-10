@@ -1,0 +1,78 @@
+{
+  "scan_info": {
+    "scan_id": "WVS-EBEAFAEF",
+    "target": "http://47.95.192.41:8082",
+    "scan_time": "2026-04-17T15:57:05.255470",
+    "vulnerability_count": 5
+  },
+  "summary": {
+    "total": 5,
+    "critical": 0,
+    "high": 5,
+    "medium": 0,
+    "low": 0,
+    "info": 0
+  },
+  "vulnerabilities": [
+    {
+      "name": "XSS (reflected)",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8082/vul/xss/xss_reflected_get.php",
+      "payload": "<script>alert(1)</script>",
+      "description": "检测到 reflected 型 XSS，payload 被反射到响应中",
+      "remediation": "对用户输入进行 HTML 转义，使用 Content-Security-Policy",
+      "confidence": 0.9,
+      "cve_ids": []
+    },
+    {
+      "name": "XSS (reflected)",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8082/vul/xss/xss_reflected_get.php",
+      "payload": "<img src=x onerror=alert(1)>",
+      "description": "检测到 reflected 型 XSS，payload 被反射到响应中",
+      "remediation": "对用户输入进行 HTML 转义，使用 Content-Security-Policy",
+      "confidence": 0.9,
+      "cve_ids": []
+    },
+    {
+      "name": "XSS (reflected)",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8082/vul/xss/xss_reflected_get.php",
+      "payload": "<svg onload=alert(1)>",
+      "description": "检测到 reflected 型 XSS，payload 被反射到响应中",
+      "remediation": "对用户输入进行 HTML 转义，使用 Content-Security-Policy",
+      "confidence": 0.9,
+      "cve_ids": []
+    },
+    {
+      "name": "敏感信息: Email Pattern",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8082/index.php",
+      "payload": "1061****.com",
+      "description": "发现 Email Pattern: 1061****.com",
+      "remediation": "移除敏感信息，使用环境变量",
+      "confidence": 0.85,
+      "cve_ids": []
+    },
+    {
+      "name": "敏感信息: Email Pattern",
+      "severity": "HIGH",
+      "severity_cn": "高危",
+      "color": "#E74C3C",
+      "url": "http://47.95.192.41:8082",
+      "payload": "1061****.com",
+      "description": "发现 Email Pattern: 1061****.com",
+      "remediation": "移除敏感信息，使用环境变量",
+      "confidence": 0.85,
+      "cve_ids": []
+    }
+  ]
+}

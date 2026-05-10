@@ -1,0 +1,16 @@
+# WVS v19 开发依赖
+# 运行测试: pip install -r requirements-dev.txt && pytest
+
+# 测试框架
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# 代码质量
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.1.0
+mypy>=1.5.0
+
+# 类型检查
+types-requests>=2.31.0

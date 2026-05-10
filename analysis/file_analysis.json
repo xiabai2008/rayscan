@@ -1,0 +1,1973 @@
+﻿{
+    "DuplicateCount":  86,
+    "Duplicates":  [
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "2EF2E6FF8933DDA14B5422270FC6237D",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\rce\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  37937,
+                                             "Modified":  "2026-05-06 05:52:36"
+                                         },
+                                         {
+                                             "Hash":  "533ED35855E5207286ED319E084EFF30",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\rce\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  11957,
+                                             "Modified":  "2026-04-21 09:51:25"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/rce/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A934C417BA06AF75751160D04E5C7566",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\rce\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  5866,
+                                             "Modified":  "2026-04-21 09:50:34"
+                                         },
+                                         {
+                                             "Hash":  "A934C417BA06AF75751160D04E5C7566",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\rce\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  5866,
+                                             "Modified":  "2026-04-21 09:50:34"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/rce/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0EF09627C61FCC14B2C165384F451345",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\rce\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  168,
+                                             "Modified":  "2026-04-21 09:49:29"
+                                         },
+                                         {
+                                             "Hash":  "0EF09627C61FCC14B2C165384F451345",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\rce\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  168,
+                                             "Modified":  "2026-04-21 09:49:29"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/rce/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "252FE6944A5EDD8C5C42329FB1EF2BA7",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\lfi\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  18310,
+                                             "Modified":  "2026-05-07 23:00:00"
+                                         },
+                                         {
+                                             "Hash":  "D5BFCD85C411413FAE8FA692504023A7",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\lfi\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  17174,
+                                             "Modified":  "2026-04-23 15:19:32"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/lfi/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A8C21B4C9805EC76E1A03E91AAA2588F",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\lfi\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3484,
+                                             "Modified":  "2026-05-03 23:48:12"
+                                         },
+                                         {
+                                             "Hash":  "3B6991B9163EE5DE407C518E313C70C7",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\lfi\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  932,
+                                             "Modified":  "2026-04-30 13:14:26"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/lfi/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "EE651111F81D312D036578F51B94019B",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\sqli\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  59169,
+                                             "Modified":  "2026-05-08 10:19:25"
+                                         },
+                                         {
+                                             "Hash":  "242EB91A39147A954E41E574C3E45D17",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\sqli\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  41686,
+                                             "Modified":  "2026-04-23 23:50:04"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/sqli/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "184E8608AC0CD2ABB6D8CEC6893431C0",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\sqli\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9830,
+                                             "Modified":  "2026-05-05 19:15:32"
+                                         },
+                                         {
+                                             "Hash":  "BC9632A5BFEAD32753294B51073701AF",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\sqli\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  20681,
+                                             "Modified":  "2026-04-30 10:58:24"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/sqli/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "3C70A1DD96E051E1A7663157DE2B86AD",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\sqli\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  83,
+                                             "Modified":  "2026-04-20 16:51:24"
+                                         },
+                                         {
+                                             "Hash":  "3C70A1DD96E051E1A7663157DE2B86AD",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\sqli\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  83,
+                                             "Modified":  "2026-04-20 16:51:24"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/sqli/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "E67E0868F93CC2C48DC1EE3092C4EB0B",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\sensitive\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  185,
+                                             "Modified":  "2026-04-21 09:53:38"
+                                         },
+                                         {
+                                             "Hash":  "E67E0868F93CC2C48DC1EE3092C4EB0B",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\sensitive\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  185,
+                                             "Modified":  "2026-04-21 09:53:38"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/sensitive/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A0D3EF52F1DB9B7F29E8A6895F34B1BE",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\sensitive\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  26599,
+                                             "Modified":  "2026-05-06 05:52:01"
+                                         },
+                                         {
+                                             "Hash":  "FF22E271223630D94947804F036C9E00",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\sensitive\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  13491,
+                                             "Modified":  "2026-04-23 15:55:29"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/sensitive/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0514D1C5D72B2C4F686ECC2D46B76D82",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\lfi\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  80,
+                                             "Modified":  "2026-04-20 16:57:12"
+                                         },
+                                         {
+                                             "Hash":  "0514D1C5D72B2C4F686ECC2D46B76D82",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\lfi\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  80,
+                                             "Modified":  "2026-04-20 16:57:12"
+                                         },
+                                         {
+                                             "Hash":  "84B96080F6D0EA734EAEEA660FCB692D",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\modules\\lfi\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  215,
+                                             "Modified":  "2026-04-18 23:50:37"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/modules/lfi/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  3,
+                           "Files":  [
+                                         {
+                                             "Hash":  "7241E7639F79E40273CE4483A4AD88E4",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1640,
+                                             "Modified":  "2026-05-07 10:42:25"
+                                         },
+                                         {
+                                             "Hash":  "E599CC428ACB81B16ECD52B5706F0ED0",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  1535,
+                                             "Modified":  "2026-04-23 11:34:27"
+                                         },
+                                         {
+                                             "Hash":  "5DD60B3127E64848A754AA4DDDE4A99F",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\modules\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  22,
+                                             "Modified":  "2026-04-18 09:57:35"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/modules/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "8A632A444521D844A6E4EDEBAAE49081",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\api\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  161,
+                                             "Modified":  "2026-04-21 09:52:26"
+                                         },
+                                         {
+                                             "Hash":  "8A632A444521D844A6E4EDEBAAE49081",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\api\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  161,
+                                             "Modified":  "2026-04-21 09:52:26"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/api/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "16D8610E6E8AD673893E50D2AC949D2F",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\models.py",
+                                             "Version":  "v19.2",
+                                             "Size":  11012,
+                                             "Modified":  "2026-05-06 10:04:04"
+                                         },
+                                         {
+                                             "Hash":  "7B9D3F6C4E3ACF1E15FBF9235401088B",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\models.py",
+                                             "Version":  "v19",
+                                             "Size":  9694,
+                                             "Modified":  "2026-04-23 23:44:36"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/models.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "ED549A50C669EA55C9291B9926C4BEF8",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\integrations\\nuclei_integration.py",
+                                             "Version":  "v19.2",
+                                             "Size":  14963,
+                                             "Modified":  "2026-04-23 23:46:08"
+                                         },
+                                         {
+                                             "Hash":  "ED549A50C669EA55C9291B9926C4BEF8",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\integrations\\nuclei_integration.py",
+                                             "Version":  "v19",
+                                             "Size":  14963,
+                                             "Modified":  "2026-04-23 23:46:08"
+                                         },
+                                         {
+                                             "Hash":  "82BF2EFE059CC2EAAEC9528A8D97C7A4",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\integrations\\nuclei_integration.py",
+                                             "Version":  "v18",
+                                             "Size":  42916,
+                                             "Modified":  "2026-04-20 16:29:42"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/integrations/nuclei_integration.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "8FB87C0BE1DEFE2DBEFE4B205FC25372",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\integrations\\sqlmap_integration.py",
+                                             "Version":  "v19.2",
+                                             "Size":  11701,
+                                             "Modified":  "2026-05-07 10:10:12"
+                                         },
+                                         {
+                                             "Hash":  "754D75A7974306943DEF32D909757C56",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\integrations\\sqlmap_integration.py",
+                                             "Version":  "v18",
+                                             "Size":  10304,
+                                             "Modified":  "2026-04-17 22:39:33"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/integrations/sqlmap_integration.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "9C1C33A9B843BF6E50EBF02175FA211E",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\cmdi\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  21373,
+                                             "Modified":  "2026-05-06 21:41:14"
+                                         },
+                                         {
+                                             "Hash":  "06DB1CB4F60FB6E9B68734CD81C8ADEB",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\cmdi\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  18111,
+                                             "Modified":  "2026-04-30 11:30:57"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/cmdi/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A6C8FF2776623B695AED261B4C38C8A9",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\cmdi\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3842,
+                                             "Modified":  "2026-05-03 23:48:11"
+                                         },
+                                         {
+                                             "Hash":  "9D057034B82754025A22458845BB7302",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\cmdi\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  14100,
+                                             "Modified":  "2026-04-30 11:14:24"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/cmdi/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "95471C71621EEA1D519CFAE8C0587BDA",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\cmdi\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  99,
+                                             "Modified":  "2026-04-20 16:53:35"
+                                         },
+                                         {
+                                             "Hash":  "95471C71621EEA1D519CFAE8C0587BDA",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\cmdi\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  99,
+                                             "Modified":  "2026-04-20 16:53:35"
+                                         },
+                                         {
+                                             "Hash":  "A854F12F79C8DA0607EFBC374FFE1898",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\modules\\cmdi\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  170,
+                                             "Modified":  "2026-04-18 11:57:48"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/modules/cmdi/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "1538F4F19404B7C823242FB895618997",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\api\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  16213,
+                                             "Modified":  "2026-05-06 03:14:04"
+                                         },
+                                         {
+                                             "Hash":  "CFC591524E2A594A8CCFAC196F757292",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\api\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  13458,
+                                             "Modified":  "2026-04-23 11:36:34"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/api/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "1AA36591237793F190312A7950E6F1EB",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\base.py",
+                                             "Version":  "v19.2",
+                                             "Size":  35041,
+                                             "Modified":  "2026-05-08 00:22:06"
+                                         },
+                                         {
+                                             "Hash":  "EBA357403966DAF7F5F107E2C589EF2D",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\base.py",
+                                             "Version":  "v19",
+                                             "Size":  30085,
+                                             "Modified":  "2026-04-23 23:49:09"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/base.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A7C5E3A31A79137BFEC7C712E62CBF43",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\ssrf\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  66,
+                                             "Modified":  "2026-04-21 14:42:47"
+                                         },
+                                         {
+                                             "Hash":  "A7C5E3A31A79137BFEC7C712E62CBF43",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\ssrf\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  66,
+                                             "Modified":  "2026-04-21 14:42:47"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/ssrf/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "1875A0D61442C9902AC2EA1E8D76E0BD",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\reporting\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  349,
+                                             "Modified":  "2026-04-23 10:25:46"
+                                         },
+                                         {
+                                             "Hash":  "1875A0D61442C9902AC2EA1E8D76E0BD",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\reporting\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  349,
+                                             "Modified":  "2026-04-23 10:25:46"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/reporting/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "5FAC1B5EE3D98AA41C162FD926DA1C8E",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\reporting\\console.py",
+                                             "Version":  "v19.2",
+                                             "Size":  11854,
+                                             "Modified":  "2026-04-20 17:14:50"
+                                         },
+                                         {
+                                             "Hash":  "5FAC1B5EE3D98AA41C162FD926DA1C8E",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\reporting\\console.py",
+                                             "Version":  "v19",
+                                             "Size":  11854,
+                                             "Modified":  "2026-04-20 17:14:50"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/reporting/console.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0EB02FD44EA83D30C87C63689935F732",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\plugins\\mobile\\__init__.py",
+                                             "Version":  "latest",
+                                             "Size":  5061,
+                                             "Modified":  "2026-04-17 15:51:27"
+                                         },
+                                         {
+                                             "Hash":  "801E96617B6CE06B923EA01D45E4C636",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\plugins\\mobile\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  77,
+                                             "Modified":  "2026-04-17 21:05:31"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/plugins/mobile/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "55C05F7AD9AC04ECBC3688FE8A1197E5",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\plugins\\auth.py",
+                                             "Version":  "v19.2",
+                                             "Size":  22530,
+                                             "Modified":  "2026-04-22 09:14:50"
+                                         },
+                                         {
+                                             "Hash":  "55C05F7AD9AC04ECBC3688FE8A1197E5",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\plugins\\auth.py",
+                                             "Version":  "v19",
+                                             "Size":  22530,
+                                             "Modified":  "2026-04-22 09:14:50"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/plugins/auth.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "E93B7A4AE60207E4BD36944BE658F1CE",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\plugins\\compliance\\scanner.py",
+                                             "Version":  "latest",
+                                             "Size":  15743,
+                                             "Modified":  "2026-04-17 15:58:51"
+                                         },
+                                         {
+                                             "Hash":  "7C33DCC6A9A2CCBC760C661E29EB41F9",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\plugins\\compliance\\scanner.py",
+                                             "Version":  "v18",
+                                             "Size":  13813,
+                                             "Modified":  "2026-04-17 20:45:52"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/plugins/compliance/scanner.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0192CE773C944155D81FA92ACD9E5C71",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\reporting\\markdown_report.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3884,
+                                             "Modified":  "2026-04-23 10:01:32"
+                                         },
+                                         {
+                                             "Hash":  "0192CE773C944155D81FA92ACD9E5C71",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\reporting\\markdown_report.py",
+                                             "Version":  "v19",
+                                             "Size":  3884,
+                                             "Modified":  "2026-04-23 10:01:32"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/reporting/markdown_report.py"
+                       },
+                       {
+                           "UniqueHashes":  3,
+                           "Files":  [
+                                         {
+                                             "Hash":  "D68BE2315BED6029293FD5C430F7A493",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\vuln\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  520,
+                                             "Modified":  "2026-04-19 14:15:45"
+                                         },
+                                         {
+                                             "Hash":  "5A159906D4B1B364BBB216521A021184",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\vuln\\__init__.py",
+                                             "Version":  "v17",
+                                             "Size":  424,
+                                             "Modified":  "2026-04-17 20:32:19"
+                                         },
+                                         {
+                                             "Hash":  "AD400FE5B2E8F9A8E9F0FFA27774AE3B",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v16\\wvs\\vuln\\__init__.py",
+                                             "Version":  "v16",
+                                             "Size":  442,
+                                             "Modified":  "2026-04-17 19:02:47"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/vuln/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "87B0313B479C930A2A725882639E1FD8",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\reporting\\json_reporter.py",
+                                             "Version":  "v19.2",
+                                             "Size":  10032,
+                                             "Modified":  "2026-04-23 10:25:07"
+                                         },
+                                         {
+                                             "Hash":  "87B0313B479C930A2A725882639E1FD8",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\reporting\\json_reporter.py",
+                                             "Version":  "v19",
+                                             "Size":  10032,
+                                             "Modified":  "2026-04-23 10:25:07"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/reporting/json_reporter.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "86A5CEE2C3418A2918555E59BD518432",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\reporting\\csv_reporter.py",
+                                             "Version":  "v19.2",
+                                             "Size":  4633,
+                                             "Modified":  "2026-04-23 10:25:32"
+                                         },
+                                         {
+                                             "Hash":  "86A5CEE2C3418A2918555E59BD518432",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\reporting\\csv_reporter.py",
+                                             "Version":  "v19",
+                                             "Size":  4633,
+                                             "Modified":  "2026-04-23 10:25:32"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/reporting/csv_reporter.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "B4329080130FA081C89C4FDE5079BFE2",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\reporting\\html_report.py",
+                                             "Version":  "v19.2",
+                                             "Size":  14724,
+                                             "Modified":  "2026-04-20 17:14:56"
+                                         },
+                                         {
+                                             "Hash":  "B4329080130FA081C89C4FDE5079BFE2",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\reporting\\html_report.py",
+                                             "Version":  "v19",
+                                             "Size":  14724,
+                                             "Modified":  "2026-04-20 17:14:56"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/reporting/html_report.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "224C40D1C9B556FC5539BA649D283786",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\xxe\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3982,
+                                             "Modified":  "2026-04-21 14:38:49"
+                                         },
+                                         {
+                                             "Hash":  "224C40D1C9B556FC5539BA649D283786",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\xxe\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  3982,
+                                             "Modified":  "2026-04-21 14:38:49"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/xxe/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0D515A3F1701F0C5D68FD38A34755EAC",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\waf\\bypass_payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9340,
+                                             "Modified":  "2026-04-22 12:59:03"
+                                         },
+                                         {
+                                             "Hash":  "0D515A3F1701F0C5D68FD38A34755EAC",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\waf\\bypass_payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  9340,
+                                             "Modified":  "2026-04-22 12:59:03"
+                                         },
+                                         {
+                                             "Hash":  "1AD166F3D09384443F809CD59C785DCB",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\modules\\waf\\bypass_payloads.py",
+                                             "Version":  "v18",
+                                             "Size":  9414,
+                                             "Modified":  "2026-04-19 12:06:05"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/modules/waf/bypass_payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "1ED81A9E85E342269E31C183F0B6BBCF",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\waf\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  15690,
+                                             "Modified":  "2026-04-23 11:38:17"
+                                         },
+                                         {
+                                             "Hash":  "1ED81A9E85E342269E31C183F0B6BBCF",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\waf\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  15690,
+                                             "Modified":  "2026-04-23 11:38:17"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/waf/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "C04FE3ADA05D8F97A569A45545934902",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\waf\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  270,
+                                             "Modified":  "2026-04-22 13:00:44"
+                                         },
+                                         {
+                                             "Hash":  "C04FE3ADA05D8F97A569A45545934902",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\waf\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  270,
+                                             "Modified":  "2026-04-22 13:00:44"
+                                         },
+                                         {
+                                             "Hash":  "AB660A21628CEA715907ADA6A157725C",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\modules\\waf\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  347,
+                                             "Modified":  "2026-04-19 12:06:12"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/modules/waf/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0D1E34042BD760B3F7D3E8FD8B347662",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\ssrf\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  21166,
+                                             "Modified":  "2026-05-07 21:58:06"
+                                         },
+                                         {
+                                             "Hash":  "B9224228AC398A949B9DA12E80D02C71",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\ssrf\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  11452,
+                                             "Modified":  "2026-04-23 16:46:28"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/ssrf/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "666ED93DB70EA9F9EBB4C15D639FC1B0",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\ssrf\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  6986,
+                                             "Modified":  "2026-05-06 22:03:40"
+                                         },
+                                         {
+                                             "Hash":  "B13AC25EBE8143BE1EB9C3375B902274",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\ssrf\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  5327,
+                                             "Modified":  "2026-04-21 14:42:11"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/ssrf/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "F28084073BF5491FFB24671A9D947AB5",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\xxe\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  64,
+                                             "Modified":  "2026-04-21 14:42:47"
+                                         },
+                                         {
+                                             "Hash":  "F28084073BF5491FFB24671A9D947AB5",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\xxe\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  64,
+                                             "Modified":  "2026-04-21 14:42:47"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/xxe/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "4126EB4B60211EFB9CEC155C1D3F9011",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\xxe\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  18071,
+                                             "Modified":  "2026-05-06 01:47:50"
+                                         },
+                                         {
+                                             "Hash":  "F897097DCC8533E57E2CB3060D063420",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\xxe\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  10841,
+                                             "Modified":  "2026-04-23 16:43:37"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/xxe/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "AEAD99DDB459C58BA89C061F192E5ECE",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\xss\\payloads.py",
+                                             "Version":  "v19.2",
+                                             "Size":  5972,
+                                             "Modified":  "2026-05-03 23:48:10"
+                                         },
+                                         {
+                                             "Hash":  "B0C09992659A303B786ABE65EE120ED4",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\xss\\payloads.py",
+                                             "Version":  "v19",
+                                             "Size":  14833,
+                                             "Modified":  "2026-04-30 11:00:13"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/xss/payloads.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "DD61C09ECB8796D432E1495D579920CF",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\xss\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  80,
+                                             "Modified":  "2026-04-20 16:55:20"
+                                         },
+                                         {
+                                             "Hash":  "DD61C09ECB8796D432E1495D579920CF",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\xss\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  80,
+                                             "Modified":  "2026-04-20 16:55:20"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/xss/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "B646AF1060EFDDF42999C931B3C32BC5",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\modules\\xss\\detector.py",
+                                             "Version":  "v19.2",
+                                             "Size":  20967,
+                                             "Modified":  "2026-05-05 19:15:32"
+                                         },
+                                         {
+                                             "Hash":  "38F5414E4AC89D19A252CF16A015AA0D",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\modules\\xss\\detector.py",
+                                             "Version":  "v19",
+                                             "Size":  17078,
+                                             "Modified":  "2026-04-30 11:37:18"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/modules/xss/detector.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "3A11A00478351B6E1BBAF4A6ED70C370",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_sensitive.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1662,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         },
+                                         {
+                                             "Hash":  "3A11A00478351B6E1BBAF4A6ED70C370",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_sensitive.py",
+                                             "Version":  "v19",
+                                             "Size":  1662,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_sensitive.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "30142B9742D61351D1D82E09FCA34F19",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_sqli.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1727,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         },
+                                         {
+                                             "Hash":  "30142B9742D61351D1D82E09FCA34F19",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_sqli.py",
+                                             "Version":  "v19",
+                                             "Size":  1727,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_sqli.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "6F1DC0B6900219A90F983775CFD832E0",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_scanner.py",
+                                             "Version":  "v19.2",
+                                             "Size":  2008,
+                                             "Modified":  "2026-04-21 10:27:14"
+                                         },
+                                         {
+                                             "Hash":  "6F1DC0B6900219A90F983775CFD832E0",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_scanner.py",
+                                             "Version":  "v19",
+                                             "Size":  2008,
+                                             "Modified":  "2026-04-21 10:27:14"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_scanner.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "1BC04DA76F6C7A3A0DE2797458ECF8C3",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_models.py",
+                                             "Version":  "v19.2",
+                                             "Size":  6936,
+                                             "Modified":  "2026-04-21 10:15:22"
+                                         },
+                                         {
+                                             "Hash":  "1BC04DA76F6C7A3A0DE2797458ECF8C3",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_models.py",
+                                             "Version":  "v19",
+                                             "Size":  6936,
+                                             "Modified":  "2026-04-21 10:15:22"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_models.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "BA935BE4DCE03A3DC914099CA58ED0A1",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_rce.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1638,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         },
+                                         {
+                                             "Hash":  "BA935BE4DCE03A3DC914099CA58ED0A1",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_rce.py",
+                                             "Version":  "v19",
+                                             "Size":  1638,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_rce.py"
+                       },
+                       {
+                           "UniqueHashes":  5,
+                           "Files":  [
+                                         {
+                                             "Hash":  "30EF959E2AC794D87026E3BF26391B09",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\__main__.py",
+                                             "Version":  "v19",
+                                             "Size":  121,
+                                             "Modified":  "2026-04-20 17:16:52"
+                                         },
+                                         {
+                                             "Hash":  "30EF959E2AC794D87026E3BF26391B09",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\__main__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  121,
+                                             "Modified":  "2026-04-20 17:16:52"
+                                         },
+                                         {
+                                             "Hash":  "E279780FC8D4971B4481544FAE09C6F7",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\__main__.py",
+                                             "Version":  "latest",
+                                             "Size":  82,
+                                             "Modified":  "2026-04-17 13:18:28"
+                                         },
+                                         {
+                                             "Hash":  "80AE7250D390F6B78D1F3BF7D7C985B5",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v16\\wvs\\__main__.py",
+                                             "Version":  "v16",
+                                             "Size":  92,
+                                             "Modified":  "2026-04-17 19:02:27"
+                                         },
+                                         {
+                                             "Hash":  "2506696F919E9F90641AEA67E798FA0B",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\__main__.py",
+                                             "Version":  "v17",
+                                             "Size":  90,
+                                             "Modified":  "2026-04-17 20:32:19"
+                                         },
+                                         {
+                                             "Hash":  "C4E59CAD0643EF8FDF67E9010F564D03",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\__main__.py",
+                                             "Version":  "v18",
+                                             "Size":  86,
+                                             "Modified":  "2026-04-17 20:47:37"
+                                         }
+                                     ],
+                           "Count":  6,
+                           "RelativePath":  "/wvs/__main__.py"
+                       },
+                       {
+                           "UniqueHashes":  4,
+                           "Files":  [
+                                         {
+                                             "Hash":  "4DAA55F40E80A94BA739DF9EE625ABFB",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\cli.py",
+                                             "Version":  "v19.2",
+                                             "Size":  22298,
+                                             "Modified":  "2026-05-07 12:05:18"
+                                         },
+                                         {
+                                             "Hash":  "71E9643A50A481C0265400167023FF59",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\cli.py",
+                                             "Version":  "latest",
+                                             "Size":  43827,
+                                             "Modified":  "2026-04-17 15:26:21"
+                                         },
+                                         {
+                                             "Hash":  "7B933188C5BC2ACEE57FFF8DB16059E2",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\cli.py",
+                                             "Version":  "v18",
+                                             "Size":  23601,
+                                             "Modified":  "2026-04-19 12:20:27"
+                                         },
+                                         {
+                                             "Hash":  "2F4E070155EFF2BB9A45DC478B32DBE4",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\cli.py",
+                                             "Version":  "v19",
+                                             "Size":  21171,
+                                             "Modified":  "2026-04-24 10:57:47"
+                                         }
+                                     ],
+                           "Count":  4,
+                           "RelativePath":  "/wvs/cli.py"
+                       },
+                       {
+                           "UniqueHashes":  6,
+                           "Files":  [
+                                         {
+                                             "Hash":  "854328B55381026CA83EF1119071A0E3",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  73,
+                                             "Modified":  "2026-04-20 17:01:19"
+                                         },
+                                         {
+                                             "Hash":  "D627467F389FD2CE7B90F34174D7F972",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  73,
+                                             "Modified":  "2026-05-07 10:04:48"
+                                         },
+                                         {
+                                             "Hash":  "867B62BCE9CCBE97546170197C9785C8",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\__init__.py",
+                                             "Version":  "latest",
+                                             "Size":  89,
+                                             "Modified":  "2026-04-17 12:46:03"
+                                         },
+                                         {
+                                             "Hash":  "16AD04BE1336095654DF40D8E3DA8EB2",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v16\\wvs\\__init__.py",
+                                             "Version":  "v16",
+                                             "Size":  1203,
+                                             "Modified":  "2026-04-17 19:17:50"
+                                         },
+                                         {
+                                             "Hash":  "E980522E5EDACDCB657C3048A69278FB",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\__init__.py",
+                                             "Version":  "v17",
+                                             "Size":  109,
+                                             "Modified":  "2026-04-17 20:32:19"
+                                         },
+                                         {
+                                             "Hash":  "D7E5B2ED617B5A4E3B69596869BFB92B",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  81,
+                                             "Modified":  "2026-04-17 20:47:37"
+                                         }
+                                     ],
+                           "Count":  6,
+                           "RelativePath":  "/wvs/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A523F0988430E64989F72F39B1A310F6",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_xss.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1697,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         },
+                                         {
+                                             "Hash":  "A523F0988430E64989F72F39B1A310F6",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_xss.py",
+                                             "Version":  "v19",
+                                             "Size":  1697,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_xss.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "C9380CF0D35EF83377076E806FDED92D",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_xxe_ssrf.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3223,
+                                             "Modified":  "2026-04-21 14:49:30"
+                                         },
+                                         {
+                                             "Hash":  "C9380CF0D35EF83377076E806FDED92D",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_xxe_ssrf.py",
+                                             "Version":  "v19",
+                                             "Size":  3223,
+                                             "Modified":  "2026-04-21 14:49:30"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_xxe_ssrf.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "40E1DD7C9C8CDE90EDB50DAF8ED04A86",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_live_target.py",
+                                             "Version":  "v19.2",
+                                             "Size":  15847,
+                                             "Modified":  "2026-04-22 12:52:08"
+                                         },
+                                         {
+                                             "Hash":  "40E1DD7C9C8CDE90EDB50DAF8ED04A86",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_live_target.py",
+                                             "Version":  "v19",
+                                             "Size":  15847,
+                                             "Modified":  "2026-04-22 12:52:08"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_live_target.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "5255BEF3698D4D0915D5CE83F19FBA69",
+                                             "Path":  "I:\\wvs-v19.2\\scan_dvwa.py",
+                                             "Version":  "v19.2",
+                                             "Size":  7233,
+                                             "Modified":  "2026-05-06 19:35:58"
+                                         },
+                                         {
+                                             "Hash":  "964C8C70BCDA623BA73AEFB1701EDA8A",
+                                             "Path":  "I:\\workspace\\wvs-v19\\scan_dvwa.py",
+                                             "Version":  "v19",
+                                             "Size":  4169,
+                                             "Modified":  "2026-04-22 13:09:38"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/scan_dvwa.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "FB3F85F1278CB57685FE7781BA83B0C8",
+                                             "Path":  "I:\\workspace\\wvs-v19\\test_auth.py",
+                                             "Version":  "v19",
+                                             "Size":  756,
+                                             "Modified":  "2026-04-22 09:15:12"
+                                         },
+                                         {
+                                             "Hash":  "1D8051A9BBC085F5DAFECBA211A34569",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\test_auth.py",
+                                             "Version":  "v18",
+                                             "Size":  5758,
+                                             "Modified":  "2026-04-18 10:29:14"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/test_auth.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "9980207DF2701383C20B0F2E77193963",
+                                             "Path":  "I:\\wvs-v19.2\\quick_scan.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3632,
+                                             "Modified":  "2026-05-06 15:30:22"
+                                         },
+                                         {
+                                             "Hash":  "2A7AF082460D05A0DE7FE498B9AFDB56",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\quick_scan.py",
+                                             "Version":  "v18",
+                                             "Size":  1813,
+                                             "Modified":  "2026-04-19 01:26:29"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/quick_scan.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "89CAC330A9A1DE0CD1D94E38221C7B3E",
+                                             "Path":  "I:\\wvs-v19.2\\examples\\usage_demo.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3805,
+                                             "Modified":  "2026-04-20 17:29:00"
+                                         },
+                                         {
+                                             "Hash":  "89CAC330A9A1DE0CD1D94E38221C7B3E",
+                                             "Path":  "I:\\workspace\\wvs-v19\\examples\\usage_demo.py",
+                                             "Version":  "v19",
+                                             "Size":  3805,
+                                             "Modified":  "2026-04-20 17:29:00"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/examples/usage_demo.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "6ED33560B6EF31C1F34873F6971D7059",
+                                             "Path":  "I:\\wvs-v19.2\\full_scan.py",
+                                             "Version":  "v19.2",
+                                             "Size":  2916,
+                                             "Modified":  "2026-05-06 09:15:42"
+                                         },
+                                         {
+                                             "Hash":  "19394959D5EFB213C1516C17E26E444F",
+                                             "Path":  "I:\\workspace\\wvs-v19\\full_scan.py",
+                                             "Version":  "v19",
+                                             "Size":  3558,
+                                             "Modified":  "2026-04-22 13:29:00"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/full_scan.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "513F8009A1AE64868E485A71EBDFA70C",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_api.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1694,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         },
+                                         {
+                                             "Hash":  "513F8009A1AE64868E485A71EBDFA70C",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_api.py",
+                                             "Version":  "v19",
+                                             "Size":  1694,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_api.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "840CCDD0B08317E35B36ABE8D7C3F94C",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\test_cmdi.py",
+                                             "Version":  "v19.2",
+                                             "Size":  2606,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         },
+                                         {
+                                             "Hash":  "840CCDD0B08317E35B36ABE8D7C3F94C",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\test_cmdi.py",
+                                             "Version":  "v19",
+                                             "Size":  2606,
+                                             "Modified":  "2026-04-21 10:26:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/test_cmdi.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "2F5E2340E5C69694C8B7CE7DAE9C0A71",
+                                             "Path":  "I:\\wvs-v19.2\\tests\\conftest.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1803,
+                                             "Modified":  "2026-04-21 10:07:55"
+                                         },
+                                         {
+                                             "Hash":  "2F5E2340E5C69694C8B7CE7DAE9C0A71",
+                                             "Path":  "I:\\workspace\\wvs-v19\\tests\\conftest.py",
+                                             "Version":  "v19",
+                                             "Size":  1803,
+                                             "Modified":  "2026-04-21 10:07:55"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/tests/conftest.py"
+                       },
+                       {
+                           "UniqueHashes":  3,
+                           "Files":  [
+                                         {
+                                             "Hash":  "77336763C33074DD7B5F7E182B1F5AC2",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\test_crawl.py",
+                                             "Version":  "latest",
+                                             "Size":  817,
+                                             "Modified":  "2026-04-17 12:49:20"
+                                         },
+                                         {
+                                             "Hash":  "2AC09B64C71F05172E89AE192F8CE6DA",
+                                             "Path":  "I:\\workspace\\wvs-v19\\test_crawl.py",
+                                             "Version":  "v19",
+                                             "Size":  1635,
+                                             "Modified":  "2026-04-20 18:10:52"
+                                         },
+                                         {
+                                             "Hash":  "E55EE3A8F59AD42C4E2600C29F383F39",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\test_crawl.py",
+                                             "Version":  "v18",
+                                             "Size":  739,
+                                             "Modified":  "2026-04-19 11:00:04"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/test_crawl.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "FAEDC54558A2FC672972F8485636B0E9",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\test_modules.py",
+                                             "Version":  "latest",
+                                             "Size":  3844,
+                                             "Modified":  "2026-04-17 15:50:56"
+                                         },
+                                         {
+                                             "Hash":  "B2C57382C9C5AF826F479BB08199C28F",
+                                             "Path":  "I:\\workspace\\wvs-v19\\test_modules.py",
+                                             "Version":  "v19",
+                                             "Size":  4290,
+                                             "Modified":  "2026-04-21 09:54:45"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/test_modules.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "4DD20F96A01418CD8DF92573494B2474",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\config.py",
+                                             "Version":  "v19.2",
+                                             "Size":  17793,
+                                             "Modified":  "2026-05-07 10:45:52"
+                                         },
+                                         {
+                                             "Hash":  "A787A2269DFF9E83DFEB3109BA530376",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\config.py",
+                                             "Version":  "v19",
+                                             "Size":  14224,
+                                             "Modified":  "2026-04-23 23:44:24"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/config.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "68DE6EC0333023E473B147FA6A72AAA9",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\exploit\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  538,
+                                             "Modified":  "2026-04-30 11:22:28"
+                                         },
+                                         {
+                                             "Hash":  "68DE6EC0333023E473B147FA6A72AAA9",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\exploit\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  538,
+                                             "Modified":  "2026-04-30 11:22:28"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/exploit/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "5074F04024937BAA2F9D3812768D068E",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\exploit\\engine.py",
+                                             "Version":  "v19.2",
+                                             "Size":  14635,
+                                             "Modified":  "2026-04-22 13:00:19"
+                                         },
+                                         {
+                                             "Hash":  "5074F04024937BAA2F9D3812768D068E",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\exploit\\engine.py",
+                                             "Version":  "v19",
+                                             "Size":  14635,
+                                             "Modified":  "2026-04-22 13:00:19"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/exploit/engine.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A2BE81468A3405313BA9A1C0868385A2",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\exceptions.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3906,
+                                             "Modified":  "2026-04-20 15:23:39"
+                                         },
+                                         {
+                                             "Hash":  "A2BE81468A3405313BA9A1C0868385A2",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\exceptions.py",
+                                             "Version":  "v19",
+                                             "Size":  3906,
+                                             "Modified":  "2026-04-20 15:23:39"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/exceptions.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "6CFFB302F4565A07937BB3377BDD72F5",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\core\\scheduler.py",
+                                             "Version":  "latest",
+                                             "Size":  7600,
+                                             "Modified":  "2026-04-17 13:24:57"
+                                         },
+                                         {
+                                             "Hash":  "1F110231AA1E7CB1B887F5B2C17A3985",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\scheduler.py",
+                                             "Version":  "v19.2",
+                                             "Size":  10582,
+                                             "Modified":  "2026-04-30 11:44:09"
+                                         },
+                                         {
+                                             "Hash":  "1F110231AA1E7CB1B887F5B2C17A3985",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\scheduler.py",
+                                             "Version":  "v19",
+                                             "Size":  10582,
+                                             "Modified":  "2026-04-30 11:44:09"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/core/scheduler.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "9F09B4E8AEDC878EB6A8EBCC431E7E76",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\session.py",
+                                             "Version":  "v19.2",
+                                             "Size":  26415,
+                                             "Modified":  "2026-05-08 09:37:56"
+                                         },
+                                         {
+                                             "Hash":  "1CA31BCB73CBCA18EC3EF37B48FF4B92",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\session.py",
+                                             "Version":  "v19",
+                                             "Size":  24872,
+                                             "Modified":  "2026-04-23 23:48:11"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/session.py"
+                       },
+                       {
+                           "UniqueHashes":  3,
+                           "Files":  [
+                                         {
+                                             "Hash":  "36FFA614F14AAD29419E257641A6A932",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\integrations\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  640,
+                                             "Modified":  "2026-05-07 10:10:12"
+                                         },
+                                         {
+                                             "Hash":  "BB8B4449D6EF50A21213C1F02AAE3197",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v18\\wvs\\integrations\\__init__.py",
+                                             "Version":  "v18",
+                                             "Size":  870,
+                                             "Modified":  "2026-04-17 22:15:21"
+                                         },
+                                         {
+                                             "Hash":  "9167BB90F4A5F0B8C54AAD26F18628FE",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\integrations\\__init__.py",
+                                             "Version":  "v17",
+                                             "Size":  182,
+                                             "Modified":  "2026-04-17 20:32:19"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/integrations/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "CBF59582333DEAF40FD30EB8BCEEC864",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\integrations\\manager.py",
+                                             "Version":  "latest",
+                                             "Size":  14004,
+                                             "Modified":  "2026-04-17 14:22:21"
+                                         },
+                                         {
+                                             "Hash":  "E7C4AC9DAF93C22D7A5F5D1CF88585CC",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\integrations\\manager.py",
+                                             "Version":  "v17",
+                                             "Size":  16953,
+                                             "Modified":  "2026-04-17 20:29:22"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/integrations/manager.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "2F48251971670B8153D78BB5348C7275",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\exploit\\xxe_exploit.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9156,
+                                             "Modified":  "2026-04-30 11:19:59"
+                                         },
+                                         {
+                                             "Hash":  "2F48251971670B8153D78BB5348C7275",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\exploit\\xxe_exploit.py",
+                                             "Version":  "v19",
+                                             "Size":  9156,
+                                             "Modified":  "2026-04-30 11:19:59"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/exploit/xxe_exploit.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "BAF327DCECE8D086EFA1771ADFDCB2D5",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\exploit\\ssrf_exploit.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9499,
+                                             "Modified":  "2026-04-30 11:19:03"
+                                         },
+                                         {
+                                             "Hash":  "BAF327DCECE8D086EFA1771ADFDCB2D5",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\exploit\\ssrf_exploit.py",
+                                             "Version":  "v19",
+                                             "Size":  9499,
+                                             "Modified":  "2026-04-30 11:19:03"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/exploit/ssrf_exploit.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "1E968536CECB7EB0022132DC0A338F5C",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\exploit\\xss_exploit.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9739,
+                                             "Modified":  "2026-04-30 11:21:03"
+                                         },
+                                         {
+                                             "Hash":  "1E968536CECB7EB0022132DC0A338F5C",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\exploit\\xss_exploit.py",
+                                             "Version":  "v19",
+                                             "Size":  9739,
+                                             "Modified":  "2026-04-30 11:21:03"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/exploit/xss_exploit.py"
+                       },
+                       {
+                           "UniqueHashes":  3,
+                           "Files":  [
+                                         {
+                                             "Hash":  "859C4A8AF404F907284D55A4E514290C",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\core\\scanner.py",
+                                             "Version":  "latest",
+                                             "Size":  13361,
+                                             "Modified":  "2026-04-17 15:56:45"
+                                         },
+                                         {
+                                             "Hash":  "FFD3F2C233C1C5C667A8445E6C191546",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\scanner.py",
+                                             "Version":  "v19.2",
+                                             "Size":  48524,
+                                             "Modified":  "2026-05-08 08:50:44"
+                                         },
+                                         {
+                                             "Hash":  "F501CA148F5F0DE4683A17CF73969A10",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\scanner.py",
+                                             "Version":  "v19",
+                                             "Size":  33011,
+                                             "Modified":  "2026-04-24 11:02:07"
+                                         }
+                                     ],
+                           "Count":  3,
+                           "RelativePath":  "/wvs/core/scanner.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "2141A54D539E243FBB7AC8C114EE65A7",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\crawler.py",
+                                             "Version":  "v19.2",
+                                             "Size":  41656,
+                                             "Modified":  "2026-05-07 12:06:05"
+                                         },
+                                         {
+                                             "Hash":  "094399EEDAD6E98DEC95BEBD3BE1DBF9",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\crawler.py",
+                                             "Version":  "v19",
+                                             "Size":  25659,
+                                             "Modified":  "2026-04-22 12:40:18"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/crawler.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "2CE71C6123B94D4EFA25D67692CB7ABB",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs\\wvs\\core\\distributed.py",
+                                             "Version":  "latest",
+                                             "Size":  10051,
+                                             "Modified":  "2026-04-17 13:57:31"
+                                         },
+                                         {
+                                             "Hash":  "A011C35FB1E6A01B24B22174D18B5157",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\core\\distributed.py",
+                                             "Version":  "v17",
+                                             "Size":  21310,
+                                             "Modified":  "2026-04-17 20:29:18"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/distributed.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "0E9653CFEB2D82391CFA13265F45AE80",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\cache.py",
+                                             "Version":  "v19.2",
+                                             "Size":  18112,
+                                             "Modified":  "2026-04-22 12:56:39"
+                                         },
+                                         {
+                                             "Hash":  "0E9653CFEB2D82391CFA13265F45AE80",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\cache.py",
+                                             "Version":  "v19",
+                                             "Size":  18112,
+                                             "Modified":  "2026-04-22 12:56:39"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/cache.py"
+                       },
+                       {
+                           "UniqueHashes":  2,
+                           "Files":  [
+                                         {
+                                             "Hash":  "4000B9F22167FFEBFD3CA3AAE37D4ADB",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\constants.py",
+                                             "Version":  "v19.2",
+                                             "Size":  3873,
+                                             "Modified":  "2026-05-06 12:47:05"
+                                         },
+                                         {
+                                             "Hash":  "7B39E20DB97055F049300C3E3C52FC59",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\constants.py",
+                                             "Version":  "v19",
+                                             "Size":  3334,
+                                             "Modified":  "2026-04-23 23:43:59"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/constants.py"
+                       },
+                       {
+                           "UniqueHashes":  4,
+                           "Files":  [
+                                         {
+                                             "Hash":  "AB09C75E9206D38756054F3319D66980",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  702,
+                                             "Modified":  "2026-04-30 11:45:25"
+                                         },
+                                         {
+                                             "Hash":  "80BBBDA96B06B519FAF1798532BFECCC",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  1251,
+                                             "Modified":  "2026-05-03 23:51:56"
+                                         },
+                                         {
+                                             "Hash":  "E046D54C8A656F0717B4850990EFBDBA",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v16\\wvs\\core\\__init__.py",
+                                             "Version":  "v16",
+                                             "Size":  574,
+                                             "Modified":  "2026-04-17 19:03:00"
+                                         },
+                                         {
+                                             "Hash":  "1372233EAC39E9F019D55F8BD548F6D4",
+                                             "Path":  "I:\\workspace-agent-b7ed571b\\wvs-v17\\wvs\\core\\__init__.py",
+                                             "Version":  "v17",
+                                             "Size":  306,
+                                             "Modified":  "2026-04-17 20:32:19"
+                                         }
+                                     ],
+                           "Count":  4,
+                           "RelativePath":  "/wvs/core/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "29471D2BFCC0E9B2042E542672BD2509",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\oob\\oob_manager.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9722,
+                                             "Modified":  "2026-04-23 15:02:47"
+                                         },
+                                         {
+                                             "Hash":  "29471D2BFCC0E9B2042E542672BD2509",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\oob\\oob_manager.py",
+                                             "Version":  "v19",
+                                             "Size":  9722,
+                                             "Modified":  "2026-04-23 15:02:47"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/oob/oob_manager.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "DDF64748F7FD6BA5F15A4AF7AE0486AB",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\rate_limiter.py",
+                                             "Version":  "v19.2",
+                                             "Size":  18662,
+                                             "Modified":  "2026-04-22 12:58:02"
+                                         },
+                                         {
+                                             "Hash":  "DDF64748F7FD6BA5F15A4AF7AE0486AB",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\rate_limiter.py",
+                                             "Version":  "v19",
+                                             "Size":  18662,
+                                             "Modified":  "2026-04-22 12:58:02"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/rate_limiter.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "D5146F6226D1C9D0120BF6431BC32681",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\oob\\interactsh.py",
+                                             "Version":  "v19.2",
+                                             "Size":  9363,
+                                             "Modified":  "2026-04-23 15:02:00"
+                                         },
+                                         {
+                                             "Hash":  "D5146F6226D1C9D0120BF6431BC32681",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\oob\\interactsh.py",
+                                             "Version":  "v19",
+                                             "Size":  9363,
+                                             "Modified":  "2026-04-23 15:02:00"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/oob/interactsh.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "DAAE76B59940A8C1B82A5D9416F64E21",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\oob\\__init__.py",
+                                             "Version":  "v19.2",
+                                             "Size":  526,
+                                             "Modified":  "2026-04-30 11:25:21"
+                                         },
+                                         {
+                                             "Hash":  "DAAE76B59940A8C1B82A5D9416F64E21",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\oob\\__init__.py",
+                                             "Version":  "v19",
+                                             "Size":  526,
+                                             "Modified":  "2026-04-30 11:25:21"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/oob/__init__.py"
+                       },
+                       {
+                           "UniqueHashes":  1,
+                           "Files":  [
+                                         {
+                                             "Hash":  "A8E71D42EE8605D4C360FEE46E71C11A",
+                                             "Path":  "I:\\wvs-v19.2\\wvs\\core\\oob\\dnslog.py",
+                                             "Version":  "v19.2",
+                                             "Size":  8625,
+                                             "Modified":  "2026-04-30 11:24:58"
+                                         },
+                                         {
+                                             "Hash":  "A8E71D42EE8605D4C360FEE46E71C11A",
+                                             "Path":  "I:\\workspace\\wvs-v19\\wvs\\core\\oob\\dnslog.py",
+                                             "Version":  "v19",
+                                             "Size":  8625,
+                                             "Modified":  "2026-04-30 11:24:58"
+                                         }
+                                     ],
+                           "Count":  2,
+                           "RelativePath":  "/wvs/core/oob/dnslog.py"
+                       }
+                   ],
+    "TotalFiles":  545
+}

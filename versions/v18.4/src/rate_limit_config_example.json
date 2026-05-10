@@ -1,0 +1,115 @@
+{
+  "智能限速系统配置示例": "此文件展示智能限速系统的各种配置选项",
+
+  "基础配置": {
+    "注释": "以下是最基础的速率限制配置",
+    "max_rps": 10,
+    "mode": "burst",
+    "window_size": 1.0,
+    "enabled": true
+  },
+
+  "自适应限速配置": {
+    "注释": "启用自适应调整，根据响应状态码和响应时间动态调整速率",
+    "max_rps": 15,
+    "min_rps": 1,
+    "recovery_rate": 0.1,
+    "backoff_factor": 2.0,
+    "enable_adaptive": true,
+    "enabled": true
+  },
+
+  "WAF规避配置": {
+    "注释": "启用WAF规避策略，包括随机抖动、User-Agent轮换、请求头变化等",
+    "enable_waf_evasion": true,
+    "enable_jitter": true,
+    "jitter_range": 0.3,
+    "enable_rotation": true,
+    "enabled": true
+  },
+
+  "生产环境推荐配置": {
+    "注释": "适用于生产环境扫描，平衡速度与安全性",
+    "max_rps": 5,
+    "mode": "uniform",
+    "enable_adaptive": true,
+    "min_rps": 1,
+    "recovery_rate": 0.05,
+    "backoff_factor": 3.0,
+    "enable_waf_evasion": true,
+    "enable_jitter": true,
+    "jitter_range": 0.2,
+    "enable_rotation": true,
+    "enabled": true
+  },
+
+  "激进扫描配置": {
+    "注释": "适用于内部测试或低防护目标，速度优先",
+    "max_rps": 20,
+    "mode": "burst",
+    "enable_adaptive": false,
+    "enable_waf_evasion": false,
+    "enabled": true
+  },
+
+  "高隐蔽性配置": {
+    "注释": "适用于高防护目标，最大限度避免触发WAF",
+    "max_rps": 2,
+    "mode": "uniform",
+    "enable_adaptive": true,
+    "min_rps": 1,
+    "recovery_rate": 0.02,
+    "backoff_factor": 5.0,
+    "enable_waf_evasion": true,
+    "enable_jitter": true,
+    "jitter_range": 0.5,
+    "enable_rotation": true,
+    "enabled": true
+  },
+
+  "扫描器集成配置示例": {
+    "注释": "在VulnerabilityScanner中使用的配置示例",
+    "timeout": 30,
+    "delay": 0.1,
+    "rate_limiter": {
+      "enabled": true,
+      "max_rps": 8,
+      "mode": "burst",
+      "enable_adaptive": true,
+      "enable_waf_evasion": true,
+      "enable_jitter": true,
+      "jitter_range": 0.2
+    }
+  },
+
+  "并发扫描器集成配置示例": {
+    "注释": "在ConcurrentScanner中使用的配置示例",
+    "max_workers": 3,
+    "timeout_per_target": 120,
+    "scanner_timeout": 30,
+    "scanner_delay": 0.1,
+    "enable_validation": true,
+    "rate_limiter": {
+      "enabled": true,
+      "max_rps": 15,
+      "mode": "burst",
+      "enable_adaptive": true,
+      "enable_waf_evasion": true
+    }
+  },
+
+  "配置说明": {
+    "max_rps": "最大每秒请求数。设置为0表示无限制。",
+    "mode": "限速模式：'burst'（突发模式，允许突发请求）或'uniform'（均匀模式，请求均匀分布）。",
+    "window_size": "时间窗口大小（秒），用于计算RPS。",
+    "min_rps": "自适应限速的最小RPS。",
+    "recovery_rate": "恢复速率（每次调整增加的比例）。",
+    "backoff_factor": "退避因子（遇到错误时RPS减少的倍数）。",
+    "enable_adaptive": "是否启用自适应调整。",
+    "enable_waf_evasion": "是否启用WAF规避。",
+    "enable_jitter": "是否启用随机抖动。",
+    "jitter_range": "抖动范围（秒）。",
+    "enable_rotation": "是否启用User-Agent轮换。",
+    "enabled": "是否启用限速器。"
+  }
+}

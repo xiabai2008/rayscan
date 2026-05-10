@@ -1,0 +1,1218 @@
+{
+  "scan_time": "2026-04-20T00:32:43.102877",
+  "base_path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b",
+  "wvs_directories": [
+    "wvs",
+    "wvs-v16",
+    "wvs-v17",
+    "wvs-v18",
+    "wvs-versions"
+  ],
+  "directory_details": {
+    "wvs": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs",
+      "exists": true,
+      "is_dir": true,
+      "files": [
+        {
+          "name": "check_classes.py",
+          "size": 538,
+          "ext": ".py"
+        },
+        {
+          "name": "report-sample.html",
+          "size": 18966,
+          "ext": ".html"
+        },
+        {
+          "name": "report-v2.json",
+          "size": 10067,
+          "ext": ".json"
+        },
+        {
+          "name": "requirements.txt",
+          "size": 90,
+          "ext": ".txt"
+        },
+        {
+          "name": "setup.py",
+          "size": 484,
+          "ext": ".py"
+        },
+        {
+          "name": "test-config.yaml",
+          "size": 649,
+          "ext": ".yaml"
+        },
+        {
+          "name": "test_cli.py",
+          "size": 1056,
+          "ext": ".py"
+        },
+        {
+          "name": "test_crawl.py",
+          "size": 817,
+          "ext": ".py"
+        },
+        {
+          "name": "test_e2e.py",
+          "size": 4000,
+          "ext": ".py"
+        },
+        {
+          "name": "test_features.py",
+          "size": 2091,
+          "ext": ".py"
+        },
+        {
+          "name": "test_modules.py",
+          "size": 3844,
+          "ext": ".py"
+        },
+        {
+          "name": "test_scan.py",
+          "size": 425,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs.db",
+          "size": 45056,
+          "ext": ".db"
+        }
+      ],
+      "subdirs": [
+        "data",
+        "docker",
+        "reports",
+        "scan_results",
+        "templates",
+        "tests",
+        "versions",
+        "wvs"
+      ],
+      "size": 88083,
+      "mtime": "2026-04-17 18:37:14"
+    },
+    "wvs-v16": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-v16",
+      "exists": true,
+      "is_dir": true,
+      "files": [
+        {
+          "name": "CHANGELOG.md",
+          "size": 4442,
+          "ext": ".md"
+        },
+        {
+          "name": "README.md",
+          "size": 3352,
+          "ext": ".md"
+        },
+        {
+          "name": "requirements.txt",
+          "size": 396,
+          "ext": ".txt"
+        }
+      ],
+      "subdirs": [
+        "reports",
+        "wvs"
+      ],
+      "size": 8190,
+      "mtime": "2026-04-17 19:19:29"
+    },
+    "wvs-v17": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-v17",
+      "exists": true,
+      "is_dir": true,
+      "files": [
+        {
+          "name": "PROGRESS.md",
+          "size": 836,
+          "ext": ".md"
+        },
+        {
+          "name": "README.md",
+          "size": 2599,
+          "ext": ".md"
+        },
+        {
+          "name": "requirements.txt",
+          "size": 386,
+          "ext": ".txt"
+        }
+      ],
+      "subdirs": [
+        "wvs"
+      ],
+      "size": 3821,
+      "mtime": "2026-04-17 20:32:19"
+    },
+    "wvs-v18": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-v18",
+      "exists": true,
+      "is_dir": true,
+      "files": [
+        {
+          "name": "advanced_demo_simple.py",
+          "size": 6499,
+          "ext": ".py"
+        },
+        {
+          "name": "advanced_detection_demo.py",
+          "size": 5737,
+          "ext": ".py"
+        },
+        {
+          "name": "advanced_detection_manager.py",
+          "size": 15759,
+          "ext": ".py"
+        },
+        {
+          "name": "advanced_vulnerability_detection.md",
+          "size": 9182,
+          "ext": ".md"
+        },
+        {
+          "name": "analyze_html.py",
+          "size": 1024,
+          "ext": ".py"
+        },
+        {
+          "name": "analyze_report.py",
+          "size": 1054,
+          "ext": ".py"
+        },
+        {
+          "name": "auto_integrate.py",
+          "size": 10868,
+          "ext": ".py"
+        },
+        {
+          "name": "BATTLE_READINESS.md",
+          "size": 4028,
+          "ext": ".md"
+        },
+        {
+          "name": "cache_example.py",
+          "size": 12527,
+          "ext": ".py"
+        },
+        {
+          "name": "CACHE_INTEGRATION.md",
+          "size": 10635,
+          "ext": ".md"
+        },
+        {
+          "name": "cache_system.py",
+          "size": 24317,
+          "ext": ".py"
+        },
+        {
+          "name": "check_files.py",
+          "size": 1177,
+          "ext": ".py"
+        },
+        {
+          "name": "check_links.py",
+          "size": 1131,
+          "ext": ".py"
+        },
+        {
+          "name": "claude_collaboration_request.md",
+          "size": 4362,
+          "ext": ".md"
+        },
+        {
+          "name": "compare_optimization.py",
+          "size": 10829,
+          "ext": ".py"
+        },
+        {
+          "name": "concurrent_scanner.py",
+          "size": 19223,
+          "ext": ".py"
+        },
+        {
+          "name": "cve_rce.py",
+          "size": 2429,
+          "ext": ".py"
+        },
+        {
+          "name": "debug_login_sqli.py",
+          "size": 3753,
+          "ext": ".py"
+        },
+        {
+          "name": "debug_phpliteadmin.py",
+          "size": 2004,
+          "ext": ".py"
+        },
+        {
+          "name": "debug_phpliteadmin_v2.py",
+          "size": 3607,
+          "ext": ".py"
+        },
+        {
+          "name": "diagnose_deep.py",
+          "size": 5528,
+          "ext": ".py"
+        },
+        {
+          "name": "diagnose_forms.py",
+          "size": 5537,
+          "ext": ".py"
+        },
+        {
+          "name": "diagnose_scan.py",
+          "size": 7125,
+          "ext": ".py"
+        },
+        {
+          "name": "download_nuclei.py",
+          "size": 2383,
+          "ext": ".py"
+        },
+        {
+          "name": "download_nuclei_now.py",
+          "size": 4293,
+          "ext": ".py"
+        },
+        {
+          "name": "drifting_result.json",
+          "size": 1069,
+          "ext": ".json"
+        },
+        {
+          "name": "drifting_v18_result.json",
+          "size": 5409,
+          "ext": ".json"
+        },
+        {
+          "name": "drifting_v18_test.json",
+          "size": 4892,
+          "ext": ".json"
+        },
+        {
+          "name": "dvwa_auth_test.py",
+          "size": 3531,
+          "ext": ".py"
+        },
+        {
+          "name": "dvwa_login_html.py",
+          "size": 219,
+          "ext": ".py"
+        },
+        {
+          "name": "dvwa_requests_test.py",
+          "size": 2402,
+          "ext": ".py"
+        },
+        {
+          "name": "dvwa_sqli_test.py",
+          "size": 1945,
+          "ext": ".py"
+        },
+        {
+          "name": "enhanced_concurrent_scanner.py",
+          "size": 16568,
+          "ext": ".py"
+        },
+        {
+          "name": "enum_webroot.py",
+          "size": 2996,
+          "ext": ".py"
+        },
+        {
+          "name": "exploit_check.py",
+          "size": 2201,
+          "ext": ".py"
+        },
+        {
+          "name": "explore_db.py",
+          "size": 2293,
+          "ext": ".py"
+        },
+        {
+          "name": "extract_stats.py",
+          "size": 1966,
+          "ext": ".py"
+        },
+        {
+          "name": "final_optimization_test.py",
+          "size": 11634,
+          "ext": ".py"
+        },
+        {
+          "name": "final_recon_zico2.py",
+          "size": 4896,
+          "ext": ".py"
+        },
+        {
+          "name": "find_db_path.py",
+          "size": 1232,
+          "ext": ".py"
+        },
+        {
+          "name": "find_phpliteadmin_path.py",
+          "size": 2410,
+          "ext": ".py"
+        },
+        {
+          "name": "find_webroot.py",
+          "size": 3012,
+          "ext": ".py"
+        },
+        {
+          "name": "get_main.py",
+          "size": 1646,
+          "ext": ".py"
+        },
+        {
+          "name": "integrate_optimization.py",
+          "size": 13697,
+          "ext": ".py"
+        },
+        {
+          "name": "integrate_optimized_validation.py",
+          "size": 14730,
+          "ext": ".py"
+        },
+        {
+          "name": "intelligent_rate_limiter.py",
+          "size": 2985,
+          "ext": ".py"
+        },
+        {
+          "name": "intelligent_rate_limiter_backup.py",
+          "size": 24686,
+          "ext": ".py"
+        },
+        {
+          "name": "login_sqli_module.md",
+          "size": 3523,
+          "ext": ".md"
+        },
+        {
+          "name": "net_check.py",
+          "size": 1150,
+          "ext": ".py"
+        },
+        {
+          "name": "nuclei_manager.py",
+          "size": 19398,
+          "ext": ".py"
+        },
+        {
+          "name": "OPTIMIZATION_REPORT.md",
+          "size": 6635,
+          "ext": ".md"
+        },
+        {
+          "name": "optimized_config.py",
+          "size": 10602,
+          "ext": ".py"
+        },
+        {
+          "name": "optimized_validation.py",
+          "size": 14225,
+          "ext": ".py"
+        },
+        {
+          "name": "parse_result.py",
+          "size": 662,
+          "ext": ".py"
+        },
+        {
+          "name": "performance_test_framework.py",
+          "size": 15365,
+          "ext": ".py"
+        },
+        {
+          "name": "pivot_zico2.py",
+          "size": 3495,
+          "ext": ".py"
+        },
+        {
+          "name": "probe_sensitive.py",
+          "size": 1584,
+          "ext": ".py"
+        },
+        {
+          "name": "probe_source.py",
+          "size": 1693,
+          "ext": ".py"
+        },
+        {
+          "name": "probe_zico2.py",
+          "size": 1103,
+          "ext": ".py"
+        },
+        {
+          "name": "PROGRESS.md",
+          "size": 21214,
+          "ext": ".md"
+        },
+        {
+          "name": "query_info.py",
+          "size": 1540,
+          "ext": ".py"
+        },
+        {
+          "name": "quick_scan.py",
+          "size": 1813,
+          "ext": ".py"
+        },
+        {
+          "name": "quick_validation_test.py",
+          "size": 8347,
+          "ext": ".py"
+        },
+        {
+          "name": "rate_limiter.py",
+          "size": 34769,
+          "ext": ".py"
+        },
+        {
+          "name": "rate_limit_config_example.json",
+          "size": 3360,
+          "ext": ".json"
+        },
+        {
+          "name": "rate_limit_integration_plan.md",
+          "size": 7346,
+          "ext": ".md"
+        },
+        {
+          "name": "rate_limit_usage_example.py",
+          "size": 12141,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_final_check.py",
+          "size": 4095,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_log_poison.py",
+          "size": 3483,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_sqlite_include.py",
+          "size": 2849,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_zico2.py",
+          "size": 2789,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_zico2_final.py",
+          "size": 4300,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_zico2_v2.py",
+          "size": 3379,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_zico2_v3.py",
+          "size": 3046,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_zico2_v4.py",
+          "size": 4296,
+          "ext": ".py"
+        },
+        {
+          "name": "rce_zico2_v5.py",
+          "size": 4228,
+          "ext": ".py"
+        },
+        {
+          "name": "README_RATE_LIMITING.md",
+          "size": 9434,
+          "ext": ".md"
+        },
+        {
+          "name": "read_phplite_source.py",
+          "size": 1549,
+          "ext": ".py"
+        },
+        {
+          "name": "read_source_b64.py",
+          "size": 3078,
+          "ext": ".py"
+        },
+        {
+          "name": "real_test_metasploitable2.py",
+          "size": 8673,
+          "ext": ".py"
+        },
+        {
+          "name": "recon_kioptrix.py",
+          "size": 999,
+          "ext": ".py"
+        },
+        {
+          "name": "recon_lfi_zico2.py",
+          "size": 2933,
+          "ext": ".py"
+        },
+        {
+          "name": "requirements.txt",
+          "size": 393,
+          "ext": ".txt"
+        },
+        {
+          "name": "scanner_performance_optimization.md",
+          "size": 10992,
+          "ext": ".md"
+        },
+        {
+          "name": "scan_metasploitable.py",
+          "size": 4709,
+          "ext": ".py"
+        },
+        {
+          "name": "scan_output.txt",
+          "size": 3677,
+          "ext": ".txt"
+        },
+        {
+          "name": "scan_result.json",
+          "size": 6143,
+          "ext": ".json"
+        },
+        {
+          "name": "scan_v18_final.py",
+          "size": 7679,
+          "ext": ".py"
+        },
+        {
+          "name": "scan_v18_improved.py",
+          "size": 3030,
+          "ext": ".py"
+        },
+        {
+          "name": "scan_zico2.py",
+          "size": 2000,
+          "ext": ".py"
+        },
+        {
+          "name": "scan_zico2_v2.py",
+          "size": 2747,
+          "ext": ".py"
+        },
+        {
+          "name": "simple_perf_test.py",
+          "size": 3628,
+          "ext": ".py"
+        },
+        {
+          "name": "ssh_zico2.py",
+          "size": 1465,
+          "ext": ".py"
+        },
+        {
+          "name": "static_crawl.py",
+          "size": 1862,
+          "ext": ".py"
+        },
+        {
+          "name": "targeted_scan.py",
+          "size": 2479,
+          "ext": ".py"
+        },
+        {
+          "name": "test.db",
+          "size": 12288,
+          "ext": ".db"
+        },
+        {
+          "name": "test_auth.py",
+          "size": 5758,
+          "ext": ".py"
+        },
+        {
+          "name": "test_basic.py",
+          "size": 1158,
+          "ext": ".py"
+        },
+        {
+          "name": "test_cache_system.py",
+          "size": 12549,
+          "ext": ".py"
+        },
+        {
+          "name": "test_crawl.py",
+          "size": 739,
+          "ext": ".py"
+        },
+        {
+          "name": "test_crawl_out.txt",
+          "size": 3064,
+          "ext": ".txt"
+        },
+        {
+          "name": "test_crawl_out2.txt",
+          "size": 976,
+          "ext": ".txt"
+        },
+        {
+          "name": "test_detection.py",
+          "size": 16565,
+          "ext": ".py"
+        },
+        {
+          "name": "test_detection_direct.py",
+          "size": 6724,
+          "ext": ".py"
+        },
+        {
+          "name": "test_fully_optimized.py",
+          "size": 6719,
+          "ext": ".py"
+        },
+        {
+          "name": "test_http_client.py",
+          "size": 895,
+          "ext": ".py"
+        },
+        {
+          "name": "test_lfi.py",
+          "size": 1551,
+          "ext": ".py"
+        },
+        {
+          "name": "test_localhost.py",
+          "size": 748,
+          "ext": ".py"
+        },
+        {
+          "name": "test_metasploitable2.py",
+          "size": 6892,
+          "ext": ".py"
+        },
+        {
+          "name": "test_more.py",
+          "size": 2125,
+          "ext": ".py"
+        },
+        {
+          "name": "test_network.py",
+          "size": 905,
+          "ext": ".py"
+        },
+        {
+          "name": "test_nuclei.py",
+          "size": 736,
+          "ext": ".py"
+        },
+        {
+          "name": "test_phpliteadmin.py",
+          "size": 2706,
+          "ext": ".py"
+        },
+        {
+          "name": "test_playwright.py",
+          "size": 1344,
+          "ext": ".py"
+        },
+        {
+          "name": "test_rate_limiter.py",
+          "size": 8895,
+          "ext": ".py"
+        },
+        {
+          "name": "test_rate_limiter_integration.py",
+          "size": 14943,
+          "ext": ".py"
+        },
+        {
+          "name": "test_result.json",
+          "size": 34,
+          "ext": ".json"
+        },
+        {
+          "name": "test_scanner.py",
+          "size": 4637,
+          "ext": ".py"
+        },
+        {
+          "name": "test_server.py",
+          "size": 8046,
+          "ext": ".py"
+        },
+        {
+          "name": "test_server_threaded.py",
+          "size": 2662,
+          "ext": ".py"
+        },
+        {
+          "name": "test_simple.py",
+          "size": 565,
+          "ext": ".py"
+        },
+        {
+          "name": "test_simple_validation.py",
+          "size": 4174,
+          "ext": ".py"
+        },
+        {
+          "name": "test_sqlmap.py",
+          "size": 733,
+          "ext": ".py"
+        },
+        {
+          "name": "test_v18.py",
+          "size": 3075,
+          "ext": ".py"
+        },
+        {
+          "name": "test_v18_final.py",
+          "size": 3309,
+          "ext": ".py"
+        },
+        {
+          "name": "test_xss_confidence.py",
+          "size": 1385,
+          "ext": ".py"
+        },
+        {
+          "name": "test_zico2_vulns.py",
+          "size": 1693,
+          "ext": ".py"
+        },
+        {
+          "name": "time_based_optimized.json",
+          "size": 268,
+          "ext": ".json"
+        },
+        {
+          "name": "verify_metasploitable.py",
+          "size": 5777,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs_debug.py",
+          "size": 1090,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs_fast.py",
+          "size": 3075,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs_out.log",
+          "size": 8958,
+          "ext": ".log"
+        },
+        {
+          "name": "wvs_scan.py",
+          "size": 1916,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs_scan_drift.py",
+          "size": 1884,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs_scan_fixed.py",
+          "size": 4382,
+          "ext": ".py"
+        },
+        {
+          "name": "wvs_scan_out.txt",
+          "size": 12280,
+          "ext": ".txt"
+        },
+        {
+          "name": "wvs_scan_out2.txt",
+          "size": 3506,
+          "ext": ".txt"
+        },
+        {
+          "name": "wvs_scan_out3.txt",
+          "size": 13528,
+          "ext": ".txt"
+        },
+        {
+          "name": "zero_day_detector.py",
+          "size": 13645,
+          "ext": ".py"
+        }
+      ],
+      "subdirs": [
+        "reports",
+        "tests",
+        "wvs",
+        "wvs_web",
+        "__pycache__"
+      ],
+      "size": 790232,
+      "mtime": "2026-04-20 00:00:06"
+    },
+    "wvs-versions": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-versions",
+      "exists": true,
+      "is_dir": true,
+      "files": [
+        {
+          "name": "CHANGELOG.md",
+          "size": 5758,
+          "ext": ".md"
+        },
+        {
+          "name": "scan_all_versions.py",
+          "size": 7194,
+          "ext": ".py"
+        },
+        {
+          "name": "VERSION_ARCHITECTURE.md",
+          "size": 5582,
+          "ext": ".md"
+        }
+      ],
+      "subdirs": [
+        "tools",
+        "v18.4"
+      ],
+      "size": 18534,
+      "mtime": "2026-04-20 00:32:37"
+    }
+  },
+  "progress_documents": {
+    "wvs-progress-report-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-report-01.md",
+      "size_kb": 2.5654296875,
+      "line_count": 93,
+      "first_lines": [
+        "# 漏洞扫描工具开发进度报告",
+        "",
+        "## 项目概述",
+        "- **项目名称**: Web Vulnerability Scanner (WVS)",
+        "- **启动时间**: 2026-04-17 12:40 GMT+8"
+      ]
+    },
+    "wvs-progress-report-02.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-report-02.md",
+      "size_kb": 1.787109375,
+      "line_count": 76,
+      "first_lines": [
+        "# 漏洞扫描工具开发进度报告 #2",
+        "",
+        "## 时间",
+        "2026-04-17 13:00 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-roadmap-v9-v11.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-roadmap-v9-v11.md",
+      "size_kb": 7.345703125,
+      "line_count": 209,
+      "first_lines": [
+        "# WVS Tool v9.0-v11.0 迭代升级方案",
+        "",
+        "## 版本规划总览",
+        "",
+        "| 版本 | 代码行数 | 扫描模板 | 工作流状态 |"
+      ]
+    },
+    "wvs-progress-v10-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v10-01.md",
+      "size_kb": 0.9140625,
+      "line_count": 50,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v10.0 - 分布式扫描与云原生",
+        "",
+        "## 时间",
+        "2026-04-17 15:25 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v10-final-doc.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v10-final-doc.md",
+      "size_kb": 2.052734375,
+      "line_count": 82,
+      "first_lines": [
+        "# 漏洞扫描工具 v10.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 16:00 - 16:10 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v10-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v10-final.md",
+      "size_kb": 1.6748046875,
+      "line_count": 86,
+      "first_lines": [
+        "# 漏洞扫描工具 v10.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 15:25 - 15:35 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v11-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v11-01.md",
+      "size_kb": 0.7998046875,
+      "line_count": 47,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v11.0 - 自动化修复与DevSecOps集成",
+        "",
+        "## 时间",
+        "2026-04-17 15:35 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v11-final-doc.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v11-final-doc.md",
+      "size_kb": 2.349609375,
+      "line_count": 90,
+      "first_lines": [
+        "# 漏洞扫描工具 v11.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 16:10 - 16:15 (约5分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v11-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v11-final.md",
+      "size_kb": 1.6357421875,
+      "line_count": 93,
+      "first_lines": [
+        "# 漏洞扫描工具 v11.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 15:35 - 15:45 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v12-v15-complete.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v12-v15-complete.md",
+      "size_kb": 8.0234375,
+      "line_count": 272,
+      "first_lines": [
+        "# WVS Tool v12.0-v15.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 15:00 - 15:30 (约30分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v2-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v2-01.md",
+      "size_kb": 1.263671875,
+      "line_count": 56,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 - 进度报告 #1",
+        "",
+        "## 时间",
+        "2026-04-17 14:00 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v2-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v2-final.md",
+      "size_kb": 3.0126953125,
+      "line_count": 134,
+      "first_lines": [
+        "# 漏洞扫描工具 v2.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 14:00 - 14:10 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v3-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v3-01.md",
+      "size_kb": 1.10546875,
+      "line_count": 51,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v3.0 - 进度报告",
+        "",
+        "## 时间",
+        "2026-04-17 14:10 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v3-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v3-final.md",
+      "size_kb": 2.705078125,
+      "line_count": 115,
+      "first_lines": [
+        "# 漏洞扫描工具 v3.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 14:10 - 14:20 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v4-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v4-01.md",
+      "size_kb": 1.1181640625,
+      "line_count": 62,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v4.0 - 进度报告",
+        "",
+        "## 时间",
+        "2026-04-17 14:20 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v4-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v4-final.md",
+      "size_kb": 2.734375,
+      "line_count": 123,
+      "first_lines": [
+        "# 漏洞扫描工具 v4.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 14:20 - 14:30 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v5-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v5-01.md",
+      "size_kb": 1.2119140625,
+      "line_count": 64,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v5.0 - 进度报告",
+        "",
+        "## 时间",
+        "2026-04-17 14:30 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v5-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v5-final.md",
+      "size_kb": 3.095703125,
+      "line_count": 143,
+      "first_lines": [
+        "# 漏洞扫描工具 v5.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 14:30 - 14:40 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v6-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v6-01.md",
+      "size_kb": 1.2470703125,
+      "line_count": 59,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v6.0 - 进度报告",
+        "",
+        "## 时间",
+        "2026-04-17 14:40 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v6-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v6-final.md",
+      "size_kb": 3.0625,
+      "line_count": 135,
+      "first_lines": [
+        "# 漏洞扫描工具 v6.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 14:40 - 14:50 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v7-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v7-01.md",
+      "size_kb": 1.0400390625,
+      "line_count": 60,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v7.0 - 进度报告",
+        "",
+        "## 时间",
+        "2026-04-17 14:50 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v7-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v7-final.md",
+      "size_kb": 2.7587890625,
+      "line_count": 135,
+      "first_lines": [
+        "# 漏洞扫描工具 v7.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 14:50 - 15:00 (约10分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v8-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v8-01.md",
+      "size_kb": 1.0078125,
+      "line_count": 55,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v8.0 - 进度报告",
+        "",
+        "## 时间",
+        "2026-04-17 15:00 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v8-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v8-final.md",
+      "size_kb": 3.1572265625,
+      "line_count": 143,
+      "first_lines": [
+        "# 漏洞扫描工具 v8.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 15:00 - 15:15 (约15分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v9-01.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v9-01.md",
+      "size_kb": 0.9404296875,
+      "line_count": 48,
+      "first_lines": [
+        "# 漏洞扫描工具迭代升级 v9.0 - 智能扫描与AI分析",
+        "",
+        "## 时间",
+        "2026-04-17 15:15 GMT+8",
+        ""
+      ]
+    },
+    "wvs-progress-v9-final-doc.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v9-final-doc.md",
+      "size_kb": 3.0576171875,
+      "line_count": 110,
+      "first_lines": [
+        "# 漏洞扫描工具 v9.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 15:45 - 16:00 (约15分钟)",
+        ""
+      ]
+    },
+    "wvs-progress-v9-final.md": {
+      "path": "C:\\Users\\HZR\\.qclaw\\workspace-agent-b7ed571b\\wvs-progress-v9-final.md",
+      "size_kb": 1.6943359375,
+      "line_count": 84,
+      "first_lines": [
+        "# 漏洞扫描工具 v9.0 迭代完成报告",
+        "",
+        "## 迭代时间",
+        "2026-04-17 15:15 - 15:25 (约10分钟)",
+        ""
+      ]
+    }
+  },
+  "version_timeline": []
+}
