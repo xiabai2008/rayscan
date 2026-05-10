@@ -1,90 +1,102 @@
-﻿# WVS 项目汇总报告
+# WVS - Web Vulnerability Scanner 🚀
 
-## 📍 汇总位置
-C:\Users\HZR\Desktop\WVS_all
+> **最新版本：v19.2** | 一个功能强大的 Web 漏洞扫描器
 
-## 📊 总体统计
+## 📋 功能特性
 
-| 版本 | 文件数 | 描述 |
-|------|--------|------|
-| v1_v15_complete | 16 | 早期完整版本 (v1-v15) |
-| v15.0 | 231 | v15.0 详细版本 |
-| v16_arch | 5 | v16 架构规划版本 |
-| v16 | 29 | v16 正式版本 |
-| v17_transition | 22 | v17 过渡版本 |
-| v17 | 21 | v17 正式版本 |
-| v18 | 309 | v18 主版本 |
-| v18.4 | 226 | v18.4 子版本 |
-| v19 | 438 | v19 主版本 |
-| v19.2 | 325 | v19.2 最新版本 |
-| latest | 179 | latest 版本 |
-| **总计** | **1801** | |
+- **SQL 注入检测** - 支持多种注入类型和payload
+- **XSS 检测** - 反射型/存储型/DOM型
+- **命令注入 (CMDi) 检测**
+- **文件包含 (LFI/RFI) 检测**
+- **SSRF/XXE 检测**
+- **敏感信息泄露检测**
+- **WAF 绕过**
+- **API 扫描**
+- **JSPathFinder** - JavaScript 端点发现
+- **RCE 检测**
+- **第三方工具集成**（Nuclei, sqlmap, ffuf, Wappalyzer）
+- **多种报告格式**（HTML, JSON, CSV, Markdown, Console）
 
-## 🔍 版本演进
+## 🚀 快速开始
 
-\\\
-v1.0 (2026-04-15)
-  └─ v15.0 (早期开发)
-       ├─ v16 (架构版本) ─ 基础扫描 + XSS/SQLi
-       ├─ v17 (过渡版本) ─ 增加 AI/Distributed
-       ├─ v18 ─ 验证增强 + 并发优化 + 缓存系统
-       │   └─ v18.4 ─ 性能优化 + 高级检测
-       └─ v19 ─ 模块化重构 + Lab Profiles
-            └─ v19.2 ─ 最新版本 (2026-05-08)
-\\\
+```bash
+# 安装依赖
+pip install -r requirements-dev.txt
 
-## 📁 目录结构
+# 快速扫描
+python quick_scan.py -u https://example.com
 
-\\\
+# 全量扫描
+python full_scan.py -u https://example.com --profile full
+
+# GUI 模式
+python wvs_gui.py
+```
+
+## 📂 项目结构
+
+```
 WVS_all/
-├── analysis/           # 分析文档
-│   ├── CHANGELOG.md
-│   ├── VERSION_ARCHITECTURE.md
-│   ├── WVS_COMPLETE_HISTORY.md
-│   ├── file_analysis.json
-│   └── version_history_report.json
-├── tools/              # 工具脚本
-│   └── tools/
-└── versions/           # 所有版本目录
-    ├── v1_v15_complete/  (16 files)
-    ├── v15.0/            (231 files)
-    ├── v16_arch/          (5 files)
-    ├── v16/              (29 files)
-    ├── v17_transition/   (22 files)
-    ├── v17/              (21 files)
-    ├── v18/              (309 files)
-    ├── v18.4/            (226 files)
-    ├── v19/              (438 files)
-    ├── v19.2/            (325 files)
-    └── latest/           (179 files)
-\\\
+├── wvs/                       # 核心扫描库（v19.2）
+├── scripts/                   # 扫描脚本
+├── scan_reports/              # 扫描报告
+├── examples/                  # 示例代码
+├── analysis/                  # 项目分析文档
+├── docs/                      # 技术文档
+├── archive/                   # 📦 历史版本归档
+│   ├── v19/
+│   ├── v18.4/
+│   ├── v18/
+│   ├── v17/
+│   ├── v16/
+│   ├── v15.0/
+│   ├── v1_v15_complete/
+│   └── ...
+├── shared_components/         # 共享组件
+├── tools/                     # 工具脚本
+├── version_diffs/             # 版本差异分析
+├── full_scan.py               # 全量扫描入口
+├── quick_scan.py              # 快速扫描入口
+├── scan_dvwa.py               # DVWA 靶场扫描
+├── scan_dvwa_v19.2.py         # DVWA 扫描（v19.2 优化版）
+├── wvs_gui.py                 # GUI 界面
+├── pyproject.toml             # 项目配置
+└── .gitignore
+```
 
-## ⚠️ 重复文件分析
+## 📊 检测能力
 
-在 545 个 Python 文件中：
-- **41 个完全相同** - 内容完全一致
-- **45 个内容不同** - 各版本有功能差异
+| 能力 | 状态 |
+|------|------|
+| SQL 注入 | ✅ 高精度 |
+| XSS | ✅ 高精度 |
+| 命令注入 | ✅ 高精度 |
+| LFI/RFI | ✅ 高精度 |
+| SSRF | ✅ 支持 |
+| XXE | ✅ 支持 |
+| 敏感信息 | ✅ 高覆盖 |
+| WAF 绕过 | ✅ 多策略 |
+| API 扫描 | ✅ 支持 |
+| RCE | ✅ 支持 |
+| 第三方集成 | ✅ Nuclei, sqlmap, ffuf |
 
-### 主要差异文件
+## ⚙️ 版本历史
 
-| 文件 | v19 | v19.2 | 说明 |
-|------|-----|-------|------|
-| core/crawler.py | 658行 | 942行 | v19.2 新增 API 发现 |
-| core/scanner.py | 799行 | 1052行 | v19.2 新增并发扫描 |
-| modules/sqli/payloads.py | 667行 | 251行 | v19 payload更丰富 |
-| cli.py | 514行 | 537行 | v19.2 命令行优化 |
+| 版本 | 说明 |
+|------|------|
+| **v19.2** | **当前最新版** - 性能优化 + bug修复 + 新检测模块 |
+| v19 | 扫描引擎重构，集成框架升级 |
+| v18.4 | 企业级扫描能力完善 |
+| v18 | 高级检测模块 + 性能优化 |
+| v17 | 模块化架构重构 |
+| v16 | 插件系统 + 多报告格式 |
+| v15 | 基础扫描框架搭建 |
+| v1~14 | 早期版本开发迭代 |
 
-## 🎯 建议
+## ⚠️ 免责声明
 
-1. **使用 v19.2 作为主线版本** - 最新、功能最完整
-2. **参考 v19 和 v19.2 的差异** - 了解功能演进
-3. **保留各版本目录** - 用于版本对比和回溯
+本工具仅供授权的安全测试和漏洞研究使用。未经授权扫描他人系统是违法行为。
 
-## 📄 参考文档
+## 📄 License
 
-- nalysis/WVS_COMPLETE_HISTORY.md - 完整版本历史
-- nalysis/VERSION_ARCHITECTURE.md - 版本架构设计
-- nalysis/CHANGELOG.md - 变更日志
-
----
-生成时间: 2026-05-08 20:24:17
+MIT License
