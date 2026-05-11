@@ -9,17 +9,10 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
 from typing import List, Optional
-
-# Fix Windows console encoding for Chinese output
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    os.environ["PYTHONIOENCODING"] = "utf-8"
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
@@ -86,17 +79,8 @@ def cmd_scan(args):
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
 
-    # 设置全局扫描超时（默认 7200s = 2h）
-    max_time = args.max_time if hasattr(args, 'max_time') else 7200
-    if max_time <= 0:
-        max_time = 0  # 0 = unlimited
-
-    # 若启用 --resume，则加载上次 checkpoint
-    if hasattr(args, 'resume') and args.resume:
-        checkpoint = scanner.load_checkpoint(target_url)
-        if checkpoint:
-            console.print(f"[cyan][*] 从 checkpoint 恢复: {len(checkpoint.get('vulnerabilities', []))} 个已有漏洞, "
-                         f"{len(checkpoint.get('modules_done', []))} 个已完成模块[/cyan]")
+    # 设置全局扫描超时
+    max_time = args.max_time if hasattr(args, 'max_time') else 0
 
     # 初始化 OOB 管理器（如果指定了 OOB 服务器）
     oob_manager = None
@@ -107,14 +91,20 @@ def cmd_scan(args):
 
     # 加载指定模块
     if args.modules:
-        # 支持逗号分隔: --modules sqli,xss 等同 --modules sqli xss
         for mod in args.modules:
-            for submod in mod.split(","):
-                submod = submod.strip()
-                if submod:
-                    scanner.load_module(submod)
+            scanner.load_module(mod)
     else:
         scanner.load_all_modules()
+
+    # 过滤禁用的模块（--no-modules）
+    if hasattr(args, 'disabled_modules') and args.disabled_modules:
+        disable_set = set(args.disabled_modules)
+        for mod_name in list(scanner._modules.keys()):
+            if mod_name in disable_set:
+                del scanner._modules[mod_name]
+                scanner._loaded_module_names = [m for m in scanner._loaded_module_names if m != mod_name]
+                console.print(f"[yellow]  禁用模块: {mod_name}[/yellow]")
+        console.print(f"[yellow]  已禁用 {len(disable_set)} 个模块: {', '.join(sorted(disable_set))}[/yellow]")
 
     # 为检测模块设置 OOB 管理器
     if oob_manager:
@@ -221,6 +211,8 @@ def cmd_scan(args):
 
         try:
             # 支持全局超时
+            # 保存 max_time 到 scanner（超时抢救用）
+            scanner._scan_max_time = max_time
             if max_time and max_time > 0:
                 result = await asyncio.wait_for(
                     scanner.scan(target),
@@ -240,21 +232,24 @@ def cmd_scan(args):
         console.print("\n[yellow]扫描被中断[/yellow]")
         return 130
     except asyncio.TimeoutError:
-        console.print(f"\n[yellow]扫描超时（>{max_time}秒），正在保存部分结果...[/yellow]")
-        partial_vulns = []
-        for mod_name, mod_instance in scanner._modules.items():
-            if hasattr(mod_instance, '_found_vulns'):
+        console.print(f"\n[yellow]扫描超时（>{max_time}秒），保存部分结果...[/yellow]")
+        # 超时时从 scanner 获取已收集的漏洞（通过 _vuln_seen 反推）
+        # wait_for 会取消 task，但 scanner._deduplicate 不会被执行
+        # 所以我们需要从 scanner 的模块实例中捞取部分结果
+        # 从 scanner._partial_vulns 收集超时前的部分结果
+        partial_vulns = getattr(scanner, '_partial_vulns', [])
+        # 兼容旧式模块 _found_vulns（部分模块中途被中断时可能还有残留）
+        for mod_instance in scanner._modules.values():
+            if hasattr(mod_instance, '_found_vulns') and mod_instance._found_vulns:
                 partial_vulns.extend(mod_instance._found_vulns)
-            elif hasattr(mod_instance, 'vulnerabilities'):
-                partial_vulns.extend(mod_instance.vulnerabilities)
 
         if partial_vulns:
             from .models import ScanResult
+            # 去重
             seen = set()
             unique = []
             for v in partial_vulns:
-                normalized = v.url.split("?")[0].split("#")[0].rstrip("/") if v.url else ""
-                sig = f"{v.type.value}|{normalized}|{v.parameter or ''}".lower()
+                sig = f"{v.type.value}|{v.url or ''}|{v.parameter or ''}|{v.payload or ''}".lower()
                 if sig not in seen:
                     seen.add(sig)
                     unique.append(v)
@@ -267,12 +262,14 @@ def cmd_scan(args):
             partial_result.modules_run = len(scanner._modules)
             elapsed = max_time
             display_result(partial_result, elapsed, args)
-
-            # P8: Also save partial results to checkpoint so --resume can continue
-            scanner._save_checkpoint(target_url, unique, [])
-            console.print(f"[yellow]超时前已发现 {len(unique)} 个漏洞（已保存 checkpoint，可用 --resume 恢复）[/yellow]")
+            console.print(f"[yellow]超时前已发现 {len(unique)} 个漏洞![/yellow]")
         else:
-            console.print("[yellow]超时前未发现漏洞[/yellow]")
+            # 兜底：部分模块可能有 scan_completed 标记但未触发
+            completed = getattr(scanner, '_modules_completed', [])
+            if completed:
+                console.print(f"[yellow]超时，{len(completed)} 个模块已完成扫描但未发现漏洞[/yellow]")
+            else:
+                console.print("[yellow]超时前未完成任何模块的扫描[/yellow]")
         return 124
 
     elapsed = time.perf_counter() - start
@@ -468,10 +465,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 扫描控制选项
     control_group = scan_parser.add_argument_group("扫描控制")
-    control_group.add_argument("--max-time", type=int, default=7200,
-                               help="全局扫描超时（秒），默认 7200（2小时），0 表示无限制")
-    control_group.add_argument("--resume", action="store_true",
-                               help="从上次 checkpoint 恢复扫描")
+    control_group.add_argument("--max-time", type=int, default=0,
+                               help="全局扫描超时（秒），0 表示无限制")
     control_group.add_argument("--rate", type=int, default=10,
                                help="每秒最大请求数（默认 10）")
     control_group.add_argument("--rate-mode", choices=["burst", "uniform"], default="burst",

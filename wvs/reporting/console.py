@@ -26,12 +26,27 @@ SEV_COLORS = {
     Severity.INFO: "dim",
 }
 
+# Windows GBK 终端不支持 emoji，使用 ASCII 安全字符
+_SAFE_EMOJI = False
+try:
+    '\u2600'.encode(sys.stdout.encoding or 'utf-8')
+    _SAFE_EMOJI = True
+except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
+    _SAFE_EMOJI = False
+
+_SEV_BADGES = {
+    Severity.CRITICAL: "CRIT",
+    Severity.HIGH: "HIGH",
+    Severity.MEDIUM: "MED",
+    Severity.LOW: "LOW",
+    Severity.INFO: "INFO",
+}
 SEV_ICONS = {
-    Severity.CRITICAL: "💀",
-    Severity.HIGH: "🔴",
-    Severity.MEDIUM: "🟡",
-    Severity.LOW: "🔵",
-    Severity.INFO: "⚪",
+    Severity.CRITICAL: ("!!" if not _SAFE_EMOJI else "\U0001f480"),
+    Severity.HIGH: ("[H]" if not _SAFE_EMOJI else "\U0001f534"),
+    Severity.MEDIUM: ("[M]" if not _SAFE_EMOJI else "\U0001f7e1"),
+    Severity.LOW: ("[L]" if not _SAFE_EMOJI else "\U0001f535"),
+    Severity.INFO: ("[I]" if not _SAFE_EMOJI else "\u26aa"),
 }
 
 
@@ -65,21 +80,31 @@ class ConsoleReporter:
             + (f" [dim]{detail}[/dim]" if detail else "")
         )
 
+    def _icon(self, name: str) -> str:
+        """返回安全图标（非 Windows 用 emoji，Windows 用 ASCII）"""
+        icons = {
+            'info': ("[i]" if not _SAFE_EMOJI else "\u2139"),
+            'ok': ("[v]" if not _SAFE_EMOJI else "\u2713"),
+            'warn': ("[!]" if not _SAFE_EMOJI else "\u26a0"),
+            'err': ("[x]" if not _SAFE_EMOJI else "\u2717"),
+        }
+        return icons.get(name, "[*]")
+
     def info(self, msg: str):
         """输出普通信息"""
         if not self.quiet:
-            self.console.print(f"  [dim]ℹ[/dim]  {msg}")
+            self.console.print(f"  [dim]{self._icon('info')}[/dim]  {msg}")
 
     def success(self, msg: str):
         if not self.quiet:
-            self.console.print(f"  [green]✓[/green]  {msg}")
+            self.console.print(f"  [green]{self._icon('ok')}[/green]  {msg}")
 
     def warning(self, msg: str):
         if not self.quiet:
-            self.console.print(f"  [yellow]⚠[/yellow]  {msg}")
+            self.console.print(f"  [yellow]{self._icon('warn')}[/yellow]  {msg}")
 
     def error(self, msg: str):
-        self.console.print(f"  [red]✗[/red]  {msg}", err=True)
+        self.console.print(f"  [red]{self._icon('err')}[/red]  {msg}", err=True)
 
     def debug(self, msg: str):
         if self.verbose:
@@ -136,7 +161,7 @@ class ConsoleReporter:
         self.console.print()
         self.console.print(
             Panel.fit(
-                "[bold green]✅ 扫描完成，未发现漏洞[/bold green]\n"
+                "[bold green][v] 扫描完成，未发现漏洞[/bold green]\n"
                 f"端点扫描: {result.endpoints_found or '?'} | "
                 f"耗时: {result.duration:.1f}s",
                 border_style="green",
@@ -148,22 +173,24 @@ class ConsoleReporter:
         """漏洞摘要"""
         counts = result.severity_count
         parts = []
-        if counts.get("critical"):
-            parts.append(f"[bold red]💀 {counts['critical']} 严重[/bold red]")
-        if counts.get("high"):
-            parts.append(f"[red]🔴 {counts['high']} 高危[/red]")
-        if counts.get("medium"):
-            parts.append(f"[yellow]🟡 {counts['medium']} 中危[/yellow]")
-        if counts.get("low"):
-            parts.append(f"[blue]🔵 {counts['low']} 低危[/blue]")
-        if counts.get("info"):
-            parts.append(f"[dim]⚪ {counts['info']} 信息[/dim]")
+        sev_labels = {
+            "critical": ("[bold red]", f"{SEV_ICONS.get(Severity.CRITICAL, '')} {counts.get('critical', 0)} 严重[/bold red]"),
+            "high": ("[red]", f"{SEV_ICONS.get(Severity.HIGH, '')} {counts.get('high', 0)} 高危[/red]"),
+            "medium": ("[yellow]", f"{SEV_ICONS.get(Severity.MEDIUM, '')} {counts.get('medium', 0)} 中危[/yellow]"),
+            "low": ("[blue]", f"{SEV_ICONS.get(Severity.LOW, '')} {counts.get('low', 0)} 低危[/blue]"),
+            "info": ("[dim]", f"{SEV_ICONS.get(Severity.INFO, '')} {counts.get('info', 0)} 信息[/dim]"),
+        }
+        parts = []
+        for sev in ["critical", "high", "medium", "low", "info"]:
+            if counts.get(sev):
+                parts.append(f"{sev_labels[sev][0]}{sev_labels[sev][1]}")
 
         total = len(result.vulnerabilities)
+        warn_icon = "[!]" if not _SAFE_EMOJI else "\u26a0"
         self.console.print()
         self.console.print(
             Panel.fit(
-                f"[bold red]⚠ 发现 {total} 个漏洞[/bold red]\n"
+                f"[bold red]{warn_icon} 发现 {total} 个漏洞[/bold red]\n"
                 + "  |  ".join(parts),
                 border_style="red",
                 padding=(1, 2),
