@@ -1,10 +1,10 @@
 """
-OOB (Out-of-Band) 检测模块
+OOB (Out-of-Band) Detection Module
 
-提供统一的 OOB 回调验证机制，支持多种 OOB 服务提供商：
-- Interactsh (推荐，免费开源)
-- DNSLog.cn (国内备选)
-- Burp Collaborator (商业)
+Provides a unified OOB callback verification mechanism, supporting multiple OOB service providers:
+- Interactsh (recommended, free and open source)
+- DNSLog.cn (domestic alternative)
+- Burp Collaborator (commercial)
 """
 
 from .interactsh import InteractshClient

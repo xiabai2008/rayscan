@@ -1,5 +1,6 @@
 """
-RayScan 1.0 (基于 WVS v19.2)
-实用型 Web 漏洞扫描器
+RayScan 1.0 — Practical Web Vulnerability Scanner
+(based on WVS v19.2)
 """
+
 __version__ = "1.0.0"

@@ -1,26 +1,24 @@
 """
-Wappalyzer 集成模块
-v19.2 新增：技术栈指纹识别
+Wappalyzer Integration Module
+v19.2 New: Technology Stack Fingerprinting
 
-策略：
-1. 优先使用 python-Wappalyzer（pip 包）
-2. Fallback 到内置轻量指纹匹配
-3. 识别结果用于优化扫描策略（跳过不相关模块）
+Strategy:
+1. Prefer python-Wappalyzer (pip package)
+2. Fallback to built-in lightweight fingerprint matching
+3. Results used to optimize scan strategy (skip irrelevant modules)
 
-支持：
-- 服务端技术栈识别（语言/框架/CMS/CDN）
-- JavaScript 库检测
-- 安全工具识别（WAF/IDS）
+Supports:
+- Server technology stack identification (language/framework/CMS/CDN)
+- JavaScript library detection
+- Security tool identification (WAF/IDS)
 """
-import asyncio
+
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import urlparse
+from typing import Dict, List, Optional, Tuple
 
 from ..config import ConfigManager
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
 
 
 logger = logging.getLogger("wvs.integrations.wappalyzer")
@@ -28,7 +26,8 @@ logger = logging.getLogger("wvs.integrations.wappalyzer")
 
 @dataclass
 class Technology:
-    """识别到的技术信息"""
+    """Identified technology information"""
+
     name: str
     category: str = "unknown"
     version: Optional[str] = None
@@ -39,11 +38,12 @@ class Technology:
 @dataclass
 class TechFingerprint:
     """
-    技术栈指纹结果
+    Technology stack fingerprint result
 
-    包含目标网站使用的完整技术栈信息，
-    可传递给扫描模块以优化扫描策略。
+    Contains the complete technology stack information of the target website,
+    can be passed to scan modules to optimize scan strategies.
     """
+
     url: str
     technologies: List[Technology] = field(default_factory=list)
     server: Optional[str] = None
@@ -57,16 +57,16 @@ class TechFingerprint:
     waf_name: Optional[str] = None
 
     def has_tech(self, name: str) -> bool:
-        """检查是否使用了特定技术"""
+        """Check whether a specific technology is used"""
         name_lower = name.lower()
         return any(t.name.lower() == name_lower for t in self.technologies)
 
     def get_category(self, category: str) -> List[Technology]:
-        """获取特定类别的所有技术"""
+        """Get all technologies of a specific category"""
         return [t for t in self.technologies if t.category == category]
 
     def summary(self) -> str:
-        """技术栈摘要"""
+        """Technology stack summary"""
         parts = []
         if self.language:
             parts.append(self.language)
@@ -83,19 +83,20 @@ class TechFingerprint:
 
 class WappalyzerIntegration:
     """
-    Wappalyzer 集成 — 技术栈指纹识别
+    Wappalyzer Integration — Technology Stack Fingerprinting
 
-    识别目标网站的技术栈，指导后续扫描模块选择。
+    Identifies the technology stack of the target website,
+    guides subsequent scan module selection.
     """
 
-    # ── 内置轻量指纹库（无 Wappalyzer 时的 fallback）──
+    # ── Built-in lightweight fingerprint database (fallback when Wappalyzer is unavailable) ──
     _BUILTIN_FINGERPRINTS = [
         # CMS
         ("WordPress", "cms", [r"wp-content", r"wp-includes", r"/wp-json/"], ["meta", "header", "html"]),
         ("Drupal", "cms", [r"Drupal", r"/sites/default/", r"/misc/drupal\.js"], ["html"]),
         ("Joomla", "cms", [r"Joomla", r"/components/com_", r"/templates/ja_"], ["html"]),
         ("Magento", "cms", [r"Magento", r"/skin/frontend/"], ["html"]),
-        # 框架
+        # Frameworks
         ("Laravel", "framework", [r"laravel_session", r"XSRF-TOKEN"], ["cookie", "header"]),
         ("Django", "framework", [r"csrftoken", r"django\.", r"__debug__"], ["cookie", "html"]),
         ("Ruby on Rails", "framework", [r"_session_id.*rails", r"rails/"], ["cookie", "header"]),
@@ -103,14 +104,14 @@ class WappalyzerIntegration:
         ("ASP.NET", "framework", [r"__VIEWSTATE", r"ASP\.NET", r"ASPXANONYMOUS"], ["html", "cookie", "header"]),
         ("Express", "framework", [r"x-powered-by:.*express", r"connect\.sid"], ["header", "cookie"]),
         ("Flask", "framework", [r"werkzeug", r"flask/"], ["header", "html"]),
-        # 语言
+        # Languages
         ("PHP", "language", [r"\.php", r"PHPSESSID", r"x-powered-by:.*PHP"], ["url", "cookie", "header"]),
         ("Python", "language", [r"\.py(?:$|\?)", r"python/"], ["url", "header"]),
         ("Java", "language", [r"\.jsp", r"\.do", r"JSESSIONID", r"x-powered-by:.*JSP"], ["url", "cookie", "header"]),
         ("Node.js", "language", [r"node\.js", r"express"], ["header", "html"]),
         ("Ruby", "language", [r"\.rb(?:$|\?)", r"phusion passenger"], ["url", "header"]),
         ("Go", "language", [r"go/", r"x-powered-by:.*go"], ["header"]),
-        # Web 服务器
+        # Web Servers
         ("Nginx", "server", [r"server:.*nginx", r"x-powered-by:.*nginx"], ["header"]),
         ("Apache", "server", [r"server:.*apache", r"x-powered-by:.*apache"], ["header"]),
         ("IIS", "server", [r"server:.*IIS", r"x-powered-by:.*ASP\.NET"], ["header"]),
@@ -136,19 +137,20 @@ class WappalyzerIntegration:
         self._try_init_wappalyzer()
 
     def _try_init_wappalyzer(self):
-        """尝试初始化 python-Wappalyzer"""
+        """Try to initialize python-Wappalyzer"""
         try:
             from Wappalyzer import Wappalyzer, WebPage
+
             self._wappalyzer = Wappalyzer.latest()
             self._WebPage = WebPage
-            logger.info("[Wappalyzer] python-Wappalyzer 已加载")
+            logger.info("[Wappalyzer] python-Wappalyzer loaded")
         except ImportError:
-            logger.info("[Wappalyzer] python-Wappalyzer 未安装，使用内置指纹库")
+            logger.info("[Wappalyzer] python-Wappalyzer not installed, using built-in fingerprint database")
             self._wappalyzer = None
 
     @property
     def is_available(self) -> bool:
-        return True  # 始终可用（内置 fallback）
+        return True  # Always available (built-in fallback)
 
     async def fingerprint(
         self,
@@ -158,16 +160,16 @@ class WappalyzerIntegration:
         cookies: Optional[Dict[str, str]] = None,
     ) -> TechFingerprint:
         """
-        对目标 URL 进行技术栈指纹识别
+        Perform technology stack fingerprinting on the target URL
 
         Args:
-            url: 目标 URL
-            html: HTML 内容（可选，如不传则自动获取）
-            headers: HTTP 响应头
-            cookies: Cookie 字典
+            url: Target URL
+            html: HTML content (optional, auto-fetched if not provided)
+            headers: HTTP response headers
+            cookies: Cookie dictionary
 
         Returns:
-            技术栈指纹结果
+            Technology stack fingerprint result
         """
         fingerprint = TechFingerprint(url=url)
 
@@ -183,7 +185,7 @@ class WappalyzerIntegration:
         headers: Optional[Dict[str, str]],
         fingerprint: TechFingerprint,
     ) -> TechFingerprint:
-        """使用 python-Wappalyzer 进行识别"""
+        """Identify using python-Wappalyzer"""
         try:
             if html is None:
                 html, resp_headers = await self._fetch_url(url)
@@ -202,10 +204,10 @@ class WappalyzerIntegration:
                 )
                 fingerprint.technologies.append(tech)
 
-            logger.info(f"[Wappalyzer] 识别到 {len(analysis)} 项技术")
+            logger.info(f"[Wappalyzer] Identified {len(analysis)} technologies")
 
         except Exception as e:
-            logger.warning(f"[Wappalyzer] python-Wappalyzer 失败: {e}，回退内置")
+            logger.warning(f"[Wappalyzer] python-Wappalyzer failed: {e}, falling back to built-in")
             return await self._fingerprint_builtin(url, html, headers, {}, fingerprint)
 
         self._enrich_fingerprint(fingerprint)
@@ -219,7 +221,7 @@ class WappalyzerIntegration:
         cookies: Optional[Dict[str, str]],
         fingerprint: TechFingerprint,
     ) -> TechFingerprint:
-        """使用内置指纹库进行识别"""
+        """Identify using the built-in fingerprint database"""
         if html is None and headers is None:
             html, headers = await self._fetch_url(url)
 
@@ -227,7 +229,7 @@ class WappalyzerIntegration:
         headers_lower = {k.lower(): v.lower() for k, v in (headers or {}).items()}
         cookie_keys = " ".join((cookies or {}).keys()).lower()
 
-        # 提取响应头关键字段
+        # Extract key response header fields
         fingerprint.server = headers.get("Server") or headers_lower.get("server")
         fingerprint.powered_by = headers.get("X-Powered-By") or headers_lower.get("x-powered-by")
 
@@ -254,11 +256,11 @@ class WappalyzerIntegration:
                     break
 
         self._enrich_fingerprint(fingerprint)
-        logger.info(f"[Wappalyzer:Builtin] 识别到 {len(fingerprint.technologies)} 项技术: {fingerprint.summary()}")
+        logger.info(f"[Wappalyzer:Builtin] Identified {len(fingerprint.technologies)} technologies: {fingerprint.summary()}")
         return fingerprint
 
     def _enrich_fingerprint(self, fp: TechFingerprint):
-        """从识别到的技术中提取摘要信息"""
+        """Extract summary information from identified technologies"""
         for tech in fp.technologies:
             cat = tech.category
             if cat == "cms" and fp.cms is None:
@@ -278,7 +280,7 @@ class WappalyzerIntegration:
                 fp.waf_name = tech.name
 
     async def _fetch_url(self, url: str) -> Tuple[Optional[str], Dict[str, str]]:
-        """获取 URL 的 HTML 和响应头"""
+        """Fetch HTML content and response headers for a URL"""
         try:
             import aiohttp
         except ImportError:
@@ -292,19 +294,19 @@ class WappalyzerIntegration:
                     headers = dict(resp.headers)
                     return html, headers
         except Exception as e:
-            logger.warning(f"[Wappalyzer] 获取 {url} 失败: {e}")
+            logger.warning(f"[Wappalyzer] Failed to fetch {url}: {e}")
             return None, {}
 
     def get_scan_recommendations(self, fp: TechFingerprint) -> Dict[str, List[str]]:
         """
-        根据技术栈指纹生成扫描建议
+        Generate scan recommendations based on technology stack fingerprinting
 
         Returns:
             {"enable": [...], "disable": [...], "focus": [...]}
         """
         rec = {"enable": [], "disable": [], "focus": []}
 
-        # 根据语言推荐
+        # Recommendations based on language
         if fp.language == "PHP":
             rec["focus"].extend(["sqli", "lfi", "cmdi"])
             rec["enable"].append("php_specific")
@@ -317,14 +319,14 @@ class WappalyzerIntegration:
         elif fp.language == "Python":
             rec["focus"].extend(["ssti", "sqli"])
 
-        # 根据 CMS 推荐
+        # Recommendations based on CMS
         if fp.cms == "WordPress":
             rec["focus"].extend(["sqli", "xss", "lfi"])
             rec["enable"].append("wordpress_specific")
         elif fp.cms == "Drupal":
             rec["focus"].append("rce")
 
-        # WAF 检测
+        # WAF detection
         if fp.has_waf:
             rec["enable"].append("waf_bypass")
 
@@ -332,7 +334,7 @@ class WappalyzerIntegration:
 
     @staticmethod
     def _guess_category(tech_name: str) -> str:
-        """根据技术名称猜测类别"""
+        """Guess the category based on the technology name"""
         name_lower = tech_name.lower()
         if any(k in name_lower for k in ["wordpress", "drupal", "joomla", "cms"]):
             return "cms"

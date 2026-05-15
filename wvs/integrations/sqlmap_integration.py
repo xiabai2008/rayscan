@@ -1,21 +1,19 @@
 """
-Sqlmap 集成模块
-v19.2 新增：调用 sqlmap 进行深度 SQL 注入检测
+Sqlmap Integration Module
+v19.2 New: Invoke sqlmap for deep SQL injection detection
 
-策略：
-1. 优先使用真实 sqlmap CLI
-2. 使用 --batch 模式自动应答
-3. 解析 stdout 输出提取注入点
-4. 结果映射为 Vulnerability 对象
+Strategy:
+1. Prefer real sqlmap CLI
+2. Use --batch mode for automatic answers
+3. Parse stdout output to extract injection points
+4. Map results to Vulnerability objects
 """
+
 import asyncio
-import json
 import logging
 import os
 import re
 import shutil
-import subprocess
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..config import ConfigManager
@@ -24,7 +22,7 @@ from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
 
 logger = logging.getLogger("wvs.integrations.sqlmap")
 
-# sqlmap 可能的路径
+# sqlmap possible paths
 SQLMAP_PATHS = [
     "C:/Tools/sqlmap/sqlmap.py",
     "C:/Tools/sqlmap/sqlmap.exe",
@@ -32,22 +30,22 @@ SQLMAP_PATHS = [
     "sqlmap.py",
 ]
 
-# 默认技术组合（B: Boolean, E: Error, U: Union, S: Stacked, T: Time）
+# Default technique combination (B: Boolean, E: Error, U: Union, S: Stacked, T: Time)
 DEFAULT_TECHNIQUES = "BEUST"
 
 
 class SqlmapIntegration:
     """
-    Sqlmap 集成
+    Sqlmap Integration
 
-    使用真实 sqlmap CLI 执行自动化 SQL 注入检测，
-    结果解析为 Vulnerability 对象。
+    Uses real sqlmap CLI to perform automated SQL injection detection,
+    results parsed into Vulnerability objects.
 
-    支持：
-    - 多种注入技术（Boolean/Error/Union/Stacked/Time）
-    - 数据库指纹识别
-    - 数据提取（可选，需显式开启）
-    - 自定义检测级别和风险等级
+    Supports:
+    - Multiple injection techniques (Boolean/Error/Union/Stacked/Time)
+    - Database fingerprinting
+    - Data extraction (optional, must be explicitly enabled)
+    - Custom detection levels and risk levels
     """
 
     def __init__(
@@ -67,16 +65,16 @@ class SqlmapIntegration:
         }
 
     def _find_sqlmap(self) -> Optional[str]:
-        """查找 sqlmap 是否存在"""
+        """Find if sqlmap exists"""
         for path in SQLMAP_PATHS:
             if os.path.exists(path):
-                logger.info(f"[Sqlmap] 找到 sqlmap: {path}")
+                logger.info(f"[Sqlmap] Found sqlmap: {path}")
                 return path
         exe = shutil.which("sqlmap")
         if exe:
-            logger.info(f"[Sqlmap] 从 PATH 找到 sqlmap: {exe}")
+            logger.info(f"[Sqlmap] Found sqlmap in PATH: {exe}")
             return exe
-        logger.warning("[Sqlmap] 未找到 sqlmap")
+        logger.warning("[Sqlmap] sqlmap not found")
         return None
 
     @property
@@ -96,30 +94,27 @@ class SqlmapIntegration:
         extract_data: bool = False,
     ) -> List[Vulnerability]:
         """
-        使用 sqlmap 扫描目标
+        Scan target using sqlmap
 
         Args:
-            url: 目标 URL
-            method: HTTP 方法 (GET/POST)
-            data: POST 数据
-            cookies: Cookie 字典
-            headers: 额外的 HTTP headers
-            level: 检测级别 (1-5)
-            risk: 风险级别 (1-3)
-            techniques: 注入技术 (BEUST)
-            extract_data: 是否提取数据（慢且危险）
+            url: Target URL
+            method: HTTP method (GET/POST)
+            data: POST data
+            cookies: Cookie dictionary
+            headers: Additional HTTP headers
+            level: Detection level (1-5)
+            risk: Risk level (1-3)
+            techniques: Injection techniques (BEUST)
+            extract_data: Whether to extract data (slow and dangerous)
 
         Returns:
-            发现的 SQL 注入漏洞列表
+            List of discovered SQL injection vulnerabilities
         """
         if not self.is_available:
-            logger.warning("[Sqlmap] sqlmap 不可用，跳过扫描")
+            logger.warning("[Sqlmap] sqlmap not available, skipping scan")
             return []
 
-        return await self._scan_async(
-            url, method, data, cookies, headers,
-            level, risk, techniques, extract_data
-        )
+        return await self._scan_async(url, method, data, cookies, headers, level, risk, techniques, extract_data)
 
     async def _scan_async(
         self,
@@ -133,33 +128,33 @@ class SqlmapIntegration:
         techniques: str,
         extract_data: bool,
     ) -> List[Vulnerability]:
-        """异步执行 sqlmap 扫描"""
-        # 基础命令
+        """Execute sqlmap scan asynchronously"""
+        # Base command
         cmd = [self._get_runner(), "-u", url]
 
-        # 注入技术
+        # Injection technique
         cmd.extend(["--technique", techniques])
 
-        # 检测深度
+        # Detection depth
         cmd.extend(["--level", str(max(1, min(5, level)))])
         cmd.extend(["--risk", str(max(1, min(3, risk)))])
 
-        # 自动化
+        # Automation
         cmd.append("--batch")
 
-        # 随机 UA
+        # Random UA
         cmd.append("--random-agent")
 
-        # 跳过确认
+        # Skip WAF confirmation
         cmd.append("--skip-waf")
 
-        # HTTP 方法
+        # HTTP method
         if method.upper() == "POST":
             cmd.extend(["--method", "POST"])
         else:
             cmd.extend(["--method", "GET"])
 
-        # POST 数据
+        # POST data
         if data:
             cmd.extend(["--data", data])
 
@@ -174,14 +169,14 @@ class SqlmapIntegration:
                 if key.lower() != "cookie":
                     cmd.extend(["--headers", f"{key}: {value}"])
 
-        # 不提取数据（除非显式要求）
+        # Do not extract data (unless explicitly requested)
         if not extract_data:
             cmd.append("--no-escape")
 
-        # 线程
+        # Threads
         cmd.extend(["--threads", "3"])
 
-        logger.info(f"[Sqlmap] 执行: {self._get_runner()} -u {url} --level {level} --risk {risk}")
+        logger.info(f"[Sqlmap] Executing: {self._get_runner()} -u {url} --level {level} --risk {risk}")
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -197,7 +192,7 @@ class SqlmapIntegration:
                 )
             except asyncio.TimeoutError:
                 proc.kill()
-                logger.warning(f"[Sqlmap] 超时（>{self.timeout + 30}s）")
+                logger.warning(f"[Sqlmap] Timeout (>{self.timeout + 30}s)")
                 return []
 
             output = stdout.decode("utf-8", errors="ignore")
@@ -209,36 +204,36 @@ class SqlmapIntegration:
             return self._parse_sqlmap_output(output, url)
 
         except FileNotFoundError:
-            logger.error(f"[Sqlmap] 未找到: {self.sqlmap_path}")
+            logger.error(f"[Sqlmap] Not found: {self.sqlmap_path}")
             return []
         except Exception as e:
-            logger.error(f"[Sqlmap] 执行失败: {e}")
+            logger.error(f"[Sqlmap] Execution failed: {e}")
             return []
 
     def _get_runner(self) -> str:
-        """获取运行 sqlmap 的命令"""
+        """Get the command to run sqlmap"""
         if self.sqlmap_path and self.sqlmap_path.endswith(".py"):
             return self.python_exe
         return self.sqlmap_path
 
     def _build_command(self) -> List[str]:
-        """构建完整命令（sqlmap.py 需要 python 前缀）"""
+        """Build the full command (sqlmap.py needs python prefix)"""
         if self.sqlmap_path and self.sqlmap_path.endswith(".py"):
             return [self.python_exe, self.sqlmap_path]
         return [self.sqlmap_path]
 
     def _parse_sqlmap_output(self, output: str, target_url: str) -> List[Vulnerability]:
-        """解析 sqlmap stdout 输出"""
+        """Parse sqlmap stdout output"""
         vulnerabilities = []
 
-        # ── 检查是否发现注入 ──
+        # ── Check if injection was found ──
         if "identified the following injection point" not in output:
-            # 尝试其他匹配模式
+            # Try other matching patterns
             if "is vulnerable" not in output and "vulnerable" not in output.lower():
-                logger.debug("[Sqlmap] 未发现注入点")
+                logger.debug("[Sqlmap] No injection point found")
                 return []
 
-        # ── 提取注入参数 ──
+        # ── Extract injection parameters ──
         injection_pattern = re.compile(
             r"Parameter:\s*['\"](.+?)['\"]"
             r"[\s\S]*?"
@@ -253,7 +248,7 @@ class SqlmapIntegration:
         injections = list(injection_pattern.finditer(output))
 
         if not injections:
-            # 尝试宽松匹配
+            # Try loose matching
             if "is vulnerable" in output.lower() or "injectable" in output.lower():
                 vuln = Vulnerability(
                     type=VulnerabilityType.SQL_INJECTION,
@@ -274,14 +269,14 @@ class SqlmapIntegration:
                 self._stats["injections_found"] += 1
             return vulnerabilities
 
-        # ── 解析每个注入点 ──
+        # ── Parse each injection point ──
         for match in injections:
             param = match.group(1).strip()
             inj_type = match.group(2).strip()
             title = match.group(3).strip()
             payload = match.group(4).strip() if len(match.groups()) >= 4 else ""
 
-            # 提取数据库类型
+            # Extract database type
             dbms_match = re.search(r"back-end DBMS:\s*(.+?)(?:\n|$)", output)
             dbms = dbms_match.group(1).strip() if dbms_match else "Unknown"
 
@@ -297,12 +292,7 @@ class SqlmapIntegration:
                 severity=severity,
                 confidence=confidence,
                 description=f"参数 '{param}' 存在 SQL 注入 ({inj_type})。后端数据库: {dbms}",
-                recommendation=(
-                    "1. 使用参数化查询/预编译语句\n"
-                    "2. 对输入进行严格校验和转义\n"
-                    "3. 最小化数据库用户权限\n"
-                    "4. 启用 WAF 作为额外防护层"
-                ),
+                recommendation=("1. 使用参数化查询/预编译语句\n2. 对输入进行严格校验和转义\n3. 最小化数据库用户权限\n4. 启用 WAF 作为额外防护层"),
                 module="sqlmap",
                 tags=["sqlmap", "sqli", inj_type.lower()],
                 context={
@@ -320,7 +310,7 @@ class SqlmapIntegration:
 
     @staticmethod
     def _assess_injection(inj_type: str) -> tuple:
-        """根据注入类型评估严重程度和置信度"""
+        """Assess severity and confidence based on injection type"""
         inj_type_lower = inj_type.lower()
         if "error-based" in inj_type_lower:
             return (Severity.HIGH, Confidence.CERTAIN)
@@ -336,5 +326,5 @@ class SqlmapIntegration:
             return (Severity.MEDIUM, Confidence.MEDIUM)
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """Get statistics"""
         return self._stats.copy()

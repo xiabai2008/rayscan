@@ -1,12 +1,28 @@
-"""快速扫描 172.17.43.128 — P13 优化版 (并发 cmdi + 本地延迟)"""
-import asyncio, json, sys, time, os
+"""
+RayScan Quick Scan — fast targeted scan against a lab target.
+
+Usage:
+    pip install -e .          # install from source (once)
+    python quick_scan.py      # then run this script
+
+NOTE: The target URL is currently hardcoded for DVWA/Mutillidae labs.
+Change `target.url` below to scan your own target.
+"""
+import asyncio
+import json
+import sys
+import time
+import os
 from datetime import datetime
 from pathlib import Path
 
-# P13: 禁用 stdout 缓冲，进度条实时刷新
+# Disable stdout buffering for real-time progress
 os.environ["PYTHONUNBUFFERED"] = "1"
 
-sys.path.insert(0, r'C:\Users\HZR\Desktop\wvs-v19')
+# Project root imports — run from project root or install with pip install -e .
+from wvs.config import ConfigManager
+from wvs.core import HTTPPool, WAVScanner
+from wvs.models import ScanTarget
 
 from wvs.config import ConfigManager
 from wvs.core import HTTPPool, WAVScanner

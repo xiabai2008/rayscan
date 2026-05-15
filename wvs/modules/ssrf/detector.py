@@ -18,7 +18,6 @@ from .payloads import (
     CLOUD_METADATA_PAYLOADS,
     INTERNAL_SERVICES,
     PROTOCOL_PAYLOADS,
-    ENCODING_BYPASS_PAYLOADS,
     SSRF_SUCCESS_PATTERNS,
 )
 
@@ -41,10 +40,34 @@ class SSRFDetector(DetectionModule):
     """SSRF vulnerability detector"""
 
     SSRF_PARAM_PATTERNS = [
-        "url", "uri", "path", "dest", "redirect", "return", "continue",
-        "domain", "host", "server", "site", "link", "src", "source",
-        "target", "fetch", "load", "proxy", "callback", "next", "goto",
-        "location", "data", "file", "page", "image", "img", "resource",
+        "url",
+        "uri",
+        "path",
+        "dest",
+        "redirect",
+        "return",
+        "continue",
+        "domain",
+        "host",
+        "server",
+        "site",
+        "link",
+        "src",
+        "source",
+        "target",
+        "fetch",
+        "load",
+        "proxy",
+        "callback",
+        "next",
+        "goto",
+        "location",
+        "data",
+        "file",
+        "page",
+        "image",
+        "img",
+        "resource",
         "endpoint",
     ]
 
@@ -59,14 +82,14 @@ class SSRFDetector(DetectionModule):
         return MODULE_INFO
 
     # ----------------------------------------------------------
-    # 核心入口
+    # Core Entry Point
     # ----------------------------------------------------------
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
-        """扫描目标，检测 SSRF"""
+        """Scan target for SSRF"""
         self._found_vulns = []
 
-        # 1. 直接用 target.params/data
+        # 1. Use target.params/data directly
         target_params = getattr(target, "params", None) or {}
         target_data = getattr(target, "data", None) or {}
         if target_params:
@@ -74,9 +97,9 @@ class SSRFDetector(DetectionModule):
         elif target_data:
             await self._scan_endpoint(target.url, target_data.copy(), "POST", "body")
 
-        # 2. 补充端点
+        # 2. Supplement endpoints
         endpoints = self._extract_endpoints(target)
-        logger.info(f"[SSRF] 开始检测，共 {len(endpoints)} 个端点")
+        logger.info(f"[SSRF] Starting detection, {len(endpoints)} endpoints total")
 
         for endpoint in endpoints:
             url = endpoint["url"]
@@ -91,13 +114,13 @@ class SSRFDetector(DetectionModule):
             try:
                 await self._scan_endpoint(url, params, method, param_type)
             except Exception as e:
-                logger.debug(f"[SSRF] 检测 {url} 出错: {e}")
+                logger.debug(f"[SSRF] Error testing {url}: {e}")
 
-        logger.info(f"[SSRF] 检测完成，发现 {len(self._found_vulns)} 个漏洞")
+        logger.info(f"[SSRF] Detection complete, found {len(self._found_vulns)} vulnerabilities")
         return self._found_vulns
 
     # ----------------------------------------------------------
-    # 主要检测流程
+    # Main Detection Flow
     # ----------------------------------------------------------
 
     async def _scan_endpoint(
@@ -107,16 +130,15 @@ class SSRFDetector(DetectionModule):
         method: str,
         param_type: str,
     ) -> None:
-        """对单个端点进行 SSRF 检测"""
+        """Run SSRF detection on a single endpoint"""
         if not params:
             return
 
-        # P16: 获取 baseline 响应，用于过滤输入反射误报
+        # P16: Get baseline response for filtering input reflection false positives
         baseline_resp = await self._send_request(method, url, params.copy(), param_type)
         baseline_text = baseline_resp.get("text", "") if baseline_resp else ""
 
-        all_payloads = (BASIC_PAYLOADS[:3] + CLOUD_METADATA_PAYLOADS[:3] +
-                       INTERNAL_SERVICES[:3] + PROTOCOL_PAYLOADS[:2])
+        all_payloads = BASIC_PAYLOADS[:3] + CLOUD_METADATA_PAYLOADS[:3] + INTERNAL_SERVICES[:3] + PROTOCOL_PAYLOADS[:2]
 
         for param_name, original_value in params.items():
             for payload in all_payloads:
@@ -131,13 +153,13 @@ class SSRFDetector(DetectionModule):
                     resp_text = response.get("text", "")
 
                     if self._check_ssrf_success(resp_text, payload):
-                        # P16: 过滤输入反射误报
+                        # P16: Filter input reflection false positives
                         if self._is_input_reflection_ssrf(resp_text, baseline_text, payload):
-                            logger.debug(f"[SSRF] 跳过反射误报: {url} [{param_name}] payload={payload[:30]}")
+                            logger.debug(f"[SSRF] Skipping reflection false positive: {url} [{param_name}] payload={payload[:30]}")
                             continue
-                        # P18: file:// 协议读本地文件 → 这是 LFI 不是 SSRF
+                        # P18: file:// protocol reads local files -> this is LFI not SSRF
                         if payload.startswith("file://"):
-                            logger.debug(f"[SSRF] 跳过 file:// (LFI): {url} [{param_name}]")
+                            logger.debug(f"[SSRF] Skipping file:// (LFI): {url} [{param_name}]")
                             continue
 
                         severity = self._get_severity_for_response(resp_text)
@@ -148,8 +170,7 @@ class SSRFDetector(DetectionModule):
                             severity=severity,
                             url=url,
                             title="Server-Side Request Forgery (SSRF)",
-                            description="The application is vulnerable to SSRF. "
-                            "Attackers can access internal services or cloud metadata.",
+                            description="The application is vulnerable to SSRF. Attackers can access internal services or cloud metadata.",
                             evidence=evidence,
                             payload=payload,
                             method=method,
@@ -159,14 +180,14 @@ class SSRFDetector(DetectionModule):
                             parameter=param_name,
                         )
                         self._found_vulns.append(vuln)
-                        logger.info(f"[SSRF] 发现漏洞: {url} (param: {param_name}, confidence={conf.value})")
+                        logger.info(f"[SSRF] Found vulnerability: {url} (param: {param_name}, confidence={conf.value})")
                         return
 
                 except Exception as e:
                     logger.debug(f"[SSRF] Error testing {url}: {e}")
                     continue
 
-        # OOB 检测（如果配置了 OOB 管理器）
+        # OOB detection (if OOB manager is configured)
         if self._oob_manager:
             await self._test_oob_ssrf(url, params, method, param_type)
 
@@ -178,14 +199,14 @@ class SSRFDetector(DetectionModule):
         param_type: str,
     ) -> None:
         """
-        OOB SSRF 检测：发送带回调 URL 的 payload，等待服务器发起外带请求
+        OOB SSRF detection: send payload with callback URL, wait for server to initiate outbound request
         """
         if not self._oob_manager or not params:
             return
 
         param_name = list(params.keys())[0]
 
-        # SSRF OOB payload 模板
+        # SSRF OOB payload templates
         oob_templates = [
             "{callback_url}",
             "http://{dns_url}",
@@ -206,7 +227,7 @@ class SSRFDetector(DetectionModule):
             vuln.title = "SSRF (Out-of-Band)"
             vuln.description = "SSRF vulnerability confirmed via OOB callback"
             self._found_vulns.append(vuln)
-            logger.warning(f"[SSRF] OOB 回调确认: {url}")
+            logger.warning(f"[SSRF] OOB callback confirmed: {url}")
 
     async def _send_request(
         self,
@@ -215,7 +236,7 @@ class SSRFDetector(DetectionModule):
         params: Dict[str, str],
         param_type: str,
     ) -> Optional[Dict[str, Any]]:
-        """发送 HTTP 请求"""
+        """Send HTTP request"""
         try:
             if method.upper() == "GET":
                 resp = await self.session.get(url, params=params, timeout=10)
@@ -228,11 +249,11 @@ class SSRFDetector(DetectionModule):
             return None
 
     # ----------------------------------------------------------
-    # 辅助方法
+    # Helper Methods
     # ----------------------------------------------------------
 
     def _extract_endpoints(self, target: ScanTarget) -> List[Dict]:
-        """从 ScanTarget 提取端点（含表单参数 + SSRF 特征参数）"""
+        """Extract endpoints from ScanTarget (including form parameters + SSRF characteristic parameters)"""
         endpoints = []
         url = target.url.rstrip("/")
         parsed = urlparse(url)
@@ -240,35 +261,42 @@ class SSRFDetector(DetectionModule):
         # 1. URL query params that look like SSRF targets
         if parsed.query:
             params = {k: v[0] if v else "test" for k, v in parse_qs(parsed.query).items()}
-            endpoints.append({
-                "url": f"{parsed.scheme}://{parsed.netloc}{parsed.path}",
-                "params": params,
-                "method": "GET",
-                "param_type": "query",
-            })
+            endpoints.append(
+                {
+                    "url": f"{parsed.scheme}://{parsed.netloc}{parsed.path}",
+                    "params": params,
+                    "method": "GET",
+                    "param_type": "query",
+                }
+            )
 
         # 2. target.data / target.params
         target_data = getattr(target, "data", None) or {}
         if target_data:
-            endpoints.append({
-                "url": url,
-                "params": dict(target_data),
-                "method": "POST",
-                "param_type": "body",
-            })
+            endpoints.append(
+                {
+                    "url": url,
+                    "params": dict(target_data),
+                    "method": "POST",
+                    "param_type": "body",
+                }
+            )
         target_params = getattr(target, "params", None) or {}
         if target_params:
-            endpoints.append({
-                "url": url,
-                "params": dict(target_params),
-                "method": "GET",
-                "param_type": "query",
-            })
+            endpoints.append(
+                {
+                    "url": url,
+                    "params": dict(target_params),
+                    "method": "GET",
+                    "param_type": "query",
+                }
+            )
 
-        # 3. 从 HTML 表单提取参数
+        # 3. Extract parameters from HTML forms
         html = getattr(target, "html", "") or ""
         if html:
             import re
+
             form_re = re.compile(
                 r'<form[^>]*\baction\s*=\s*["\']([^"\']*)["\'][^>]*>',
                 re.IGNORECASE,
@@ -306,12 +334,14 @@ class SSRFDetector(DetectionModule):
                         params[name] = value
 
                 if params and form_url.startswith(parsed.scheme):
-                    endpoints.append({
-                        "url": form_url.rstrip("/"),
-                        "params": params,
-                        "method": method,
-                        "param_type": "body" if method == "POST" else "query",
-                    })
+                    endpoints.append(
+                        {
+                            "url": form_url.rstrip("/"),
+                            "params": params,
+                            "method": method,
+                            "param_type": "body" if method == "POST" else "query",
+                        }
+                    )
 
         # P10: Reduced synthetic SSRF paths — crawler discovers real ones
         ssrf_paths = [
@@ -323,42 +353,45 @@ class SSRFDetector(DetectionModule):
         for path, default_params in ssrf_paths:
             full_url = base + path
             if full_url not in [e["url"] for e in endpoints]:
-                endpoints.append({
-                    "url": full_url,
-                    "params": default_params,
-                    "method": "GET",
-                    "param_type": "query",
-                })
+                endpoints.append(
+                    {
+                        "url": full_url,
+                        "params": default_params,
+                        "method": "GET",
+                        "param_type": "query",
+                    }
+                )
 
         return endpoints
 
     @staticmethod
     def _is_input_reflection_ssrf(response_text: str, baseline_text: str, payload: str) -> bool:
         """
-        P16: 检测 SSRF 是否是输入反射误报。
-        
-        如果去掉 payload 后的响应与 baseline 几乎一样，说明 payload 只是被回显了，
-        application 并没有真的发起服务端请求。
-        
+        P16: Detect if SSRF is an input reflection false positive.
+
+        If removing the payload yields a response almost identical to the baseline,
+        the payload was merely echoed back — the application didn't actually make
+        a server-side request.
+
         Returns:
-            True = 这是误报（输入反射），应该跳过
-            False = 可能是真正的 SSRF
+            True = this is a false positive (input reflection), should skip
+            False = could be a real SSRF
         """
         if not payload or payload not in response_text:
             return False
-        # 从响应中移除所有 payload 出现，再和 baseline 比较
+        # Remove all payload occurrences from response, then compare with baseline
         cleaned = response_text.replace(payload, "")
-        # 归一化：去除空白差异后比较
+        # Normalize: compare after stripping whitespace differences
         cleaned_norm = " ".join(cleaned.split())
         baseline_norm = " ".join(baseline_text.split()) if baseline_text else ""
         if not baseline_norm:
             return False
-        # 长度相似度：如果 cleaned 和 baseline 长度差 < 5%，说明只是回显
+        # Length similarity: if cleaned and baseline length differ by < 5%, it's just echo
         len_diff = abs(len(cleaned_norm) - len(baseline_norm))
         max_len = max(len(cleaned_norm), len(baseline_norm), 1)
         if len_diff / max_len < 0.05:
             return True
-        # 内容相似度：简单重叠系数
+        # Content similarity: simple overlap coefficient
         baseline_words = set(baseline_norm.split())
         if not baseline_words:
             return False
@@ -385,8 +418,12 @@ class SSRFDetector(DetectionModule):
 
         # 2. Internal service file content (direct evidence of file read via SSRF)
         internal_file_indicators = [
-            "root:x:0:0:", "nobody:x:", "daemon:x:",  # /etc/passwd
-            "[fonts]", "[extensions]", "[Mail]",  # win.ini
+            "root:x:0:0:",
+            "nobody:x:",
+            "daemon:x:",  # /etc/passwd
+            "[fonts]",
+            "[extensions]",
+            "[Mail]",  # win.ini
         ]
         file_score = sum(1 for ind in internal_file_indicators if ind.lower() in text_lower)
         if file_score >= 1:
@@ -395,10 +432,14 @@ class SSRFDetector(DetectionModule):
         if payload:
             # 3. Connection error specific to the SSRF target URL (server tried to connect)
             ssrf_error_keywords = [
-                "connection refused", "connection timed out",
-                "no route to host", "network is unreachable",
-                "failed to open stream", "getaddrinfo",
-                "name or service not known", "php_network_getaddresses",
+                "connection refused",
+                "connection timed out",
+                "no route to host",
+                "network is unreachable",
+                "failed to open stream",
+                "getaddrinfo",
+                "name or service not known",
+                "php_network_getaddresses",
             ]
             if any(kw in text_lower for kw in ssrf_error_keywords):
                 return True
@@ -421,12 +462,18 @@ class SSRFDetector(DetectionModule):
         """
         text_lower = response_text.lower()
         error_markers = [
-            "connection refused", "connection timed out",
-            "no route to host", "network is unreachable",
-            "connection reset", "cannot connect",
-            "could not connect", "unable to connect",
-            "failed to open stream", "getaddrinfo",
-            "name or service not known", "php_network_getaddresses",
+            "connection refused",
+            "connection timed out",
+            "no route to host",
+            "network is unreachable",
+            "connection reset",
+            "cannot connect",
+            "could not connect",
+            "unable to connect",
+            "failed to open stream",
+            "getaddrinfo",
+            "name or service not known",
+            "php_network_getaddresses",
         ]
         return any(m in text_lower for m in error_markers)
 
@@ -459,8 +506,7 @@ class SSRFDetector(DetectionModule):
         if payload in response_text:
             return f"SSRF: payload URL echoed in response via parameter '{param_name}'"
         # Connection attempt evidence
-        for keyword in ["connection refused", "connection timed out", "no route to host",
-                        "failed to open stream", "getaddrinfo"]:
+        for keyword in ["connection refused", "connection timed out", "no route to host", "failed to open stream", "getaddrinfo"]:
             if keyword in text_lower:
                 return f"SSRF (blind): '{keyword}' via parameter '{param_name}' (payload: {payload})"
         return f"SSRF detected via parameter '{param_name}' (payload: {payload})"

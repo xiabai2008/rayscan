@@ -10,8 +10,7 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, r'C:\Users\HZR\Desktop\wvs-v19.2')
-
+# Import from project root (pip install -e . first)
 import urllib3; urllib3.disable_warnings()
 import requests
 from wvs.config import ConfigManager

@@ -1,6 +1,7 @@
 """
-WVS v19 报告模块
+RayScan Reporting Module — HTML, JSON, CSV, Markdown, and Console reporters.
 """
+
 from .console import ConsoleReporter
 from .html_report import HTMLReporter
 from .markdown_report import MarkdownReporter

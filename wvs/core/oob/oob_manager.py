@@ -1,11 +1,10 @@
 """
-OOB 统一管理器
+OOB Unified Manager
 
-提供统一的 OOB 回调验证接口，支持多种 OOB 服务提供商。
-为检测模块提供简化的 OOB 检测能力。
+Provides a unified OOB callback verification interface, supporting multiple OOB service providers.
+Offers simplified OOB detection capabilities for detection modules.
 """
 
-import asyncio
 import logging
 import secrets
 import time
@@ -19,7 +18,8 @@ logger = logging.getLogger("wvs.oob.manager")
 
 
 class OOBProvider(Enum):
-    """OOB 服务提供商"""
+    """OOB service provider"""
+
     INTERACTSH = "interactsh"
     DNSLOG = "dnslog"
     CUSTOM = "custom"
@@ -27,7 +27,8 @@ class OOBProvider(Enum):
 
 @dataclass
 class OOBToken:
-    """OOB Token 记录"""
+    """OOB Token record"""
+
     token: str
     callback_url: str
     dns_url: str
@@ -38,7 +39,8 @@ class OOBToken:
 
 @dataclass
 class OOBCallback:
-    """OOB 回调结果"""
+    """OOB callback result"""
+
     token: str
     received_at: float
     source_ip: str
@@ -49,29 +51,29 @@ class OOBCallback:
 
 class OOBManager:
     """
-    统一 OOB 验证管理器
+    Unified OOB verification manager
 
-    功能：
-    - 自动注册 OOB 服务
-    - 生成唯一追踪 token
-    - 轮询验证回调
-    - 支持批量检查
+    Features:
+    - Auto-register OOB service
+    - Generate unique tracking tokens
+    - Poll and verify callbacks
+    - Batch check support
 
-    使用示例:
+    Usage example:
         manager = OOBManager(provider="interactsh")
         await manager.initialize()
 
-        # 生成 token 并获取回调 URL
+        # Generate token and get callback URL
         token = await manager.generate_token({"url": "http://target", "param": "id"})
         callback_url = manager.get_callback_url(token)
 
-        # 注入 payload...
-        # 发送带 callback_url 的请求...
+        # Inject payload...
+        # Send request with callback_url...
 
-        # 等待并验证回调
+        # Wait and verify callback
         callback = await manager.check_callback(token, timeout=30)
         if callback:
-            print(f"收到回调: {callback.source_ip}")
+            print(f"Received callback: {callback.source_ip}")
     """
 
     def __init__(
@@ -81,12 +83,12 @@ class OOBManager:
         auto_init: bool = False,
     ):
         """
-        初始化 OOB 管理器
+        Initialize the OOB manager
 
         Args:
-            provider: OOB 服务提供商 (interactsh / dnslog / custom)
-            server_url: 自定义服务器地址
-            auto_init: 是否在构造时自动初始化（同步模式下使用）
+            provider: OOB service provider (interactsh / dnslog / custom)
+            server_url: Custom server address
+            auto_init: Whether to auto-initialize on construction (used in synchronous mode)
         """
         self.provider = OOBProvider(provider.lower())
         self.server_url = server_url
@@ -95,18 +97,18 @@ class OOBManager:
         self._initialized = False
         self._domain = ""
 
-        # 待验证的 token 池
+        # Pool of pending tokens to verify
         self._pending_tokens: Dict[str, OOBToken] = {}
 
-        # 已收到的回调缓存
+        # Cache of received callbacks
         self._callbacks: Dict[str, OOBCallback] = {}
 
     async def initialize(self) -> bool:
         """
-        初始化 OOB 服务（注册并获取域名）
+        Initialize OOB service (register and obtain domain)
 
         Returns:
-            是否初始化成功
+            Whether initialization was successful
         """
         if self._initialized:
             return True
@@ -117,12 +119,12 @@ class OOBManager:
                 await self._client.register()
                 self._domain = self._client.domain
                 self._initialized = True
-                logger.info(f"[OOB] 初始化成功: {self._domain}")
+                logger.info(f"[OOB] Initialization successful: {self._domain}")
                 return True
 
             elif self.provider == OOBProvider.DNSLOG:
-                # DNSLog.cn 集成（暂未实现，使用 Interactsh 回退）
-                logger.warning("[OOB] DNSLog.cn 暂未实现，使用 Interactsh")
+                # DNSLog.cn integration (not yet implemented, falling back to Interactsh)
+                logger.warning("[OOB] DNSLog.cn not yet implemented, using Interactsh")
                 self._client = InteractshClient()
                 await self._client.register()
                 self._domain = self._client.domain
@@ -131,15 +133,15 @@ class OOBManager:
 
             elif self.provider == OOBProvider.CUSTOM:
                 if not self.server_url:
-                    logger.error("[OOB] 自定义模式需要提供 server_url")
+                    logger.error("[OOB] Custom mode requires a server_url")
                     return False
                 self._domain = self.server_url
                 self._initialized = True
-                logger.info(f"[OOB] 使用自定义 OOB 服务器: {self._domain}")
+                logger.info(f"[OOB] Using custom OOB server: {self._domain}")
                 return True
 
         except Exception as e:
-            logger.error(f"[OOB] 初始化失败: {e}")
+            logger.error(f"[OOB] Initialization failed: {e}")
             return False
 
         return False
@@ -149,21 +151,21 @@ class OOBManager:
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        生成唯一 OOB token
+        Generate a unique OOB token
 
         Args:
-            context: 上下文信息（如 url、param、module 等）
+            context: Contextual information (e.g. url, param, module, etc.)
 
         Returns:
-            唯一 token 字符串
+            Unique token string
         """
         if not self._initialized:
             await self.initialize()
 
-        # 生成 6 位随机 token
+        # Generate a 6-character random token
         token = secrets.token_urlsafe(6).lower()
 
-        # 创建 token 记录
+        # Create token record
         oob_token = OOBToken(
             token=token,
             callback_url=self.get_callback_url(token),
@@ -173,22 +175,22 @@ class OOBManager:
         )
 
         self._pending_tokens[token] = oob_token
-        logger.debug(f"[OOB] 生成 token: {token} -> {oob_token.callback_url}")
+        logger.debug(f"[OOB] Generated token: {token} -> {oob_token.callback_url}")
 
         return token
 
     def get_callback_url(self, token: Optional[str] = None) -> str:
         """
-        获取 HTTP 回调 URL
+        Get the HTTP callback URL
 
         Args:
-            token: 可选的 token
+            token: Optional token
 
         Returns:
-            回调 URL
+            Callback URL
         """
         if not self._initialized and not self._domain:
-            raise RuntimeError("OOB 管理器未初始化")
+            raise RuntimeError("OOB manager not initialized")
 
         if self.provider == OOBProvider.CUSTOM:
             base = self._domain.rstrip("/")
@@ -201,16 +203,16 @@ class OOBManager:
 
     def get_dns_callback(self, token: Optional[str] = None) -> str:
         """
-        获取 DNS 回调域名
+        Get the DNS callback domain
 
         Args:
-            token: 可选的 token
+            token: Optional token
 
         Returns:
-            DNS 回调域名
+            DNS callback domain
         """
         if not self._initialized and not self._domain:
-            raise RuntimeError("OOB 管理器未初始化")
+            raise RuntimeError("OOB manager not initialized")
 
         if self.provider == OOBProvider.CUSTOM:
             return f"{token}.{self._domain}" if token else self._domain
@@ -227,25 +229,25 @@ class OOBManager:
         poll_interval: float = 2.0,
     ) -> Optional[OOBCallback]:
         """
-        检查指定 token 是否收到回调
+        Check whether a specific token received a callback
 
         Args:
-            token: 要检查的 token
-            timeout: 超时时间（秒）
-            poll_interval: 轮询间隔（秒）
+            token: The token to check
+            timeout: Timeout (seconds)
+            poll_interval: Poll interval (seconds)
 
         Returns:
-            如果收到回调，返回 OOBCallback；否则返回 None
+            OOBCallback if a callback was received, None otherwise
         """
         if not self._initialized:
             return None
 
-        # 检查缓存
+        # Check cache
         if token in self._callbacks:
             return self._callbacks[token]
 
         if self._client:
-            # 使用 Interactsh 客户端轮询
+            # Use Interactsh client to poll
             interaction = await self._client.verify_token(token, timeout=timeout)
             if interaction:
                 callback = self._interaction_to_callback(interaction)
@@ -260,13 +262,13 @@ class OOBManager:
         timeout: float = 60.0,
     ) -> List[OOBCallback]:
         """
-        批量检查所有待验证的 token
+        Batch check all pending tokens
 
         Args:
-            timeout: 总超时时间
+            timeout: Total timeout
 
         Returns:
-            收到回调的列表
+            List of received callbacks
         """
         if not self._initialized or not self._pending_tokens:
             return []
@@ -274,11 +276,11 @@ class OOBManager:
         callbacks = []
 
         if self._client:
-            # 获取所有回调
+            # Get all interactions
             interactions = await self._client.poll(timeout=timeout)
 
             for interaction in interactions:
-                # 尝试匹配 pending tokens
+                # Try to match pending tokens
                 for token, oob_token in self._pending_tokens.items():
                     if token in interaction.raw_request or token in interaction.get_dns_callback():
                         callback = self._interaction_to_callback(interaction)
@@ -291,16 +293,16 @@ class OOBManager:
         return callbacks
 
     def get_pending_tokens(self) -> List[OOBToken]:
-        """获取所有待验证的 token"""
+        """Get all pending tokens"""
         return list(self._pending_tokens.values())
 
     def get_token_context(self, token: str) -> Optional[Dict[str, Any]]:
-        """获取 token 的上下文信息"""
+        """Get the context of a token"""
         oob_token = self._pending_tokens.get(token)
         return oob_token.context if oob_token else None
 
     def _interaction_to_callback(self, interaction: InteractshInteraction) -> OOBCallback:
-        """将 Interactsh Interaction 转换为 OOBCallback"""
+        """Convert an Interactsh Interaction to OOBCallback"""
         return OOBCallback(
             token=interaction.token,
             received_at=interaction.timestamp,
@@ -311,7 +313,7 @@ class OOBManager:
         )
 
     async def close(self):
-        """关闭资源"""
+        """Close resources"""
         if self._client:
             await self._client.close()
             self._client = None
@@ -319,10 +321,10 @@ class OOBManager:
 
     @property
     def domain(self) -> str:
-        """获取回调域名"""
+        """Get the callback domain"""
         return self._domain
 
     @property
     def is_initialized(self) -> bool:
-        """是否已初始化"""
+        """Whether initialized"""
         return self._initialized

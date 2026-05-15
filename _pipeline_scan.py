@@ -1,10 +1,14 @@
-"""WVS v19.2 full pipeline scan — DVWA (crawler + scanner)"""
+"""
+RayScan — Full pipeline scan (crawler + scanner)
+
+Usage: pip install -e . && python _pipeline_scan.py
+"""
 import sys, time, re, os, asyncio, json, logging
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, r"C:\Users\HZR\Desktop\wvs-v19.2")
-os.chdir(r"C:\Users\HZR\Desktop\wvs-v19.2")
+# Import from project root (pip install -e . first)
+import urllib3; urllib3.disable_warnings()
 
 import urllib3; urllib3.disable_warnings()
 import requests

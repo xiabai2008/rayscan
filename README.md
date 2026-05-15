@@ -30,33 +30,36 @@
 - **第三方工具集成**（Nuclei, sqlmap, ffuf, Wappalyzer）
 - **多种报告格式**（HTML, JSON, CSV, Markdown, Console）
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 环境准备
+### Install from source
 
 ```bash
-# Python 3.8+ 安装依赖
-pip install -r requirements-dev.txt
+git clone https://github.com/xiabai2004/RayScan
+cd RayScan
+pip install -e ".[dev]"
 ```
 
-### 2. 快速扫描
+### Docker
 
 ```bash
-# 最简单的用法 —— 给个URL就行
-python quick_scan.py -u http://example.com
+docker build -t rayscan .
+docker run rayscan scan http://example.com
+
+# Or with docker-compose
+TARGET_URL=http://example.com docker-compose up
 ```
 
-### 3. 全量扫描
+### CLI
 
 ```bash
-# 深度爬取 + 全部检测模块 + 外部集成
-python full_scan.py -u http://example.com --profile full
-```
+# Quick scan
+python -m wvs scan http://example.com
 
-### 4. GUI 界面
+# Full pipeline with crawler + all modules
+python full_scan.py
 
-```bash
-# 带图形界面的交互式扫描
+# GUI
 python wvs_gui.py
 ```
 
@@ -225,6 +228,44 @@ RayScan/
 | WAF 绕过 | ✅ 多策略 |
 | API 扫描 | ✅ 支持 |
 | 第三方集成 | ✅ Nuclei, sqlmap, ffuf, Wappalyzer |
+
+## ⚙️ 配置参考
+
+### 核心参数 (`ConfigManager` / 环境变量)
+
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `timeout` | 30s | HTTP 请求超时 |
+| `threads` | 5 | 并发线程数 |
+| `crawl_depth` | 4 | 爬虫递归深度 |
+| `crawl_max_urls` | 300 | 爬虫最大 URL 数 |
+| `crawl_max_urls_per_prefix` | 25 | 同路径前缀最大页数（防 wiki/forum 吞没） |
+| `max_post_endpoints` | 12 | POST 端点采样上限（表单密集型页面） |
+| `concurrent_endpoints` | 6 | 同时间检测的端点数量 |
+| `rate_mode` | `burst` | 限速模式：`burst` / `uniform` |
+| `verify_ssl` | `true` | HTTPS 证书验证 |
+| `max_time` | 3600s | 全局扫描超时 |
+| `enable_waf_detection` | `true` | 自动识别 WAF |
+| `enable_oob` | `false` | 启用 OOB 带外检测（需 OOB 服务器） |
+
+### 模块参数（从 `modules.<name>.*` 访问）
+
+| 参数名 | 默认值 | 说明 |
+|--------|--------|------|
+| `modules.sqli.enabled` | `true` | SQL 注入检测 |
+| `modules.sqli.threads` | 2 | SQLi 并发数 |
+| `modules.xss.enabled` | `true` | XSS 检测 |
+| `modules.lfi.enabled` | `true` | 文件包含检测 |
+| `integrations.nuclei.enabled` | `true` | Nuclei 集成 |
+| `integrations.sqlmap.enabled` | `true` | sqlmap 集成（需安装 sqlmap） |
+
+### 使用 `--help` 查看 CLI 参数
+
+```bash
+python -m wvs --help
+python -m wvs scan --help
+python -m wvs batch --help
+```
 
 ## ⚙️ 版本历史
 

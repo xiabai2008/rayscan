@@ -1,15 +1,16 @@
 """
-检测模块基类
-实现统一的模块接口，支持插件化扩展
+Detection module base class.
+Provides a unified module interface with plugin-style extensibility.
 
-重构：提取公共方法，减少各检测器的重复代码
+Refactored: extracted common methods to reduce duplication across detectors.
 """
+
 import asyncio
 import logging
 import statistics
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlparse
 
@@ -34,14 +35,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ModuleInfo:
-    """模块信息"""
+    """Module metadata."""
+
     name: str
     description: str
     author: str = "WVS Team"
     version: str = "1.0.0"
     enabled_by_default: bool = True
     tags: List[str] = None
-    
+
     def __post_init__(self):
         if self.tags is None:
             self.tags = []
@@ -49,36 +51,30 @@ class ModuleInfo:
 
 class DetectionModule(ABC):
     """
-    检测模块基类
-    
-    所有检测模块都应该继承这个类，实现统一的接口
+    Base class for all detection modules.
+
+    Every detector should inherit from this class and implement the unified interface.
     """
-    
+
     def __init__(self, config: Optional[ConfigManager] = None, session: Optional[Any] = None):
         """
-        初始化模块
+        Initialize the module.
 
         Args:
-            config: 配置管理器
-            session: HTTPPool session（带认证 cookie）
+            config: ConfigManager instance.
+            session: HTTPPool session (with auth cookies baked in).
         """
         self.config = config or ConfigManager()
-        self.session = session  # HTTPPool session（带认证 cookie）
+        self.session = session  # HTTPPool session (with auth cookies)
         self.module_config = self._get_module_config()
         self.info = self.get_info()
         self.logger = logging.getLogger(f"wvs.module.{self.info.name}")
 
-        # 运行时状态
+        # Runtime state
         self._enabled = self.module_config.enabled
-        self._stats = {
-            "requests_made": 0,
-            "vulnerabilities_found": 0,
-            "errors": 0,
-            "start_time": None,
-            "end_time": None
-        }
+        self._stats = {"requests_made": 0, "vulnerabilities_found": 0, "errors": 0, "start_time": None, "end_time": None}
 
-        # 检测过程中的状态
+        # In-scan state
         self._found_vulns: List[Vulnerability] = []
         self._checked_urls: set = set()
         self._active_session = session
@@ -86,74 +82,77 @@ class DetectionModule(ABC):
         # P18: serializes scan() calls to prevent _found_vulns concurrency race
         self._scan_lock = asyncio.Lock()
 
-        # OOB 管理器（可选，由扫描器注入）
+        # OOB manager (optional, injected by scanner)
         self._oob_manager: Optional["OOBManager"] = None
 
-        # WAF bypass 自动切换（P4 优化）
+        # WAF bypass auto-switch (P4 optimisation)
         self._waf_detected: bool = False
 
-        # 基线缓存：避免对同一 endpoint 重复请求基线 (P4 性能优化)
+        # Cookie-mode persistent client (connection-pool reuse)
+        self._cookie_client: Optional[Any] = None
+
+        # Baseline cache: avoid duplicate baseline requests for the same endpoint (P4 perf)
         self._baseline_cache: Dict[str, Dict[str, Any]] = {}
-        self._global_baseline_cache: Optional[Dict[str, Dict[str, Any]]] = None  # 跨模块共享
+        self._global_baseline_cache: Optional[Dict[str, Dict[str, Any]]] = None  # cross-module shared cache
         self._echo_server_checked: Dict[str, bool] = {}
 
     def _get_module_config(self) -> ModuleConfig:
-        """获取模块配置"""
+        """Get this module's configuration."""
         module_name = self.get_info().name
         return self.config.get_scanner_config().get_module_config(module_name)
-    
+
     @classmethod
     @abstractmethod
     def get_info(cls) -> ModuleInfo:
         """
-        获取模块信息
-        
+        Return module metadata.
+
         Returns:
-            ModuleInfo对象
+            A ModuleInfo instance describing this module.
         """
         pass
-    
+
     @property
     def enabled(self) -> bool:
-        """模块是否启用"""
+        """Whether this module is enabled."""
         return self._enabled and self.module_config.enabled
-    
+
     @enabled.setter
     def enabled(self, value: bool):
-        """设置模块启用状态"""
+        """Set the module's enabled state."""
         self._enabled = value
-    
+
     def enable(self):
-        """启用模块"""
+        """Enable this module."""
         self.enabled = True
-        self.logger.info(f"模块 {self.info.name} 已启用")
-    
+        self.logger.info(f"Module {self.info.name} enabled")
+
     def disable(self):
-        """禁用模块"""
+        """Disable this module."""
         self.enabled = False
-        self.logger.info(f"模块 {self.info.name} 已禁用")
-    
+        self.logger.info(f"Module {self.info.name} disabled")
+
     async def scan(self, target: ScanTarget, session: Optional[Any] = None) -> List[Vulnerability]:
         """
-        扫描目标
-        
+        Scan the target.
+
         Args:
-            target: 扫描目标
-            session: HTTPPool session（带认证 cookie），优先于 self.session
-            
+            target: The scan target.
+            session: HTTPPool session (with auth cookies), preferred over self.session.
+
         Returns:
-            发现的漏洞列表
+            List of discovered vulnerabilities.
         """
         if not self.enabled:
-            self.logger.debug(f"模块 {self.info.name} 已禁用，跳过扫描")
+            self.logger.debug(f"Module {self.info.name} disabled, skipping scan")
             return []
-        
-        # 优先用传入的 session，其次用 self.session
+
+        # Prefer the passed-in session, fall back to self.session
         self._active_session = session if session is not None else self.session
 
         self._stats["start_time"] = asyncio.get_event_loop().time()
-        self.logger.info(f"开始扫描 {target.url} 使用模块 {self.info.name}")
-        
+        self.logger.info(f"Starting scan of {target.url} with module {self.info.name}")
+
         # P18: serialize scan() — _found_vulns is instance-scoped, not concurrent-safe
         async with self._scan_lock:
             try:
@@ -161,34 +160,34 @@ class DetectionModule(ABC):
                 self._stats["vulnerabilities_found"] += len(vulnerabilities)
 
                 if vulnerabilities:
-                    self.logger.info(f"在 {target.url} 发现 {len(vulnerabilities)} 个漏洞")
+                    self.logger.info(f"Found {len(vulnerabilities)} vulnerabilities on {target.url}")
                 else:
-                    self.logger.debug(f"在 {target.url} 未发现漏洞")
+                    self.logger.debug(f"No vulnerabilities found on {target.url}")
 
             except Exception as e:
                 self._stats["errors"] += 1
-                self.logger.error(f"模块 {self.info.name} 扫描失败: {e}")
+                self.logger.error(f"Module {self.info.name} scan failed: {e}")
                 vulnerabilities = []
 
         self._stats["end_time"] = asyncio.get_event_loop().time()
         return vulnerabilities
-    
+
     @abstractmethod
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
         """
-        实际的扫描实现
+        Actual scan implementation.
 
-        子类必须实现这个方法
+        Subclasses must override this method.
 
         Args:
-            target: 扫描目标
+            target: The scan target.
 
         Returns:
-            发现的漏洞列表
+            List of discovered vulnerabilities.
         """
         pass
 
-    # ==================== 通用 HTTP 请求方法 ====================
+    # ==================== Shared HTTP request helpers ====================
 
     async def _send_request(
         self,
@@ -200,18 +199,18 @@ class DetectionModule(ABC):
         timeout: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        统一的 HTTP 请求方法
+        Unified HTTP request method.
 
         Args:
-            method: HTTP 方法 (GET/POST)
-            url: 目标 URL
-            params: 参数字典
-            param_type: 参数类型 (query/body/cookie)
-            headers: 额外请求头
-            timeout: 请求超时
+            method: HTTP method (GET/POST).
+            url: Target URL.
+            params: Query/body/cookie parameters.
+            param_type: Parameter location (query/body/cookie).
+            headers: Extra request headers.
+            timeout: Request timeout.
 
         Returns:
-            响应字典 {"status_code", "text", "headers"} 或 None（失败时）
+            Response dict {"status_code", "text", "headers"} or None on failure.
         """
         try:
             if not self._active_session:
@@ -223,48 +222,53 @@ class DetectionModule(ABC):
             if headers:
                 kwargs["headers"] = headers
 
-            # Cookie 参数类型：使用独立的 httpx client 发送带自定义 Cookie 的请求
+            # Cookie param type: use a cached httpx client with custom Cookie header
             if param_type == "cookie":
                 import httpx
                 from urllib.parse import urljoin, urlparse as url_parse
 
-                # 获取现有 cookies 并合并测试参数
+                # Merge existing cookies with test parameters
                 existing_cookies = {}
-                if hasattr(self._active_session, '_get_httpx_client'):
+                if hasattr(self._active_session, "_get_httpx_client"):
                     existing_cookies = dict(self._active_session._get_httpx_client().cookies)
                 merged_cookies = {**existing_cookies, **params}
 
-                # 创建临时 client 发送带测试 Cookie 的请求
-                # 使用配置的 SSL 验证设置（默认启用）
+                # Reuse persistent client to avoid connection churn
                 verify_ssl = self.config.get("verify_ssl", DEFAULT_VERIFY_SSL)
-                async with httpx.AsyncClient(verify=verify_ssl, timeout=req_timeout, follow_redirects=False) as tmp_client:
-                    cookie_str = "; ".join(f"{k}={v}" for k, v in merged_cookies.items())
-                    req_headers = {"Cookie": cookie_str}
-                    if headers:
-                        req_headers.update(headers)
+                if self._cookie_client is None:
+                    self._cookie_client = httpx.AsyncClient(
+                        verify=verify_ssl,
+                        timeout=req_timeout,
+                        follow_redirects=False,
+                    )
+                cookie_client = self._cookie_client
+                cookie_str = "; ".join(f"{k}={v}" for k, v in merged_cookies.items())
+                req_headers = {"Cookie": cookie_str}
+                if headers:
+                    req_headers.update(headers)
 
-                    resp = await tmp_client.request(method.upper(), url, headers=req_headers)
+                resp = await cookie_client.request(method.upper(), url, headers=req_headers)
 
-                    # 处理重定向（同域名内跟随一次）
-                    if resp.status_code in (301, 302, 303, 307, 308):
-                        loc = resp.headers.get("location") or resp.headers.get("Location")
-                        if loc:
-                            final_url = urljoin(url, loc)
-                            if url_parse(final_url).netloc == url_parse(url).netloc:
-                                resp = await tmp_client.request(method.upper(), final_url, headers=req_headers)
+                # Follow same-domain redirect once
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    loc = resp.headers.get("location") or resp.headers.get("Location")
+                    if loc:
+                        final_url = urljoin(url, loc)
+                        if url_parse(final_url).netloc == url_parse(url).netloc:
+                            resp = await cookie_client.request(method.upper(), final_url, headers=req_headers)
 
-                    self._stats["requests_made"] += 1
-                    return {
-                        "status_code": resp.status_code,
-                        "text": resp.text,
-                        "headers": dict(resp.headers),
-                    }
+                self._stats["requests_made"] += 1
+                return {
+                    "status_code": resp.status_code,
+                    "text": resp.text,
+                    "headers": dict(resp.headers),
+                }
 
-            # 普通 query/body 参数
+            # Normal query/body params
             if method.upper() == "GET":
                 kwargs["params"] = params
             else:
-                # POST 请求：根据 param_type 决定参数位置
+                # POST: param_type decides whether to use body or query
                 if param_type == "body":
                     kwargs["data"] = params
                 else:
@@ -279,96 +283,101 @@ class DetectionModule(ABC):
                 "headers": dict(response.headers),
             }
         except Exception as e:
-            self.logger.debug(f"请求失败: {url} - {e}")
+            self.logger.debug(f"Request failed: {url} - {e}")
             self._stats["errors"] += 1
             return None
 
-    # ==================== 端点提取方法 ====================
+    # ==================== Endpoint extraction ====================
 
     def _extract_endpoints(self, target: ScanTarget) -> List[Dict[str, Any]]:
         """
-        从 ScanTarget 提取可测试的端点
+        Extract testable endpoints from a ScanTarget.
 
-        处理：
-        - URL 查询参数
-        - POST body 数据
-        - Cookie 参数
-        - URL 片段（用于 DOM-based 检测）
+        Handles:
+        - URL query parameters
+        - POST body data
+        - Cookie parameters
+        - URL fragments (for DOM-based detection)
 
         Args:
-            target: 扫描目标
+            target: The scan target.
 
         Returns:
-            端点列表：[{"url": str, "params": dict, "method": str, "param_type": str}, ...]
+            List of endpoint dicts: [{"url": str, "params": dict, "method": str, "param_type": str}, ...]
         """
         endpoints = []
         url = target.url.rstrip("/")
         parsed = urlparse(url)
 
-        # 1. URL 查询参数
+        # 1. URL query parameters
         if parsed.query:
             query_params = parse_qs(parsed.query)
             flat_params = {k: v[0] if v else "" for k, v in query_params.items()}
-            endpoints.append({
-                "url": url.split("?")[0],
-                "params": flat_params,
-                "method": "GET",
-                "param_type": "query",
-            })
+            endpoints.append(
+                {
+                    "url": url.split("?")[0],
+                    "params": flat_params,
+                    "method": "GET",
+                    "param_type": "query",
+                }
+            )
 
-        # 2. POST body 数据
+        # 2. POST body data
         if target.data:
-            endpoints.append({
-                "url": url,
-                "params": target.data.copy() if isinstance(target.data, dict) else dict(target.data),
-                "method": "POST",
-                "param_type": "body",
-            })
+            endpoints.append(
+                {
+                    "url": url,
+                    "params": target.data.copy() if isinstance(target.data, dict) else dict(target.data),
+                    "method": "POST",
+                    "param_type": "body",
+                }
+            )
 
-        # 3. target.params（来自 scanner/crawler 注入的参数）
-        if hasattr(target, 'params') and target.params:
-            endpoints.append({
-                "url": url.split("?")[0],
-                "params": target.params.copy() if isinstance(target.params, dict) else dict(target.params),
-                "method": "GET",
-                "param_type": "query",
-            })
+        # 3. target.params (injected by scanner/crawler)
+        if hasattr(target, "params") and target.params:
+            endpoints.append(
+                {
+                    "url": url.split("?")[0],
+                    "params": target.params.copy() if isinstance(target.params, dict) else dict(target.params),
+                    "method": "GET",
+                    "param_type": "query",
+                }
+            )
 
         return endpoints
 
-    # ==================== Echo-Server 检测（P4: 减少反射型误报）====================
+    # ==================== Echo-server detection (P4: reduce reflection false positives) ====================
 
     def _is_echo_server(self, url: str, resp_text: str, payload: str) -> bool:
         """
-        检测目标是否为 echo-server（如 httpbin.org），避免反射型误报。
+        Check if the target is an echo-server (e.g. httpbin.org) to avoid reflection false positives.
 
-        Echo-server 特征：
-        1. 响应中 payload 原样完整出现，且周围没有 HTML 标签（JSON/纯文本回显）
-        2. 响应包含明显的调试/echo 结构（如 httpbin 的 "args" / "url" 字段）
-        3. 多个不同的 payload 测试后，响应结构相同仅 payload 值不同
+        Echo-server characteristics:
+        1. Payload appears verbatim in the response with no surrounding HTML (JSON/plain-text echo)
+        2. Response contains obvious debug/echo structures (e.g. httpbin's "args" / "url" fields)
+        3. Multiple different payloads produce the same structure with only the payload value changing
 
-        返回 True 表示目标是 echo-server，应降低置信度。
+        Returns True if the target behaves like an echo-server.
         """
         cache_key = f"{url}|{payload[:20]}"
         if cache_key in self._echo_server_checked:
             return self._echo_server_checked[cache_key]
 
-        # 纯 JSON echo-server 特征
+        # Pure JSON echo-server heuristics
         json_indicators = ['"args"', '"url"', '"headers"', '"origin"', '"form"']
         json_score = sum(1 for ind in json_indicators if ind in resp_text)
 
-        # payload 原样反射在 JSON 值中（非 HTML 上下文）
+        # Payload reflected verbatim inside a JSON string value
         if json_score >= 2:
-            # payload 出现在 JSON 字符串值位置（被引号包裹）
             import re
+
             quoted_payload = re.escape(payload)
             if re.search(f'"[^"]*{quoted_payload}[^"]*"', resp_text):
                 self._echo_server_checked[cache_key] = True
                 return True
 
-        # HTML debug echo 特征
-        debug_indicators = ["Request Details", "Query String Parameters",
-                           "Your Input:", "You entered:", "Debug Information"]
+        # HTML debug echo heuristics
+        debug_indicators = ["Request Details", "Query String Parameters", "Your Input:", "You entered:", "Debug Information"]
         if any(ind in resp_text for ind in debug_indicators):
             if payload in resp_text:
                 self._echo_server_checked[cache_key] = True
@@ -377,7 +386,7 @@ class DetectionModule(ABC):
         self._echo_server_checked[cache_key] = False
         return False
 
-    # ==================== 缓存基线（P4: 性能优化）====================
+    # ==================== Baseline cache (P4: performance) ====================
 
     async def _get_cached_baseline(
         self,
@@ -386,7 +395,7 @@ class DetectionModule(ABC):
         params: Dict[str, str],
         param_type: str = "query",
     ) -> Optional[Dict[str, Any]]:
-        """获取缓存的基线响应，避免对同一 endpoint 重复请求。先查本地缓存，再查全局共享缓存。"""
+        """Get a cached baseline response to avoid duplicate requests. Checks local cache first, then global."""
         cache_key = f"{method}|{url}|{param_type}|{sorted(params.keys())}"
         if cache_key in self._baseline_cache:
             return self._baseline_cache[cache_key]
@@ -400,7 +409,7 @@ class DetectionModule(ABC):
                 self._global_baseline_cache[cache_key] = baseline
         return baseline
 
-    # ==================== 漏洞创建方法 ====================
+    # ==================== Vulnerability creation ====================
 
     def _create_vuln(
         self,
@@ -419,31 +428,31 @@ class DetectionModule(ABC):
         explicit_vuln_type: Optional[VulnerabilityType] = None,
     ) -> Vulnerability:
         """
-        统一的漏洞对象创建方法
+        Unified vulnerability object factory.
 
         Args:
-            url: 目标 URL
-            param: 参数名
-            param_type: 参数类型
-            method: HTTP 方法
-            payload: 使用的 payload
-            vuln_type: 漏洞子类型 (如 error-based, time-based, reflected)
-            severity: 严重程度
-            confidence: 置信度
-            evidence: 证据
-            description: 描述
-            recommendation: 修复建议
-            context: 额外上下文
-            explicit_vuln_type: 显式指定漏洞类型（覆盖模块名自动映射）。
+            url: Target URL.
+            param: Parameter name.
+            param_type: Parameter type.
+            method: HTTP method.
+            payload: Payload used.
+            vuln_type: Vulnerability sub-type (e.g. error-based, time-based, reflected).
+            severity: Severity level.
+            confidence: Confidence level.
+            evidence: Evidence string.
+            description: Description.
+            recommendation: Remediation advice.
+            context: Extra context dict.
+            explicit_vuln_type: Override the auto-mapped VulnerabilityType.
 
         Returns:
-            Vulnerability 对象
+            A Vulnerability instance.
         """
         # P12: Guarantee evidence is never empty/null — fall back to payload-based description
         if not evidence:
             evidence = f"Detected via {self.info.name.upper()} ({vuln_type}) using payload: {payload[:60]}"
 
-        # 模块名到漏洞类型的映射（必须包含所有模块名，避免回退到 OTHER）
+        # Module name to VulnerabilityType mapping (must cover all modules to avoid falling back to OTHER)
         vuln_type_map = {
             "sqli": VulnerabilityType.SQL_INJECTION,
             "xss": VulnerabilityType.XSS,
@@ -461,8 +470,7 @@ class DetectionModule(ABC):
         vuln_enum_type = explicit_vuln_type or vuln_type_map.get(module_name)
         if vuln_enum_type is None:
             logger.warning(
-                f"[{module_name}] module name not in vuln_type_map — falling back to OTHER. "
-                f"Add '{module_name}' to base.py:vuln_type_map to fix."
+                f"[{module_name}] module name not in vuln_type_map — falling back to OTHER. Add '{module_name}' to base.py:vuln_type_map to fix."
             )
             vuln_enum_type = VulnerabilityType.OTHER
 
@@ -484,7 +492,7 @@ class DetectionModule(ABC):
             context=context or {},
         )
 
-    # ==================== 基线对比方法 ====================
+    # ==================== Baseline comparison ====================
 
     async def _get_baseline(
         self,
@@ -494,16 +502,16 @@ class DetectionModule(ABC):
         param_type: str = "query",
     ) -> Optional[Dict[str, Any]]:
         """
-        获取基线响应用于对比
+        Fetch a baseline response for comparison.
 
         Args:
-            method: HTTP 方法
-            url: 目标 URL
-            params: 参数
-            param_type: 参数类型
+            method: HTTP method.
+            url: Target URL.
+            params: Parameters.
+            param_type: Parameter type.
 
         Returns:
-            基线响应字典或 None
+            Baseline response dict or None.
         """
         return await self._send_request(method, url, params, param_type)
 
@@ -514,20 +522,20 @@ class DetectionModule(ABC):
         threshold: float = 0.1,
     ) -> bool:
         """
-        检测响应是否与基线有显著差异
+        Check if the response differs significantly from the baseline.
 
-        使用多个指标：
-        - 状态码变化
-        - 长度差异超过阈值
-        - 内容哈希差异
+        Uses multiple signals:
+        - Status code change
+        - Length difference beyond threshold
+        - Content hash difference
 
         Args:
-            response: 测试响应
-            baseline: 基线响应
-            threshold: 长度差异阈值（比例）
+            response: Test response.
+            baseline: Baseline response.
+            threshold: Length difference ratio threshold.
 
         Returns:
-            是否有显著差异
+            True if significantly different.
         """
         if not response or not baseline:
             return True
@@ -538,7 +546,7 @@ class DetectionModule(ABC):
         resp_text = response.get("text", "")
         base_text = baseline.get("text", "")
 
-        # 长度对比
+        # Length comparison
         if len(resp_text) == 0 or len(base_text) == 0:
             return len(resp_text) != len(base_text)
 
@@ -546,31 +554,31 @@ class DetectionModule(ABC):
         if length_diff > threshold:
             return True
 
-        # 哈希对比
+        # Hash comparison
         if hash(resp_text) != hash(base_text):
             return True
 
         return False
 
-    # ==================== OOB 支持方法 ====================
+    # ==================== OOB support ====================
 
     def set_oob_manager(self, oob_manager: "OOBManager"):
         """
-        设置 OOB 管理器
+        Set the OOB manager.
 
         Args:
-            oob_manager: OOB 管理器实例
+            oob_manager: OOB manager instance.
         """
         self._oob_manager = oob_manager
 
     def set_waf_detected(self, detected: bool = True):
-        """由 Scanner 调用：告知检测器目标存在 WAF，应使用 bypass payloads。"""
+        """Called by Scanner to inform the module that a WAF was detected — use bypass payloads."""
         self._waf_detected = detected
         if detected:
             self.logger.info(f"[{self.info.name}] WAF detected — using bypass payloads")
 
     def set_global_baseline_cache(self, cache: Dict[str, Dict[str, Any]]):
-        """注入跨模块共享的基线缓存，避免多个模块对同一 endpoint 重复请求基线。"""
+        """Inject a cross-module shared baseline cache to avoid duplicate requests across modules."""
         self._global_baseline_cache = cache
 
     async def _test_oob_payload(
@@ -584,35 +592,37 @@ class DetectionModule(ABC):
         timeout: float = 15.0,
     ) -> Optional[Vulnerability]:
         """
-        通用的 OOB payload 测试方法
+        Generic OOB payload test method.
 
         Args:
-            url: 目标 URL
-            params: 参数字典
-            param_name: 要注入的参数名
-            method: HTTP 方法
-            param_type: 参数类型
-            payload_templates: payload 模板列表，支持 {callback_url} 和 {token} 占位符
-            timeout: 回调等待超时
+            url: Target URL.
+            params: Parameter dict.
+            param_name: Parameter name to inject.
+            method: HTTP method.
+            param_type: Parameter type.
+            payload_templates: Payload templates supporting {callback_url} and {token} placeholders.
+            timeout: Callback wait timeout.
 
         Returns:
-            如果检测到回调，返回 Vulnerability；否则返回 None
+            Vulnerability if callback detected, else None.
         """
         if not self._oob_manager:
             return None
 
         try:
-            # 生成 token
-            token = await self._oob_manager.generate_token({
-                "url": url,
-                "param": param_name,
-                "module": self.info.name,
-            })
+            # Generate token
+            token = await self._oob_manager.generate_token(
+                {
+                    "url": url,
+                    "param": param_name,
+                    "module": self.info.name,
+                }
+            )
 
             callback_url = self._oob_manager.get_callback_url(token)
             dns_url = self._oob_manager.get_dns_callback(token)
 
-            # 发送 payload
+            # Send payloads
             for template in payload_templates:
                 payload = template.format(
                     callback_url=callback_url,
@@ -623,7 +633,7 @@ class DetectionModule(ABC):
                 test_params[param_name] = payload
                 await self._send_request(method, url, test_params, param_type)
 
-            # 轮询验证回调
+            # Poll for callback
             callback = await self._oob_manager.check_callback(token, timeout=timeout)
 
             if callback:
@@ -635,7 +645,7 @@ class DetectionModule(ABC):
                     payload="OOB payload",
                     vuln_type="oob",
                     evidence=f"OOB callback from {callback.source_ip}: {callback.protocol}",
-                    confidence=Confidence.HIGH,  # OOB 回调证明漏洞真实存在
+                    confidence=Confidence.HIGH,  # OOB callback confirms real vulnerability
                     context={
                         "callback_source": callback.source_ip,
                         "callback_protocol": callback.protocol,
@@ -644,23 +654,23 @@ class DetectionModule(ABC):
                 )
 
         except Exception as e:
-            self.logger.debug(f"OOB 测试失败: {e}")
+            self.logger.debug(f"OOB test failed: {e}")
 
         return None
 
-    # ==================== Time-based 检测公共方法 ====================
+    # ==================== Time-based detection helpers ====================
 
     def _inject_param(self, params: Dict[str, str], param_name: str, payload: str) -> Dict[str, str]:
         """
-        在参数字典中注入 payload
+        Inject a payload into a parameter dict.
 
         Args:
-            params: 原始参数字典
-            param_name: 要注入的参数名
-            payload: 要注入的 payload
+            params: Original parameter dict.
+            param_name: Parameter name to inject.
+            payload: Payload value.
 
         Returns:
-            新的参数字典
+            New parameter dict with the payload injected.
         """
         new_params = params.copy()
         new_params[param_name] = payload
@@ -675,17 +685,17 @@ class DetectionModule(ABC):
         samples: int = TIME_BASED_BASELINE_SAMPLES,
     ) -> Tuple[float, float]:
         """
-        测量基线响应时间
+        Measure baseline response time.
 
         Args:
-            method: HTTP 方法
-            url: 目标 URL
-            params: 参数字典
-            param_type: 参数类型
-            samples: 采样次数
+            method: HTTP method.
+            url: Target URL.
+            params: Parameter dict.
+            param_type: Parameter type.
+            samples: Number of samples.
 
         Returns:
-            (平均响应时间, 标准差)
+            (mean response time, standard deviation).
         """
         times = []
         for _ in range(samples):
@@ -705,18 +715,18 @@ class DetectionModule(ABC):
         baseline_avg: float,
     ) -> bool:
         """
-        判断延迟是否指示存在漏洞
+        Determine whether a delay indicates a vulnerability.
 
-        阈值计算：actual > baseline_avg * factor + 1.0
-        同时需要满足：actual >= expected * min_factor
+        Threshold: actual > baseline_avg * factor + 1.0
+        Also requires: actual >= expected * min_factor
 
         Args:
-            actual_delay: 实际延迟时间
-            expected_delay: 预期延迟时间（SLEEP(N) 中的 N）
-            baseline_avg: 基线平均响应时间
+            actual_delay: Actual response time.
+            expected_delay: Expected delay (the N in SLEEP(N)).
+            baseline_avg: Baseline average response time.
 
         Returns:
-            是否为有效的漏洞指示
+            True if this looks like a valid vulnerability indication.
         """
         threshold = baseline_avg * TIME_BASED_THRESHOLD_FACTOR + 1.0
         min_valid = expected_delay * TIME_BASED_MIN_DELAY_FACTOR
@@ -735,22 +745,22 @@ class DetectionModule(ABC):
         verify_payloads: List[str],
     ) -> bool:
         """
-        Time-based 二次验证
+        Time-based secondary verification.
 
-        使用不同的 payload 验证多次，确保不是偶然延迟
+        Uses different payloads to verify the delay is not coincidental.
 
         Args:
-            url: 目标 URL
-            params: 参数字典
-            param_name: 参数名
-            method: HTTP 方法
-            param_type: 参数类型
-            expected_delay: 预期延迟
-            baseline_avg: 基线平均响应时间
-            verify_payloads: 验证 payload 列表
+            url: Target URL.
+            params: Parameter dict.
+            param_name: Parameter name.
+            method: HTTP method.
+            param_type: Parameter type.
+            expected_delay: Expected delay.
+            baseline_avg: Baseline average response time.
+            verify_payloads: List of verification payloads.
 
         Returns:
-            是否验证通过
+            True if verification passed.
         """
         success_count = 0
         attempts = min(TIME_BASED_VERIFICATION_ATTEMPTS, len(verify_payloads))
@@ -769,251 +779,240 @@ class DetectionModule(ABC):
 
     def _should_skip_time_based(self, baseline_avg: float, baseline_std: float) -> bool:
         """
-        判断是否应该跳过 time-based 检测
+        Decide whether to skip time-based detection.
 
         Args:
-            baseline_avg: 基线平均响应时间
-            baseline_std: 基线标准差
+            baseline_avg: Baseline average response time.
+            baseline_std: Baseline standard deviation.
 
         Returns:
-            True 表示应该跳过
+            True if detection should be skipped.
         """
         if baseline_std > TIME_BASED_MAX_BASELINE_STD:
-            self.logger.debug(f"[Time-based] 网络波动过大 (std={baseline_std:.2f}s)，跳过检测")
+            self.logger.debug(f"[Time-based] Network variance too high (std={baseline_std:.2f}s), skipping")
             return True
 
         if baseline_avg > TIME_BASED_MAX_BASELINE_AVG:
-            self.logger.debug(f"[Time-based] 基线响应时间过长 ({baseline_avg:.2f}s)，跳过检测")
+            self.logger.debug(f"[Time-based] Baseline response too slow ({baseline_avg:.2f}s), skipping")
             return True
 
         return False
-    
+
     def get_config(self) -> Dict[str, Any]:
         """
-        获取模块配置
-        
+        Get module configuration.
+
         Returns:
-            配置字典
+            Configuration dict.
         """
         return {
             "enabled": self.enabled,
             "timeout": self.module_config.timeout,
             "threads": self.module_config.threads,
             "depth": self.module_config.depth,
-            "custom_params": self.module_config.custom_params
+            "custom_params": self.module_config.custom_params,
         }
-    
+
     def update_config(self, **kwargs):
         """
-        更新模块配置
-        
+        Update module configuration.
+
         Args:
-            **kwargs: 配置参数
+            **kwargs: Configuration parameters.
         """
         for key, value in kwargs.items():
             if hasattr(self.module_config, key):
                 setattr(self.module_config, key, value)
-                self.logger.debug(f"更新配置 {key} = {value}")
-    
+                self.logger.debug(f"Updated config {key} = {value}")
+
     def get_stats(self) -> Dict[str, Any]:
         """
-        获取模块统计信息
-        
+        Get module statistics.
+
         Returns:
-            统计字典
+            Statistics dict.
         """
         stats = self._stats.copy()
-        
-        # 计算持续时间
+
+        # Compute duration
         if stats["start_time"] and stats["end_time"]:
             stats["duration"] = stats["end_time"] - stats["start_time"]
         else:
             stats["duration"] = 0
-        
-        # 添加基本信息
-        stats.update({
-            "module_name": self.info.name,
-            "module_version": self.info.version,
-            "enabled": self.enabled
-        })
-        
+
+        # Add basic info
+        stats.update({"module_name": self.info.name, "module_version": self.info.version, "enabled": self.enabled})
+
         return stats
-    
+
     def reset_stats(self):
-        """重置统计信息"""
-        self._stats = {
-            "requests_made": 0,
-            "vulnerabilities_found": 0,
-            "errors": 0,
-            "start_time": None,
-            "end_time": None
-        }
-    
+        """Reset module statistics."""
+        self._stats = {"requests_made": 0, "vulnerabilities_found": 0, "errors": 0, "start_time": None, "end_time": None}
+
     def validate(self) -> bool:
         """
-        验证模块配置
-        
+        Validate module configuration.
+
         Returns:
-            配置是否有效
+            True if configuration is valid.
         """
         try:
             if self.module_config.timeout <= 0:
-                self.logger.warning(f"模块 {self.info.name} 超时时间必须大于0")
+                self.logger.warning(f"Module {self.info.name} timeout must be > 0")
                 return False
-            
+
             if self.module_config.threads <= 0:
-                self.logger.warning(f"模块 {self.info.name} 线程数必须大于0")
+                self.logger.warning(f"Module {self.info.name} threads must be > 0")
                 return False
-            
+
             if self.module_config.depth <= 0:
-                self.logger.warning(f"模块 {self.info.name} 深度必须大于0")
+                self.logger.warning(f"Module {self.info.name} depth must be > 0")
                 return False
-            
+
             return True
-            
+
         except Exception as e:
-            self.logger.error(f"模块 {self.info.name} 验证失败: {e}")
+            self.logger.error(f"Module {self.info.name} validation failed: {e}")
             return False
-    
+
     async def test(self) -> bool:
         """
-        测试模块功能
-        
+        Test module functionality.
+
         Returns:
-            测试是否通过
+            True if the test passes.
         """
-        self.logger.info(f"测试模块 {self.info.name}")
-        
+        self.logger.info(f"Testing module {self.info.name}")
+
         try:
-            # 基本功能测试
+            # Basic functionality test
             if not self.validate():
-                self.logger.error(f"模块 {self.info.name} 配置验证失败")
+                self.logger.error(f"Module {self.info.name} config validation failed")
                 return False
-            
-            # 这里可以添加模块特定的测试
-            # 例如：测试payload加载、网络连接等
-            
-            self.logger.info(f"模块 {self.info.name} 测试通过")
+
+            # Module-specific tests can be added here
+            # e.g. payload loading, network connectivity checks
+
+            self.logger.info(f"Module {self.info.name} test passed")
             return True
-            
+
         except Exception as e:
-            self.logger.error(f"模块 {self.info.name} 测试失败: {e}")
+            self.logger.error(f"Module {self.info.name} test failed: {e}")
             return False
-    
+
     def __str__(self) -> str:
-        """友好的字符串表示"""
+        """Human-readable string representation."""
         return f"{self.info.name} ({self.info.version}) - {self.info.description}"
 
 
 class ModuleFactory:
     """
-    模块工厂
-    
-    负责创建和管理检测模块实例
+    Module factory.
+
+    Responsible for creating and managing detection module instances.
     """
-    
+
     _modules: Dict[str, type] = {}
-    
+
     @classmethod
     def register(cls, module_class: type):
         """
-        注册模块类
-        
+        Register a module class.
+
         Args:
-            module_class: 模块类
+            module_class: The module class to register.
         """
         if not issubclass(module_class, DetectionModule):
-            raise TypeError(f"{module_class} 必须继承自 DetectionModule")
-        
+            raise TypeError(f"{module_class} must inherit from DetectionModule")
+
         module_info = module_class.get_info()
         cls._modules[module_info.name] = module_class
-        
-        logger.info(f"注册模块: {module_info.name}")
-    
+
+        logger.info(f"Registered module: {module_info.name}")
+
     @classmethod
     def create(cls, module_name: str, config: Optional[ConfigManager] = None) -> DetectionModule:
         """
-        创建模块实例
-        
+        Create a module instance.
+
         Args:
-            module_name: 模块名称
-            config: 配置管理器
-            
+            module_name: Module name.
+            config: ConfigManager instance.
+
         Returns:
-            模块实例
-            
+            Module instance.
+
         Raises:
-            KeyError: 模块未注册
+            KeyError: If the module is not registered.
         """
         if module_name not in cls._modules:
-            raise KeyError(f"模块 '{module_name}' 未注册")
-        
+            raise KeyError(f"Module '{module_name}' is not registered")
+
         module_class = cls._modules[module_name]
         return module_class(config)
-    
+
     @classmethod
     def list_modules(cls) -> List[str]:
         """
-        列出所有注册的模块
-        
+        List all registered modules.
+
         Returns:
-            模块名称列表
+            List of module name strings.
         """
         return list(cls._modules.keys())
-    
+
     @classmethod
     def get_module_info(cls, module_name: str) -> Optional[ModuleInfo]:
         """
-        获取模块信息
-        
+        Get module info by name.
+
         Args:
-            module_name: 模块名称
-            
+            module_name: Module name.
+
         Returns:
-            ModuleInfo对象，如果模块未注册则返回None
+            ModuleInfo object, or None if not registered.
         """
         if module_name not in cls._modules:
             return None
-        
+
         module_class = cls._modules[module_name]
         return module_class.get_info()
-    
+
     @classmethod
-    def create_all(cls, config: Optional[ConfigManager] = None, 
-                  enabled_only: bool = True) -> Dict[str, DetectionModule]:
+    def create_all(cls, config: Optional[ConfigManager] = None, enabled_only: bool = True) -> Dict[str, DetectionModule]:
         """
-        创建所有模块实例
-        
+        Create instances of all registered modules.
+
         Args:
-            config: 配置管理器
-            enabled_only: 是否只创建启用的模块
-            
+            config: ConfigManager instance.
+            enabled_only: If True, only create enabled modules.
+
         Returns:
-            模块名称到实例的映射
+            Dict mapping module name to instance.
         """
         modules = {}
-        
+
         for module_name in cls.list_modules():
             try:
                 module = cls.create(module_name, config)
-                
+
                 if enabled_only and not module.enabled:
                     continue
-                    
+
                 modules[module_name] = module
-                
+
             except Exception as e:
-                logger.error(f"创建模块 {module_name} 失败: {e}")
-        
+                logger.error(f"Failed to create module {module_name}: {e}")
+
         return modules
 
 
-# 装饰器：自动注册模块
+# Decorator: auto-register module
 def register_module(module_class: type) -> type:
     """
-    自动注册模块的装饰器
-    
-    用法:
+    Decorator that automatically registers a module.
+
+    Usage:
         @register_module
         class SQLiModule(DetectionModule):
             ...
@@ -1023,46 +1022,41 @@ def register_module(module_class: type) -> type:
 
 
 if __name__ == "__main__":
-    # 测试模块系统
-    print("测试模块系统...")
-    
-    # 创建一个测试模块
+    # Test module system
+    print("Testing module system...")
+
+    # Create a test module
     @register_module
     class TestModule(DetectionModule):
         @classmethod
         def get_info(cls):
-            return ModuleInfo(
-                name="test",
-                description="测试模块",
-                version="1.0.0"
-            )
-        
+            return ModuleInfo(name="test", description="Test module", version="1.0.0")
+
         async def _scan_impl(self, target):
-            print(f"测试模块扫描: {target.url}")
+            print(f"Test module scanning: {target.url}")
             return []
-    
-    # 测试模块工厂
-    print("\n1. 模块工厂测试:")
+
+    # Test module factory
+    print("\n1. Module factory test:")
     modules = ModuleFactory.list_modules()
-    print(f"  注册的模块: {modules}")
-    
-    # 创建模块实例
-    print("\n2. 创建模块实例:")
+    print(f"  Registered modules: {modules}")
+
+    # Create module instance
+    print("\n2. Create module instance:")
     test_module = ModuleFactory.create("test")
-    print(f"  模块: {test_module}")
-    print(f"  模块信息: {test_module.info}")
-    print(f"  模块配置: {test_module.get_config()}")
-    
-    # 测试扫描
-    print("\n3. 测试扫描:")
-    import asyncio
-    
+    print(f"  Module: {test_module}")
+    print(f"  Module info: {test_module.info}")
+    print(f"  Module config: {test_module.get_config()}")
+
+    # Test scan
+    print("\n3. Test scan:")
+
     target = ScanTarget(url="http://example.com")
-    
+
     async def run_test():
         vulnerabilities = await test_module.scan(target)
-        print(f"  发现的漏洞: {len(vulnerabilities)}")
-    
-    asyncio.run(run_test())
-    
-    print("\n测试完成！")
+        print(f"  Vulnerabilities found: {len(vulnerabilities)}")
+
+    asyncio.run(run_test())  # noqa: F405 — asyncio imported at module level
+
+    print("\nTests complete!")

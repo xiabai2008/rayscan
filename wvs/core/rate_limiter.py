@@ -1,41 +1,36 @@
 """
-WVS v19 智能限速系统
-=================================
+RayScan intelligent rate limiting system.
 
-提供完整的速率限制和WAF规避功能，完全兼容现有并发扫描器架构。
+Components:
+- RateLimiter: Sliding window rate limiter (RPS control)
+- AdaptiveRateLimiter: Dynamically adjusts rate based on response times and status codes
+- WAFEvasion: Random intervals, UA rotation, request pattern variation
+- IntelligentRateLimiter: Integrates all of the above
 
-主要组件：
-1. RateLimiter: 滑动窗口请求限制（最大RPS控制）
-2. AdaptiveRateLimiter: 基于响应时间、状态码动态调整速率
-3. WAFEvasion: 随机请求间隔、User-Agent轮换、请求模式变化
-4. IntelligentRateLimiter: 集成以上所有功能的智能限速器
-
-设计特性：
-- 线程安全（支持异步操作）
-- 可配置的速率限制模式（突发/均匀）
-- 自适应调整避免触发429/503状态码
-- WAF规避策略增强扫描隐蔽性
+Thread-safe, async-compatible, with burst/uniform modes.
 """
 
 import asyncio
 import time
 import random
 import statistics
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Deque, Any
+from dataclasses import dataclass
+from typing import List, Dict, Deque
 from collections import deque
 from enum import Enum
 import secrets
 
 
 class RateLimitMode(Enum):
-    """速率限制模式枚举"""
+    """Rate limit mode enumeration"""
+
     BURST = "burst"
     UNIFORM = "uniform"
 
 
 class HealthStatus(Enum):
-    """健康状态枚举"""
+    """Health status enumeration"""
+
     HEALTHY = "healthy"
     WARNING = "warning"
     THROTTLED = "throttled"
@@ -43,7 +38,8 @@ class HealthStatus(Enum):
 
 @dataclass
 class RateLimitMetrics:
-    """速率限制指标收集"""
+    """Rate limit metrics collector"""
+
     request_count: int = 0
     success_count: int = 0
     error_count: int = 0
@@ -53,7 +49,7 @@ class RateLimitMetrics:
     window_start_time: float = 0.0
 
     def reset(self):
-        """重置指标"""
+        """Reset metrics"""
         self.request_count = 0
         self.success_count = 0
         self.error_count = 0
@@ -62,13 +58,12 @@ class RateLimitMetrics:
 
 class RateLimiter:
     """
-    滑动窗口请求限制器
+    Sliding window request limiter
 
-    实现基于时间窗口的RPS（每秒请求数）控制，支持突发和均匀两种模式。
+    Implements RPS (requests per second) control based on time windows, supporting burst and uniform modes.
     """
 
-    def __init__(self, max_rps: int = 10, window_size: float = 1.0,
-                 mode: RateLimitMode = RateLimitMode.BURST):
+    def __init__(self, max_rps: int = 10, window_size: float = 1.0, mode: RateLimitMode = RateLimitMode.BURST):
         self.max_rps = max_rps
         self.window_size = window_size
         self.mode = mode
@@ -80,7 +75,7 @@ class RateLimiter:
         self._last_request_time = 0.0
 
     async def acquire(self, n: int = 1) -> float:
-        """等待直到可以发送n个请求"""
+        """Wait until n requests can be sent"""
         if self.max_rps <= 0:
             return 0.0
 
@@ -91,7 +86,7 @@ class RateLimiter:
                 return await self._acquire_uniform(n)
 
     async def _acquire_burst(self, n: int) -> float:
-        """突发模式：允许突发请求"""
+        """Burst mode: allows burst requests"""
         current_time = time.time()
 
         cutoff_time = current_time - self.window_size
@@ -121,7 +116,7 @@ class RateLimiter:
         return wait_time
 
     async def _acquire_uniform(self, n: int) -> float:
-        """均匀模式：请求均匀分布"""
+        """Uniform mode: evenly distribute requests"""
         current_time = time.time()
         wait_time = 0.0
 
@@ -140,7 +135,7 @@ class RateLimiter:
         return wait_time
 
     def update_metrics(self, status_code: int, response_time: float):
-        """更新请求指标"""
+        """Update request metrics"""
         self.metrics.last_status_code = status_code
         self.metrics.last_response_time = response_time
         self.metrics.total_response_time += response_time
@@ -151,7 +146,7 @@ class RateLimiter:
             self.metrics.error_count += 1
 
     def get_current_rps(self) -> float:
-        """获取当前RPS（滑动窗口内）"""
+        """Get current RPS (within sliding window)"""
         current_time = time.time()
         cutoff_time = current_time - self.window_size
 
@@ -161,23 +156,21 @@ class RateLimiter:
         return len(self.request_timestamps) / self.window_size
 
     def get_metrics(self) -> Dict:
-        """获取完整的指标信息"""
+        """Get complete metrics information"""
         return {
             "max_rps": self.max_rps,
             "current_rps": self.get_current_rps(),
             "request_count": self.metrics.request_count,
             "success_count": self.metrics.success_count,
             "error_count": self.metrics.error_count,
-            "avg_response_time": (self.metrics.total_response_time / self.metrics.request_count
-                                 if self.metrics.request_count > 0 else 0.0),
-            "error_rate": (self.metrics.error_count / self.metrics.request_count
-                          if self.metrics.request_count > 0 else 0.0),
+            "avg_response_time": (self.metrics.total_response_time / self.metrics.request_count if self.metrics.request_count > 0 else 0.0),
+            "error_rate": (self.metrics.error_count / self.metrics.request_count if self.metrics.request_count > 0 else 0.0),
             "window_size": self.window_size,
             "mode": self.mode.value,
         }
 
     def reset(self):
-        """重置限制器状态"""
+        """Reset limiter state"""
         self.request_timestamps.clear()
         self.metrics.reset()
         self.metrics.window_start_time = time.time()
@@ -186,19 +179,24 @@ class RateLimiter:
 
 class AdaptiveRateLimiter(RateLimiter):
     """
-    自适应速率限制器
+    Adaptive rate limiter
 
-    基于响应指标动态调整RPS：
-    1. 响应时间增加 => 降低速率
-    2. 429/503状态码 => 指数退避
-    3. 成功率下降 => 降低速率
-    4. 一段时间无错误后逐渐恢复速率
+    Dynamically adjusts RPS based on response metrics:
+    1. Response time increases => reduce rate
+    2. 429/503 status codes => exponential backoff
+    3. Success rate decreases => reduce rate
+    4. Gradually recover rate after a period without errors
     """
 
-    def __init__(self, max_rps: int = 10, window_size: float = 1.0,
-                 mode: RateLimitMode = RateLimitMode.BURST,
-                 min_rps: int = 1, recovery_rate: float = 0.1,
-                 backoff_factor: float = 2.0):
+    def __init__(
+        self,
+        max_rps: int = 10,
+        window_size: float = 1.0,
+        mode: RateLimitMode = RateLimitMode.BURST,
+        min_rps: int = 1,
+        recovery_rate: float = 0.1,
+        backoff_factor: float = 2.0,
+    ):
         super().__init__(max_rps, window_size, mode)
         self.original_max_rps = max_rps
         self.min_rps = min_rps
@@ -218,7 +216,7 @@ class AdaptiveRateLimiter(RateLimiter):
         self.backoff_count = 0
 
     def update_metrics(self, status_code: int, response_time: float):
-        """更新指标并可能触发自适应调整"""
+        """Update metrics and potentially trigger adaptive adjustment"""
         super().update_metrics(status_code, response_time)
 
         self.response_time_history.append(response_time)
@@ -236,11 +234,11 @@ class AdaptiveRateLimiter(RateLimiter):
             self.last_adjustment_time = current_time
 
     def _trigger_backoff(self):
-        """触发退避机制（指数退避）"""
+        """Trigger backoff mechanism (exponential backoff)"""
         self.is_in_backoff = True
         self.backoff_count += 1
 
-        backoff_time = min(60.0, 5.0 * (self.backoff_factor ** self.backoff_count))
+        backoff_time = min(60.0, 5.0 * (self.backoff_factor**self.backoff_count))
         self.backoff_until = time.time() + backoff_time
 
         self.max_rps = max(self.min_rps, int(self.max_rps // self.backoff_factor))
@@ -248,7 +246,7 @@ class AdaptiveRateLimiter(RateLimiter):
         self.health_status = HealthStatus.THROTTLED
 
     def _adaptive_adjust(self):
-        """基于历史数据进行自适应调整"""
+        """Perform adaptive adjustment based on historical data"""
         if self.is_in_backoff and time.time() >= self.backoff_until:
             self.is_in_backoff = False
             self.health_status = HealthStatus.HEALTHY
@@ -270,15 +268,14 @@ class AdaptiveRateLimiter(RateLimiter):
             self.health_status = new_status
 
             if new_status == HealthStatus.HEALTHY:
-                self.max_rps = min(self.original_max_rps,
-                                  int(self.max_rps * (1.0 + self.recovery_rate)))
+                self.max_rps = min(self.original_max_rps, int(self.max_rps * (1.0 + self.recovery_rate)))
             elif new_status == HealthStatus.WARNING:
                 self.max_rps = max(self.min_rps, int(self.max_rps * 0.8))
             elif new_status == HealthStatus.THROTTLED:
                 self.max_rps = max(self.min_rps, int(self.max_rps * 0.5))
 
     async def acquire(self, n: int = 1) -> float:
-        """重写acquire方法，在退避期间等待"""
+        """Override acquire method, wait during backoff period"""
         if self.is_in_backoff:
             current_time = time.time()
             if current_time < self.backoff_until:
@@ -288,7 +285,7 @@ class AdaptiveRateLimiter(RateLimiter):
         return await super().acquire(n)
 
     def get_health_status(self) -> Dict:
-        """获取健康状态信息"""
+        """Get health status information"""
         return {
             "status": self.health_status.value,
             "is_in_backoff": self.is_in_backoff,
@@ -303,13 +300,13 @@ class AdaptiveRateLimiter(RateLimiter):
 
 class WAFEvasion:
     """
-    WAF规避策略
+    WAF evasion strategies
 
-    实现多种WAF规避技术：
-    1. 随机请求间隔（抖动）
-    2. User-Agent轮换
-    3. 请求头变化
-    4. 请求模式变化
+    Implements various WAF evasion techniques:
+    1. Random request intervals (jitter)
+    2. User-Agent rotation
+    3. Request header variation
+    4. Request pattern variation
     """
 
     USER_AGENTS = [
@@ -340,8 +337,7 @@ class WAFEvasion:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     ]
 
-    def __init__(self, enable_jitter: bool = True, enable_rotation: bool = True,
-                 jitter_range: float = 0.3):
+    def __init__(self, enable_jitter: bool = True, enable_rotation: bool = True, jitter_range: float = 0.3):
         self.enable_jitter = enable_jitter
         self.enable_rotation = enable_rotation
         self.jitter_range = jitter_range
@@ -349,7 +345,7 @@ class WAFEvasion:
         self.request_counter = 0
 
     async def apply_jitter(self, base_delay: float = 0.0) -> float:
-        """应用随机抖动"""
+        """Apply random jitter"""
         if not self.enable_jitter or self.jitter_range <= 0:
             return base_delay
 
@@ -362,7 +358,7 @@ class WAFEvasion:
         return actual_delay
 
     def get_evasion_headers(self) -> Dict[str, str]:
-        """获取WAF规避头部"""
+        """Get WAF evasion headers"""
         headers = {}
 
         if self.enable_rotation:
@@ -384,13 +380,13 @@ class WAFEvasion:
             headers["Cache-Control"] = random.choice(["no-cache", "max-age=0"])
 
         if random.random() > 0.9:
-            headers["X-Forwarded-For"] = f"{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}.{random.randint(1,255)}"
+            headers["X-Forwarded-For"] = f"{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}"
 
         self.request_counter += 1
         return headers
 
     def randomize_request_order(self, params: Dict) -> Dict:
-        """随机化请求参数顺序"""
+        """Randomize request parameter order"""
         if not params:
             return params
 
@@ -399,7 +395,7 @@ class WAFEvasion:
         return dict(items)
 
     def add_redundant_parameters(self, params: Dict) -> Dict:
-        """添加冗余参数"""
+        """Add redundant parameters"""
         if random.random() > 0.7:
             redundant_params = {
                 "timestamp": str(int(time.time())),
@@ -421,9 +417,9 @@ class WAFEvasion:
 
 class IntelligentRateLimiter:
     """
-    智能速率限制器
+    Intelligent rate limiter
 
-    集成速率限制、自适应调整和WAF规避的完整解决方案。
+    Complete solution integrating rate limiting, adaptive adjustment, and WAF evasion.
     """
 
     def __init__(self, config: Dict = None):
@@ -443,26 +439,26 @@ class IntelligentRateLimiter:
                 mode=mode,
                 min_rps=self.config.get("min_rps", 1),
                 recovery_rate=self.config.get("recovery_rate", 0.1),
-                backoff_factor=self.config.get("backoff_factor", 2.0)
+                backoff_factor=self.config.get("backoff_factor", 2.0),
             )
         else:
-            self.rate_limiter = RateLimiter(
-                max_rps=max_rps,
-                window_size=self.config.get("window_size", 1.0),
-                mode=mode
-            )
+            self.rate_limiter = RateLimiter(max_rps=max_rps, window_size=self.config.get("window_size", 1.0), mode=mode)
 
-        self.waf_evasion = WAFEvasion(
-            enable_jitter=self.config.get("enable_jitter", True),
-            enable_rotation=self.config.get("enable_rotation", True),
-            jitter_range=self.config.get("jitter_range", 0.3)
-        ) if enable_waf_evasion else None
+        self.waf_evasion = (
+            WAFEvasion(
+                enable_jitter=self.config.get("enable_jitter", True),
+                enable_rotation=self.config.get("enable_rotation", True),
+                jitter_range=self.config.get("jitter_range", 0.3),
+            )
+            if enable_waf_evasion
+            else None
+        )
 
         self.total_requests = 0
         self.total_wait_time = 0.0
 
     async def acquire(self, n: int = 1) -> float:
-        """等待直到可以发送请求"""
+        """Wait until requests can be sent"""
         wait_time = await self.rate_limiter.acquire(n)
         self.total_wait_time += wait_time
 
@@ -475,17 +471,17 @@ class IntelligentRateLimiter:
         return wait_time
 
     def update_metrics(self, status_code: int, response_time: float):
-        """更新请求指标"""
+        """Update request metrics"""
         self.rate_limiter.update_metrics(status_code, response_time)
 
     def get_evasion_headers(self) -> Dict[str, str]:
-        """获取WAF规避头部"""
+        """Get WAF evasion headers"""
         if self.waf_evasion:
             return self.waf_evasion.get_evasion_headers()
         return {}
 
     def randomize_request(self, params: Dict) -> Dict:
-        """随机化请求参数"""
+        """Randomize request parameters"""
         if not self.waf_evasion:
             return params
 
@@ -495,12 +491,11 @@ class IntelligentRateLimiter:
         return params
 
     def get_stats(self) -> Dict:
-        """获取完整的统计信息"""
+        """Get complete statistics"""
         stats = {
             "total_requests": self.total_requests,
             "total_wait_time": self.total_wait_time,
-            "avg_wait_time_per_request": (self.total_wait_time / self.total_requests
-                                         if self.total_requests > 0 else 0.0),
+            "avg_wait_time_per_request": (self.total_wait_time / self.total_requests if self.total_requests > 0 else 0.0),
             "rate_limiter": self.rate_limiter.get_metrics(),
         }
 
@@ -517,7 +512,7 @@ class IntelligentRateLimiter:
         return stats
 
     def reset_stats(self):
-        """重置统计信息"""
+        """Reset statistics"""
         self.total_requests = 0
         self.total_wait_time = 0.0
         if isinstance(self.rate_limiter, RateLimiter):

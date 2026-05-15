@@ -1,6 +1,7 @@
 """
-允许通过 python -m wvs 运行
+Allows running via python -m wvs
 """
+
 from .cli import main
 
 if __name__ == "__main__":

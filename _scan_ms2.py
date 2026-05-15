@@ -1,7 +1,8 @@
 """MS2保守扫描 — CONC=1, DELAY=800ms, 仅6个核心端点"""
 import sys, asyncio, time, gc, importlib, re
 from pathlib import Path
-sys.path.insert(0, r'C:\Users\HZR\Desktop\wvs-v19.2')
+
+# Project imports — pip install -e . first
 import urllib3; urllib3.disable_warnings()
 from wvs.config import ConfigManager
 from wvs.core.session import HTTPPool

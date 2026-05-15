@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  rayscan:
+    build: .
+    image: rayscan:latest
+    command: scan ${TARGET_URL:-http://example.com}
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount scan reports directory to persist results
+      - ./scan_reports:/app/scan_reports
+    # No ports exposed by default — scanner is client-only

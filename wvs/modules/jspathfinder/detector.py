@@ -1,18 +1,16 @@
 """
-JSPathfinder 检测模块
-JS文件路径发现、敏感信息分析、端点提取、漏洞线索检测
+JSPathfinder Detection Module
+JS file path discovery, sensitive information analysis, endpoint extraction, vulnerability clue detection
 
-集成自 jspathfinder.py v1.0
-在爬虫之后运行，分析所有JS资源
+Integrated from jspathfinder.py v1.0
+Runs after the crawler, analyzes all JS resources
 """
+
 import asyncio
 import concurrent.futures
 import logging
-import os
 import re
-import time
-import urllib.parse
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urljoin, urlparse
 
 from ..base import DetectionModule, ModuleInfo
@@ -21,16 +19,18 @@ from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, Sc
 
 logger = logging.getLogger("wvs.module.jspathfinder")
 
-# ── 第三方依赖检查 ──
+# ── Third-party dependency check ──
 HAS_REQUESTS = False
 try:
     import requests as _requests
+
     HAS_REQUESTS = True
 except ImportError:
     pass
 
 try:
     from bs4 import BeautifulSoup
+
     HAS_BS4 = True
 except ImportError:
     HAS_BS4 = False
@@ -38,11 +38,12 @@ except ImportError:
 HAS_PLAYWRIGHT = False
 try:
     from playwright.sync_api import sync_playwright
+
     HAS_PLAYWRIGHT = True
 except ImportError:
     pass
 
-# ── 规则定义 ──
+# ── Rule definitions ──
 
 SECRET_PATTERNS = {
     "Google API Key": r"AIza[0-9A-Za-z\-_]{35}",
@@ -83,11 +84,18 @@ ENDPOINT_PATTERNS = [
 ]
 
 VULN_KEYWORDS = {
-    "SQLi": [r"(?i)select\s+.*\s+from\s+", r"(?i)union\s+.*\s+select\s+",
-              r"(?i)insert\s+into\s+", r"(?i)update\s+.*\s+set\s+",
-              r"(?i)delete\s+from\s+", r"(?i)drop\s+table\s+"],
-    "XSS": [r"(?i)(?:innerHTML|outerHTML|document\.write|eval\s*\(|setTimeout\s*\(|setInterval\s*\()",
-            r"(?i)location\s*=|location\.hash|document\.domain"],
+    "SQLi": [
+        r"(?i)select\s+.*\s+from\s+",
+        r"(?i)union\s+.*\s+select\s+",
+        r"(?i)insert\s+into\s+",
+        r"(?i)update\s+.*\s+set\s+",
+        r"(?i)delete\s+from\s+",
+        r"(?i)drop\s+table\s+",
+    ],
+    "XSS": [
+        r"(?i)(?:innerHTML|outerHTML|document\.write|eval\s*\(|setTimeout\s*\(|setInterval\s*\()",
+        r"(?i)location\s*=|location\.hash|document\.domain",
+    ],
     "SSRF": [r"(?i)(?:curl_exec|file_get_contents|readfile|fopen|fsockopen).*\$_(?:GET|POST|REQUEST)"],
     "LFI/RFI": [r"(?i)(?:include|require)(?:_once)?\s*\$_(?:GET|POST|REQUEST)"],
     "RCE": [r"(?i)(?:exec|system|passthru|shell_exec|popen|proc_open|eval)\s*\("],
@@ -96,33 +104,61 @@ VULN_KEYWORDS = {
 }
 
 KNOWN_LIB_PATTERNS = [
-    '/jquery', '/vue.', '/vue-', '/vue/', '/semantic', '/fomantic',
-    '/bootstrap', '/react.', '/react-', '/angular', '/lodash',
-    '/moment', '/clipboard', '/emojify', '/polyfill',
+    "/jquery",
+    "/vue.",
+    "/vue-",
+    "/vue/",
+    "/semantic",
+    "/fomantic",
+    "/bootstrap",
+    "/react.",
+    "/react-",
+    "/angular",
+    "/lodash",
+    "/moment",
+    "/clipboard",
+    "/emojify",
+    "/polyfill",
 ]
 
 SENSITIVE_PATHS = [
-    ".git/config", ".env", ".env.example", ".env.local", ".DS_Store",
-    "robots.txt", "sitemap.xml", "crossdomain.xml",
-    "phpinfo.php", "info.php", "test.php",
-    "admin/", "api/", "backup/", "config/", "logs/",
-    "wp-admin/", "wp-content/", "wp-includes/",
-    ".svn/entries", ".hg/", "WEB-INF/web.xml",
+    ".git/config",
+    ".env",
+    ".env.example",
+    ".env.local",
+    ".DS_Store",
+    "robots.txt",
+    "sitemap.xml",
+    "crossdomain.xml",
+    "phpinfo.php",
+    "info.php",
+    "test.php",
+    "admin/",
+    "api/",
+    "backup/",
+    "config/",
+    "logs/",
+    "wp-admin/",
+    "wp-content/",
+    "wp-includes/",
+    ".svn/entries",
+    ".hg/",
+    "WEB-INF/web.xml",
 ]
 
 
 @register_module
 class JSPathfinderDetector(DetectionModule):
-    """JS路径发现 & 敏感信息分析模块"""
+    """JS path discovery & sensitive information analysis module"""
 
-    # 类级别缓存：每个 target 只跑一次
+    # Class-level cache: only run once per target
     _target_cache: Dict[str, bool] = {}
 
     @classmethod
     def get_info(cls) -> ModuleInfo:
         return ModuleInfo(
             name="jspathfinder",
-            description="JS文件路径发现 & 敏感信息分析（API密钥/Token/密码/端点）",
+            description="JS file path discovery & sensitive information analysis (API keys/Token/Password/endpoints)",
             author="WVS Team",
             version="1.0.0",
             enabled_by_default=True,
@@ -134,25 +170,19 @@ class JSPathfinderDetector(DetectionModule):
         self._seen_js: Set[str] = set()
         self._seen_endpoints: Set[str] = set()
         self._found_vulns: List[Vulnerability] = []
-        self._thread_pool = concurrent.futures.ThreadPoolExecutor(
-            max_workers=getattr(self.module_config, 'threads', 10)
-        )
+        self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=getattr(self.module_config, "threads", 10))
         self._timeout = self.module_config.timeout
-        self._use_playwright = (
-            self.module_config.custom_params.get('use_playwright', False) and
-            HAS_PLAYWRIGHT and
-            self._check_playwright_available()
-        )
+        self._use_playwright = self.module_config.custom_params.get("use_playwright", False) and HAS_PLAYWRIGHT and self._check_playwright_available()
 
     def _check_playwright_available(self) -> bool:
-        """检测 Playwright 浏览器是否可用"""
+        """Check if Playwright browser is available"""
         if not HAS_PLAYWRIGHT:
             return False
         try:
             p = sync_playwright().start()
-            for ch in ['chrome', 'msedge', None]:
+            for ch in ["chrome", "msedge", None]:
                 try:
-                    kw = {'channel': ch} if ch else {}
+                    kw = {"channel": ch} if ch else {}
                     b = p.chromium.launch(headless=True, **kw)
                     b.close()
                     p.stop()
@@ -179,23 +209,25 @@ class JSPathfinderDetector(DetectionModule):
 
     # ── HTTP ──
     def _http_get(self, url: str, allow_redirects: bool = True) -> Optional[Any]:
-        """同步 HTTP GET (在线程池中运行)"""
+        """Synchronous HTTP GET (runs in thread pool)"""
         try:
             resp = _requests.get(
-                url, timeout=self._timeout, allow_redirects=allow_redirects,
+                url,
+                timeout=self._timeout,
+                allow_redirects=allow_redirects,
                 verify=False,
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
                     "Accept": "*/*",
-                }
+                },
             )
             return resp
         except Exception:
             return None
 
-    # ── JS 提取 ──
-    def _extract_js_sources(self, url: str) -> List[Dict]:
-        """从HTML页面提取所有JS文件引用"""
+    # ── JS extraction ──
+    def _extract_js_sources(self, url: str) -> List[Dict]:  # noqa: C901
+        """Extract all JS file references from HTML page"""
         js_list = []
         resp = self._http_get(url)
         if not resp or resp.status_code != 200:
@@ -212,7 +244,7 @@ class JSPathfinderDetector(DetectionModule):
                         self._seen_js.add(full_url)
                         js_list.append({"url": full_url, "source": "external", "content": ""})
             # inline scripts
-            for i, m in enumerate(re.finditer(r'<script[^>]*>([\s\S]*?)</script>', html, re.IGNORECASE)):
+            for i, m in enumerate(re.finditer(r"<script[^>]*>([\s\S]*?)</script>", html, re.IGNORECASE)):
                 content = m.group(1).strip()
                 if len(content) > 20:
                     inline_url = f"{url}#inline-{i}"
@@ -221,7 +253,7 @@ class JSPathfinderDetector(DetectionModule):
                         js_list.append({"url": inline_url, "source": "inline", "content": content})
             return js_list
 
-        soup = BeautifulSoup(html, 'html.parser')
+        soup = BeautifulSoup(html, "html.parser")
 
         for tag in soup.find_all("script", src=True):
             src = tag["src"].strip()
@@ -250,7 +282,7 @@ class JSPathfinderDetector(DetectionModule):
                             self._seen_js.add(ev_url)
                             js_list.append({"url": ev_url, "source": "event", "content": content})
 
-        for m in re.finditer(r'sourceMappingURL=([^\s\n]+)', html):
+        for m in re.finditer(r"sourceMappingURL=([^\s\n]+)", html):
             map_url = urljoin(url, m.group(1))
             if map_url not in self._seen_js:
                 self._seen_js.add(map_url)
@@ -258,7 +290,7 @@ class JSPathfinderDetector(DetectionModule):
 
         return js_list
 
-    # ── 内容下载 ──
+    # ── Content download ──
     def _download_js(self, js_entry: Dict) -> str:
         if js_entry.get("content"):
             return js_entry["content"]
@@ -269,7 +301,7 @@ class JSPathfinderDetector(DetectionModule):
                 return resp.text
         return ""
 
-    # ── 敏感信息扫描 ──
+    # ── Secret scanning ──
     def _scan_secrets(self, content: str, source: str) -> List[Dict]:
         found = []
         for secret_type, pattern in SECRET_PATTERNS.items():
@@ -279,14 +311,11 @@ class JSPathfinderDetector(DetectionModule):
                     value = m.group(0)
                 start = max(0, m.start() - 50)
                 end = min(len(content), m.end() + 50)
-                context = content[start:end].replace('\n', ' ')[:120]
-                found.append({
-                    "type": secret_type, "value": value[:200],
-                    "source": source, "context": context
-                })
+                context = content[start:end].replace("\n", " ")[:120]
+                found.append({"type": secret_type, "value": value[:200], "source": source, "context": context})
         return found
 
-    # ── 端点提取 ──
+    # ── Endpoint extraction ──
     def _extract_endpoints(self, content: str, source: str) -> List[Dict]:
         endpoints = []
         for pattern in ENDPOINT_PATTERNS:
@@ -294,15 +323,14 @@ class JSPathfinderDetector(DetectionModule):
                 url_str = m.group(1) if m.lastindex else m.group(0)
                 url_str = url_str.strip("'\"`")
 
-                skip_exts = ('.png', '.jpg', '.svg', '.woff', '.ttf',
-                            '.css', '.ico', '.webp', '.gif', '.eot')
+                skip_exts = (".png", ".jpg", ".svg", ".woff", ".ttf", ".css", ".ico", ".webp", ".gif", ".eot")
                 if any(skip in url_str.lower() for skip in skip_exts):
                     continue
 
                 if url_str.startswith("http"):
                     full_url = url_str
                 else:
-                    base = source if source.startswith('http') else ""
+                    base = source if source.startswith("http") else ""
                     full_url = urljoin(base or self._current_target, url_str)
 
                 normalized = self._normalize_url(full_url)
@@ -310,9 +338,9 @@ class JSPathfinderDetector(DetectionModule):
                     continue
                 self._seen_endpoints.add(normalized)
 
-                if '/api/' in url_str:
+                if "/api/" in url_str:
                     ep_type = "api"
-                elif any(url_str.endswith(ext) for ext in ['.js', '.json', '.xml', '.html']):
+                elif any(url_str.endswith(ext) for ext in [".js", ".json", ".xml", ".html"]):
                     ep_type = "static"
                 elif url_str.startswith("ws"):
                     ep_type = "websocket"
@@ -322,7 +350,7 @@ class JSPathfinderDetector(DetectionModule):
                 endpoints.append({"url": full_url, "type": ep_type, "source": source})
         return endpoints
 
-    # ── 漏洞关键字 ──
+    # ── Vulnerability keywords ──
     def _scan_vuln_keywords(self, content: str, source: str) -> List[Dict]:
         hints = []
         for vuln_type, patterns in VULN_KEYWORDS.items():
@@ -330,13 +358,13 @@ class JSPathfinderDetector(DetectionModule):
                 for m in re.finditer(pattern, content):
                     start = max(0, m.start() - 30)
                     end = min(len(content), m.end() + 30)
-                    ctx = content[start:end].replace('\n', ' ').strip()
+                    ctx = content[start:end].replace("\n", " ").strip()
                     hints.append({"type": vuln_type, "context": ctx, "source": source})
         return hints
 
-    # ── 路径 FUZZ ──
+    # ── Path FUZZ ──
     def _fuzz_paths(self, target_base: str, endpoints: List[Dict]) -> List[Dict]:
-        """基于发现的端点进行路径探测"""
+        """Probe paths based on discovered endpoints"""
         results = []
         path_prefixes = {"/"}
 
@@ -359,15 +387,13 @@ class JSPathfinderDetector(DetectionModule):
         def fuzz_one(path: str):
             url = f"{target_base}{path}"
             try:
-                resp = _requests.get(url, timeout=self._timeout, allow_redirects=False, verify=False,
-                    headers={"User-Agent": "Mozilla/5.0"})
+                resp = _requests.get(url, timeout=self._timeout, allow_redirects=False, verify=False, headers={"User-Agent": "Mozilla/5.0"})
                 if resp.status_code not in [404, 500, 503] and len(resp.text or "") > 0:
                     title = ""
-                    tm = re.search(r'<title[^>]*>(.*?)</title>', resp.text or "", re.IGNORECASE | re.DOTALL)
+                    tm = re.search(r"<title[^>]*>(.*?)</title>", resp.text or "", re.IGNORECASE | re.DOTALL)
                     if tm:
                         title = tm.group(1).strip()[:80]
-                    return {"url": url, "status": resp.status_code,
-                            "size": len(resp.text or ""), "title": title, "path": path}
+                    return {"url": url, "status": resp.status_code, "size": len(resp.text or ""), "title": title, "path": path}
             except Exception:
                 pass
             return None
@@ -381,30 +407,28 @@ class JSPathfinderDetector(DetectionModule):
         results.sort(key=lambda x: x.get("status", 0))
         return results
 
-    # ── 主扫描逻辑 ──
+    # ── Main scan logic ──
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
         target_key = self._get_target_key(target.url)
 
-        # 同一个 base URL 只跑一次
+        # Only run once per base URL
         if target_key in self._target_cache:
             return []
         self._target_cache[target_key] = True
         self._current_target = target_key
 
         vulns: List[Vulnerability] = []
-        logger.info(f"[JSPathfinder] 开始分析: {target_key}")
+        logger.info(f"[JSPathfinder] Starting analysis: {target_key}")
 
         loop = asyncio.get_event_loop()
 
-        # Phase 1: 提取 JS 文件
-        js_list = await loop.run_in_executor(
-            self._thread_pool, self._extract_js_sources, target.url
-        )
+        # Phase 1: Extract JS files
+        js_list = await loop.run_in_executor(self._thread_pool, self._extract_js_sources, target.url)
         external_js = [j for j in js_list if j["source"] == "external"]
         inline_js = [j for j in js_list if j["source"] in ("inline", "event")]
-        logger.info(f"[JSPathfinder] 发现 {len(external_js)} 个外部JS, {len(inline_js)} 个内联JS")
+        logger.info(f"[JSPathfinder] Found {len(external_js)} external JS, {len(inline_js)} inline JS")
 
-        # Phase 2: 下载 + 分析每个 JS
+        # Phase 2: Download + analyze each JS
         all_secrets: List[Dict] = []
         all_endpoints: List[Dict] = []
         all_hints: List[Dict] = []
@@ -423,11 +447,8 @@ class JSPathfinderDetector(DetectionModule):
 
             return sec, eps, hnt
 
-        # 分批在线程池运行
-        futures = [
-            loop.run_in_executor(self._thread_pool, analyze_one, j)
-            for j in js_list
-        ]
+        # Run in thread pool in batches
+        futures = [loop.run_in_executor(self._thread_pool, analyze_one, j) for j in js_list]
         results = await asyncio.gather(*futures)
 
         seen_secrets = set()
@@ -440,32 +461,30 @@ class JSPathfinderDetector(DetectionModule):
                     seen_secrets.add(key)
                     all_secrets.append(s)
 
-        # Phase 3: 路径 FUZZ
+        # Phase 3: Path FUZZ
         fuzzy = []
-        if self.module_config.custom_params.get('fuzz', True):
-            fuzzy = await loop.run_in_executor(
-                self._thread_pool, self._fuzz_paths, target_key, all_endpoints
-            )
+        if self.module_config.custom_params.get("fuzz", True):
+            fuzzy = await loop.run_in_executor(self._thread_pool, self._fuzz_paths, target_key, all_endpoints)
 
-        # ── 组装 Vulnerability ──
-        # 1. 敏感信息 → Vulnerability
+        # ── Assemble Vulnerability objects ──
+        # 1. Secrets -> Vulnerability
         for s in all_secrets:
             v = Vulnerability(
                 type=VulnerabilityType.INFO_DISCLOSURE,
-                title=f"JS敏感信息: {s['type']}",
+                title=f"JS Sensitive Info: {s['type']}",
                 url=target_key,
-                description=f"在 {s['source']} 中发现 {s['type']}: {s['value'][:100]}",
+                description=f"Found {s['type']} in {s['source']}: {s['value'][:100]}",
                 evidence=s["context"][:200] if s.get("context") else "",
                 severity=Severity.HIGH,
                 confidence=Confidence.MEDIUM,
                 module="jspathfinder",
                 tags=["js", "secret", s["type"].lower().replace(" ", "-")],
                 context={"source": s["source"], "secret_type": s["type"]},
-                recommendation=f"移除或轮换 {s['type']}，不应在客户端代码中暴露敏感凭据",
+                recommendation=f"Remove or rotate {s['type']}, sensitive credentials should not be exposed in client-side code",
             )
             vulns.append(v)
 
-        # 2. 漏洞线索 → Vulnerability (INFO 级别)
+        # 2. Vulnerability clues -> Vulnerability (INFO level)
         hint_types: Dict[str, List[Dict]] = {}
         for h in all_hints:
             ht = h["type"]
@@ -479,9 +498,9 @@ class JSPathfinderDetector(DetectionModule):
                 sources = list(set(it["source"] for it in items[:5]))
                 v = Vulnerability(
                     type=VulnerabilityType.OTHER,
-                    title=f"JS漏洞线索: {hint_type} ({len(items)}处)",
+                    title=f"JS Vulnerability Clue: {hint_type} ({len(items)} occurrences)",
                     url=target_key,
-                    description=f"在 {sources[0] if sources else 'unknown'} 等文件中发现 {hint_type} 相关代码模式",
+                    description=f"Found {hint_type}-related code patterns in files including {sources[0] if sources else 'unknown'}",
                     evidence="\n".join(sample_contexts)[:300],
                     severity=Severity.INFO,
                     confidence=Confidence.LOW,
@@ -491,7 +510,7 @@ class JSPathfinderDetector(DetectionModule):
                 )
                 vulns.append(v)
 
-        # 3. FUZZ 发现的路径 → Vulnerability
+        # 3. FUZZ discovered paths -> Vulnerability
         for fr in fuzzy:
             if fr["status"] in [200, 301, 302, 403]:
                 sev = Severity.INFO
@@ -502,21 +521,23 @@ class JSPathfinderDetector(DetectionModule):
 
                 v = Vulnerability(
                     type=VulnerabilityType.INSECURE_CONFIG,
-                    title=f"敏感路径暴露: {fr['path']}",
+                    title=f"Sensitive Path Exposed: {fr['path']}",
                     url=fr["url"],
-                    description=(f"路径 {fr['path']} 返回 HTTP {fr['status']}, "
-                                + (f"大小 {fr['size']}B, 标题: {fr['title']}" if fr.get('title') else f"大小 {fr['size']}B")),
+                    description=(
+                        f"Path {fr['path']} returned HTTP {fr['status']}, "
+                        + (f"size {fr['size']}B, title: {fr['title']}" if fr.get("title") else f"size {fr['size']}B")
+                    ),
                     severity=sev,
                     confidence=Confidence.HIGH,
                     module="jspathfinder",
-                    tags=["fuzz", "path-discovery"] + (
-                        ["sensitive"] if sev != Severity.INFO else []
-                    ),
+                    tags=["fuzz", "path-discovery"] + (["sensitive"] if sev != Severity.INFO else []),
                     context={"status": fr["status"], "size": fr["size"]},
                 )
                 vulns.append(v)
 
-        logger.info(f"[JSPathfinder] 完成: {len(all_secrets)} 敏感信息, "
-                    f"{len(all_endpoints)} 端点, {len(all_hints)} 漏洞线索, "
-                    f"{len(fuzzy)} 路径发现, 总计 {len(vulns)} 个漏洞")
+        logger.info(
+            f"[JSPathfinder] Complete: {len(all_secrets)} secrets, "
+            f"{len(all_endpoints)} endpoints, {len(all_hints)} vulnerability clues, "
+            f"{len(fuzzy)} path discoveries, total {len(vulns)} vulnerabilities"
+        )
         return vulns

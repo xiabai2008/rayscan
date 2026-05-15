@@ -25,17 +25,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyyaml requests beautifulsoup4 lxml aiohttp colorama rich httpx pydantic
-          pip install pytest flake8
+          pip install pytest pytest-asyncio pytest-timeout flake8
 
-      - name: Lint with flake8 (warnings only)
+      - name: Lint with flake8
         run: |
-          flake8 wvs/ --count --exit-zero --max-complexity=20 --max-line-length=150 --statistics
+          flake8 wvs/ --count --max-complexity=20 --max-line-length=150 --statistics
+
+      - name: Install project in dev mode
+        run: |
+          pip install -e .
 
       - name: Import check
         run: |
           python -c "
-          import sys
-          sys.path.insert(0, '.')
           import wvs
           print(f'Version: {wvs.__version__}')
           from wvs.config import ConfigManager
@@ -47,8 +49,7 @@ jobs:
       - name: Module smoke test
         run: |
           python -c "
-          import sys, asyncio
-          sys.path.insert(0, '.')
+          import asyncio
           from wvs.config import ConfigManager
           from wvs.core import WAVScanner
 
@@ -65,4 +66,4 @@ jobs:
 
       - name: Test with pytest
         run: |
-          pytest --tb=short -x --timeout=30 -q 2>/dev/null || echo "No pytest tests found — skipping"
+          pytest --tb=short -x -q tests/

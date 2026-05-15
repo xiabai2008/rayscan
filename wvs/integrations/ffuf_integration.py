@@ -1,18 +1,19 @@
 """
-ffuf 集成模块
-v19.2 新增：目录/文件爆破与模糊测试
+ffuf Integration Module
+v19.2 New: Directory/File Bruteforce and Fuzzing
 
-策略：
-1. 调用 ffuf CLI 执行批量路径发现
-2. 使用 -json 输出模式解析结果
-3. 发现的敏感路径映射为 Vulnerability (INFO_DISCLOSURE)
+Strategy:
+1. Call ffuf CLI to perform batch path discovery
+2. Use -json output mode to parse results
+3. Map discovered sensitive paths to Vulnerability (INFO_DISCLOSURE)
 
-支持：
-- 自定义字典
-- 递归发现
-- 状态码/行数/字数过滤
-- 扩展名爆破
+Supports:
+- Custom wordlists
+- Recursive discovery
+- Status code / line count / word count filtering
+- Extension bruteforce
 """
+
 import asyncio
 import json
 import logging
@@ -33,16 +34,16 @@ FFUF_PATHS = [
     "ffuf",
 ]
 
-# 默认扩展名列表
+# Default extension list
 DEFAULT_EXTENSIONS = [".php", ".asp", ".aspx", ".jsp", ".html", ".txt", ".bak", ".zip", ".sql", ".git"]
 
 
 class FfufIntegration:
     """
-    ffuf 集成 — 目录/文件发现
+    ffuf Integration — Directory/File Discovery
 
-    使用 ffuf (Fuzz Faster U Fool) 进行高速路径爆破，
-    结果解析为信息泄露漏洞。
+    Uses ffuf (Fuzz Faster U Fool) for high-speed path bruteforcing,
+    results parsed into information disclosure vulnerabilities.
     """
 
     def __init__(
@@ -64,13 +65,13 @@ class FfufIntegration:
     def _find_ffuf(self) -> Optional[str]:
         for path in FFUF_PATHS:
             if os.path.exists(path):
-                logger.info(f"[ffuf] 找到 ffuf: {path}")
+                logger.info(f"[ffuf] Found ffuf: {path}")
                 return path
         exe = shutil.which("ffuf")
         if exe:
-            logger.info(f"[ffuf] 从 PATH 找到: {exe}")
+            logger.info(f"[ffuf] Found in PATH: {exe}")
             return exe
-        logger.warning("[ffuf] 未找到 ffuf.exe")
+        logger.warning("[ffuf] ffuf.exe not found")
         return None
 
     @property
@@ -89,28 +90,34 @@ class FfufIntegration:
         timeout: int = 10,
     ) -> List[Vulnerability]:
         """
-        使用 ffuf 爆破目录/文件
+        Use ffuf to bruteforce directories/files
 
         Args:
-            url: 目标基 URL（必须包含 FUZZ 占位符，如 http://test.com/FUZZ）
-            wordlist: 字典路径（默认使用内置小字典）
-            extensions: 扩展名列表
-            match_codes: 匹配的状态码
-            filter_codes: 过滤的状态码
-            recursion: 是否递归
-            rate: 每秒请求数
-            timeout: 单个请求超时秒数
+            url: Target base URL (must contain FUZZ placeholder, e.g. http://test.com/FUZZ)
+            wordlist: Wordlist path (default uses built-in small wordlist)
+            extensions: Extension list
+            match_codes: HTTP status codes to match
+            filter_codes: HTTP status codes to filter
+            recursion: Whether to enable recursion
+            rate: Requests per second
+            timeout: Single request timeout in seconds
 
         Returns:
-            发现的路径列表（Vulnerability）
+            List of discovered paths (Vulnerability)
         """
         if not self.is_available:
-            logger.warning("[ffuf] ffuf 不可用")
+            logger.warning("[ffuf] ffuf not available")
             return []
 
         return await self._scan_async(
-            url, wordlist, extensions, match_codes,
-            filter_codes, recursion, rate, timeout,
+            url,
+            wordlist,
+            extensions,
+            match_codes,
+            filter_codes,
+            recursion,
+            rate,
+            timeout,
         )
 
     async def _scan_async(
@@ -126,35 +133,41 @@ class FfufIntegration:
     ) -> List[Vulnerability]:
         cmd = [
             self.ffuf_path,
-            "-u", url,
+            "-u",
+            url,
             "-json",
-            "-mc", match_codes,
-            "-fc", filter_codes,
-            "-rate", str(rate),
-            "-timeout", str(timeout),
-            "-t", "30",
+            "-mc",
+            match_codes,
+            "-fc",
+            filter_codes,
+            "-rate",
+            str(rate),
+            "-timeout",
+            str(timeout),
+            "-t",
+            "30",
         ]
 
-        # 字典
+        # Wordlist
         if wordlist and os.path.exists(wordlist):
             cmd.extend(["-w", wordlist])
         else:
             cmd.extend(["-w", "FUZZ"])  # fallback
 
-        # 扩展名
+        # Extensions
         if extensions:
             ext_str = ",".join(extensions)
             cmd.extend(["-e", ext_str])
 
-        # 递归
+        # Recursion
         if recursion:
             cmd.append("-recursion")
             cmd.extend(["-recursion-depth", "2"])
 
-        # 静默
+        # Silent mode
         cmd.append("-s")
 
-        logger.info(f"[ffuf] 扫描: {url}")
+        logger.info(f"[ffuf] Scanning: {url}")
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -170,17 +183,17 @@ class FfufIntegration:
                 )
             except asyncio.TimeoutError:
                 proc.kill()
-                logger.warning(f"[ffuf] 超时")
+                logger.warning("[ffuf] Timeout")
                 return []
 
             output = stdout.decode("utf-8", errors="ignore")
             return self._parse_ffuf_output(output, url)
 
         except FileNotFoundError:
-            logger.error(f"[ffuf] 未找到: {self.ffuf_path}")
+            logger.error(f"[ffuf] Not found: {self.ffuf_path}")
             return []
         except Exception as e:
-            logger.error(f"[ffuf] 执行失败: {e}")
+            logger.error(f"[ffuf] Execution failed: {e}")
             return []
 
     def _parse_ffuf_output(
@@ -188,7 +201,7 @@ class FfufIntegration:
         output: str,
         base_url: str,
     ) -> List[Vulnerability]:
-        """解析 ffuf JSON 输出"""
+        """Parse ffuf JSON output"""
         vulnerabilities = []
 
         for line in output.strip().split("\n"):
@@ -205,7 +218,7 @@ class FfufIntegration:
             words = entry.get("words", 0)
             lines_count = entry.get("lines", 0)
 
-            # 分类路径
+            # Classify path
             path_info = self._classify_path(result_url, status)
 
             vuln = Vulnerability(
@@ -214,10 +227,7 @@ class FfufIntegration:
                 url=result_url,
                 severity=path_info["severity"],
                 confidence=Confidence.MEDIUM if status != 200 else Confidence.HIGH,
-                description=(
-                    f"发现路径: {result_url}\n"
-                    f"状态码: {status}, 大小: {length}B, 行数: {lines_count}"
-                ),
+                description=(f"发现路径: {result_url}\n状态码: {status}, 大小: {length}B, 行数: {lines_count}"),
                 recommendation=path_info["recommendation"],
                 module="ffuf",
                 tags=["ffuf", "path-discovery", path_info.get("tag", "info")],
@@ -236,10 +246,10 @@ class FfufIntegration:
         return vulnerabilities
 
     def _classify_path(self, url: str, status: int) -> Dict[str, Any]:
-        """根据 HTTP 状态码和路径特征分类"""
+        """Classify based on HTTP status code and path characteristics"""
         url_lower = url.lower()
 
-        # 关键敏感路径
+        # Critical sensitive paths
         sensitive_patterns = [
             (".git/", "Git 仓库暴露", Severity.HIGH, VulnerabilityType.INFO_DISCLOSURE, "git"),
             (".env", "环境配置文件暴露", Severity.CRITICAL, VulnerabilityType.INFO_DISCLOSURE, "config"),
@@ -265,7 +275,7 @@ class FfufIntegration:
                     "tag": tag,
                 }
 
-        # 默认分类
+        # Default classification
         if status in (200, 204):
             return {
                 "type": VulnerabilityType.INFO_DISCLOSURE,

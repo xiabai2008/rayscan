@@ -1,8 +1,8 @@
 """
-WAF (Web Application Firewall) 检测模块
-检测常见 WAF：Cloudflare / AWS WAF / 阿里云 / ModSecurity 等
+WAF (Web Application Firewall) Detection Module
+Detects common WAFs: Cloudflare / AWS WAF / Alibaba Cloud / ModSecurity and others
 """
-import asyncio
+
 import logging
 import re
 from dataclasses import dataclass
@@ -17,7 +17,8 @@ logger = logging.getLogger("wvs.module.waf")
 
 
 class WAFType(Enum):
-    """WAF 类型枚举"""
+    """WAF type enumeration"""
+
     CLOUDFLARE = "Cloudflare"
     AWS_WAF = "AWS WAF"
     ALIYUN = "Aliyun WAF"
@@ -35,7 +36,8 @@ class WAFType(Enum):
 
 @dataclass
 class WAFDetectionResult:
-    """WAF 检测结果"""
+    """WAF detection result"""
+
     detected: bool
     waf_type: WAFType
     vendor: str
@@ -46,7 +48,7 @@ class WAFDetectionResult:
     response_codes: List[int]
 
 
-# WAF 特征库
+# WAF signature database
 WAF_SIGNATURES = {
     WAFType.CLOUDFLARE: {
         "headers": {
@@ -94,7 +96,7 @@ WAF_SIGNATURES = {
             r"alibaba",
             r"error5xx\.aliyun",
             r"blocked by security",
-            r"\u88ab\u62e6\u622a",  # 被拦截
+            r"\u88ab\u62e6\u622a",  # Intercepted
         ],
         "block_status": [403, 405],
     },
@@ -212,55 +214,55 @@ WAF_SIGNATURES = {
     },
 }
 
-# WAF 绕过建议
+# WAF bypass suggestions
 WAF_BYPASS_SUGGESTIONS = {
     WAFType.CLOUDFLARE: [
-        "使用编码绕过：URL 编码、双重 URL 编码、Unicode 编码",
-        "使用大小写混淆：SeLeCt, UnIoN",
-        "使用注释填充：/**/SELECT/**/",
-        "使用换行符或制表符分割关键字",
-        "尝试 HTTP 方法变换：PUT、PATCH 替代 POST",
-        "利用 Content-Type 变换：multipart/form-data",
+        "Use encoding bypass: URL encoding, double URL encoding, Unicode encoding",
+        "Use case obfuscation: SeLeCt, UnIoN",
+        "Use comment padding: /**/SELECT/**/",
+        "Use newline or tab characters to split keywords",
+        "Try HTTP method transformation: PUT, PATCH instead of POST",
+        "Leverage Content-Type transformation: multipart/form-data",
     ],
     WAFType.AWS_WAF: [
-        "使用分段传输编码",
-        "利用 JSON 嵌套结构",
-        "使用 Unicode 变体字符",
-        "尝试修改 Content-Length",
-        "利用 HTTP/2 特性",
+        "Use chunked transfer encoding",
+        "Leverage JSON nested structures",
+        "Use Unicode variant characters",
+        "Try modifying Content-Length",
+        "Leverage HTTP/2 features",
     ],
     WAFType.ALIYUN: [
-        "使用 GBK/GB2312 编码绕过 UTF-8 检测",
-        "尝试宽字节注入：0x%bf%27",
-        "使用注释符绕过关键字检测",
-        "利用 URL 编码变形",
+        "Use GBK/GB2312 encoding to bypass UTF-8 detection",
+        "Try wide byte injection: 0x%bf%27",
+        "Use comment characters to bypass keyword detection",
+        "Leverage URL encoding variations",
     ],
     WAFType.MODSECURITY: [
-        "利用规则版本差异",
-        "使用 HTTP 参数污染 (HPP)",
-        "尝试分段请求绕过",
-        "使用编码组合：Base64 + URL 编码",
-        "利用 JSON/XML 格式变换",
+        "Exploit rule version differences",
+        "Use HTTP Parameter Pollution (HPP)",
+        "Try segmented request bypass",
+        "Use encoding combinations: Base64 + URL encoding",
+        "Leverage JSON/XML format transformation",
     ],
     WAFType.GENERIC: [
-        "使用编码技术：URL、双重URL、Unicode、Base64",
-        "关键字混淆：大小写、注释、空白符",
-        "协议层绕过：HTTP 方法变换、分块传输",
-        "利用解析器差异：JSON、XML、序列化格式",
-        "延迟请求或分片发送",
+        "Use encoding techniques: URL, double URL, Unicode, Base64",
+        "Keyword obfuscation: case, comments, whitespace",
+        "Protocol layer bypass: HTTP method transformation, chunked transfer",
+        "Exploit parser differences: JSON, XML, serialization formats",
+        "Delay requests or fragment sending",
     ],
 }
 
 
 @register_module
 class WAFDetector(DetectionModule):
-    """WAF 检测模块"""
+    """WAF Detection Module"""
 
     @classmethod
     def get_info(cls) -> ModuleInfo:
         return ModuleInfo(
             name="waf",
-            description="检测 Web 应用防火墙（Cloudflare/AWS/阿里云/ModSecurity 等）",
+            description="Detect Web Application Firewalls (Cloudflare/AWS/Aliyun/ModSecurity, etc.)",
             author="WVS Team",
             version="1.0.0",
             enabled_by_default=True,
@@ -274,34 +276,32 @@ class WAFDetector(DetectionModule):
 
     async def _scan_impl(self, target: ScanTarget) -> list:
         """
-        检测 WAF
+        Detect WAF
 
         Returns:
-            空列表（WAF 检测不是漏洞检测，结果存储在 self._result）
+            Empty list (WAF detection is not vulnerability detection, results stored in self._result)
         """
-        logger.info(f"[WAF] 开始检测: {target.url}")
+        logger.info(f"[WAF] Starting detection: {target.url}")
 
-        # 1. 正常请求获取基线
+        # 1. Normal request to get baseline
         baseline = await self._send_normal_request(target.url)
         if not baseline:
-            logger.warning(f"[WAF] 无法获取基线响应: {target.url}")
+            logger.warning(f"[WAF] Cannot get baseline response: {target.url}")
             return []
 
-        # 2. 分析响应头和内容
+        # 2. Analyze response headers and content
         detected_wafs = self._analyze_response(baseline)
 
-        # 3. 发送恶意 payload 触发 WAF
+        # 3. Send malicious payloads to trigger WAF
         if not detected_wafs:
             detected_wafs = await self._probe_with_payloads(target.url, baseline)
 
-        # 4. 确定最终结果
+        # 4. Determine final result
         if detected_wafs:
-            best_match = max(detected_wafs, key=lambda x: x[2])  # 按 confidence 排序
+            best_match = max(detected_wafs, key=lambda x: x[2])  # Sort by confidence
             waf_type, evidence, confidence = best_match
 
-            bypass_suggestions = WAF_BYPASS_SUGGESTIONS.get(
-                waf_type, WAF_BYPASS_SUGGESTIONS[WAFType.GENERIC]
-            )
+            bypass_suggestions = WAF_BYPASS_SUGGESTIONS.get(waf_type, WAF_BYPASS_SUGGESTIONS[WAFType.GENERIC])
 
             self._result = WAFDetectionResult(
                 detected=True,
@@ -313,28 +313,28 @@ class WAFDetector(DetectionModule):
                 headers_detected=self._extract_detected_headers(baseline, waf_type),
                 response_codes=[baseline.get("status_code", 0)],
             )
-            logger.info(f"[WAF] 检测到: {waf_type.value} (置信度: {confidence:.2f})")
+            logger.info(f"[WAF] Detected: {waf_type.value} (confidence: {confidence:.2f})")
         else:
             self._result = WAFDetectionResult(
                 detected=False,
                 waf_type=WAFType.UNKNOWN,
                 vendor="None",
                 confidence=0.0,
-                evidence="未检测到 WAF 特征",
+                evidence="No WAF signatures detected",
                 bypass_suggestions=[],
                 headers_detected={},
                 response_codes=[baseline.get("status_code", 200)],
             )
-            logger.info("[WAF] 未检测到 WAF")
+            logger.info("[WAF] No WAF detected")
 
-        return []  # WAF 检测不返回漏洞列表
+        return []  # WAF detection does not return vulnerability list
 
     def get_result(self) -> Optional[WAFDetectionResult]:
-        """获取检测结果"""
+        """Get detection result"""
         return self._result
 
     async def _send_normal_request(self, url: str) -> Optional[Dict[str, Any]]:
-        """发送正常请求"""
+        """Send normal request"""
         try:
             if not self.session:
                 logger.error("HTTPPool session not set")
@@ -348,11 +348,11 @@ class WAFDetector(DetectionModule):
                 "cookies": dict(resp.cookies),
             }
         except Exception as e:
-            logger.debug(f"请求失败: {e}")
+            logger.debug(f"Request failed: {e}")
             return None
 
     def _analyze_response(self, response: Dict[str, Any]) -> List[Tuple[WAFType, str, float]]:
-        """分析响应中的 WAF 特征"""
+        """Analyze WAF signatures in response"""
         detected = []
         headers = {k.lower(): v for k, v in response.get("headers", {}).items()}
         cookies = list(response.get("cookies", {}).keys())
@@ -363,7 +363,7 @@ class WAFDetector(DetectionModule):
             confidence = 0.0
             evidence_list = []
 
-            # 检查响应头
+            # Check response headers
             for header_name, pattern in sigs.get("headers", {}).items():
                 header_lower = header_name.lower()
                 if header_lower in headers:
@@ -371,19 +371,19 @@ class WAFDetector(DetectionModule):
                         confidence += 0.4
                         evidence_list.append(f"Header: {header_name}={headers[header_lower][:50]}")
 
-            # 检查 Cookie
+            # Check cookies
             for cookie_name in sigs.get("cookies", []):
                 if any(cookie_name.lower() in c.lower() for c in cookies):
                     confidence += 0.3
                     evidence_list.append(f"Cookie: {cookie_name}")
 
-            # 检查响应内容
+            # Check response content
             for pattern in sigs.get("response", []):
                 if re.search(pattern, text, re.IGNORECASE):
                     confidence += 0.3
                     evidence_list.append(f"Response pattern: {pattern[:30]}")
 
-            # 检查阻断状态码
+            # Check block status codes
             if status in sigs.get("block_status", []):
                 confidence += 0.2
                 evidence_list.append(f"Block status: {status}")
@@ -393,13 +393,11 @@ class WAFDetector(DetectionModule):
 
         return detected
 
-    async def _probe_with_payloads(
-        self, url: str, baseline: Dict[str, Any]
-    ) -> List[Tuple[WAFType, str, float]]:
-        """发送恶意 payload 尝试触发 WAF"""
+    async def _probe_with_payloads(self, url: str, baseline: Dict[str, Any]) -> List[Tuple[WAFType, str, float]]:
+        """Send malicious payloads to try to trigger WAF"""
         detected = []
 
-        # 常见触发 WAF 的 payload
+        # Common WAF-triggering payloads
         test_payloads = [
             ("?id=1' OR '1'='1", "SQL injection test"),
             ("?id=1 UNION SELECT 1,2,3--", "UNION test"),
@@ -408,7 +406,7 @@ class WAFDetector(DetectionModule):
             ("?cmd=;cat /etc/passwd", "Command injection test"),
         ]
 
-        for payload, desc in test_payloads[:3]:  # 只测试前 3 个
+        for payload, desc in test_payloads[:3]:  # Only test first 3
             test_url = url + payload if "?" not in url else url + "&" + payload[1:]
 
             try:
@@ -417,46 +415,50 @@ class WAFDetector(DetectionModule):
 
                 resp = await self.session.get(test_url)
 
-                # 对比基线响应
+                # Compare with baseline response
                 if self._is_waf_blocked(resp, baseline):
-                    # 分析阻断页面特征
+                    # Analyze block page signatures
                     text = resp.text.lower()
                     for waf_type, sigs in WAF_SIGNATURES.items():
                         for pattern in sigs.get("response", []):
                             if re.search(pattern, text, re.IGNORECASE):
-                                detected.append((
-                                    waf_type,
-                                    f"Triggered by {desc}",
-                                    0.7,
-                                ))
+                                detected.append(
+                                    (
+                                        waf_type,
+                                        f"Triggered by {desc}",
+                                        0.7,
+                                    )
+                                )
                                 break
 
-                    # 如果无法识别具体 WAF，标记为 Generic
+                    # If unable to identify specific WAF, mark as Generic
                     if not detected:
-                        detected.append((
-                            WAFType.GENERIC,
-                            f"Request blocked by unknown WAF (status: {resp.status_code})",
-                            0.5,
-                        ))
-                    break  # 检测到一个就够了
+                        detected.append(
+                            (
+                                WAFType.GENERIC,
+                                f"Request blocked by unknown WAF (status: {resp.status_code})",
+                                0.5,
+                            )
+                        )
+                    break  # One detection is enough
 
             except Exception as e:
-                logger.debug(f"Payload 测试失败: {e}")
+                logger.debug(f"Payload test failed: {e}")
                 continue
 
         return detected
 
     def _is_waf_blocked(self, response: Any, baseline: Dict[str, Any]) -> bool:
-        """判断是否被 WAF 阻断"""
+        """Determine if request was blocked by WAF"""
         status = getattr(response, "status_code", 200)
         baseline_status = baseline.get("status_code", 200)
 
-        # 状态码变化
+        # Status code change
         if status in [403, 406, 503]:
             if baseline_status not in [403, 406, 503]:
                 return True
 
-        # 响应长度大幅变化
+        # Large change in response length
         resp_len = len(getattr(response, "text", ""))
         baseline_len = len(baseline.get("text", ""))
 
@@ -467,10 +469,8 @@ class WAFDetector(DetectionModule):
 
         return False
 
-    def _extract_detected_headers(
-        self, response: Dict[str, Any], waf_type: WAFType
-    ) -> Dict[str, str]:
-        """提取检测到的相关响应头"""
+    def _extract_detected_headers(self, response: Dict[str, Any], waf_type: WAFType) -> Dict[str, str]:
+        """Extract detected relevant response headers"""
         headers = {k.lower(): v for k, v in response.get("headers", {}).items()}
         sigs = WAF_SIGNATURES.get(waf_type, {}).get("headers", {})
 

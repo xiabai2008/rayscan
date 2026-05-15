@@ -1,26 +1,22 @@
 """
-XSS 检测模块
-检测：reflected / stored / DOM-based XSS
-支持：OOB 检测（Blind XSS）
+XSS Detection Module
+Detects: reflected / stored / DOM-based XSS
+Supports: OOB detection (Blind XSS)
 """
+
 import logging
 import re
-import secrets
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, urlencode, urlparse
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
+from ...models import Vulnerability, ScanTarget
 from ...core.session import HTTPPool
 from ...core.oob import OOBManager
 from .payloads import (
     REFLECTED_PAYLOADS,
-    STORED_PAYLOADS,
-    DOM_PAYLOADS,
     ENCODED_PAYLOADS,
-    WAF_BYPASS_PAYLOADS,
     generate_stored_xss_marker,
-    STORED_XSS_CALLBACK_PAYLOADS,
 )
 
 
@@ -29,12 +25,11 @@ logger = logging.getLogger("wvs.module.xss")
 
 @register_module
 class XSSDetector(DetectionModule):
-
     @classmethod
     def get_info(cls) -> ModuleInfo:
         return ModuleInfo(
             name="xss",
-            description="检测 XSS 漏洞（reflected / stored / DOM-based）",
+            description="Detect XSS vulnerabilities (reflected / stored / DOM-based)",
             author="WVS Team",
             version="1.0.0",
             enabled_by_default=True,
@@ -51,21 +46,21 @@ class XSSDetector(DetectionModule):
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
         self._found_vulns = []
 
-        # ── 1. 优先使用 target.params（来自 scanner/crawler，已带 auth）──
-        target_params = getattr(target, 'params', None) or {}
-        target_data = getattr(target, 'data', None) or {}
+        # ── 1. Prefer target.params (from scanner/crawler, already with auth) ──
+        target_params = getattr(target, "params", None) or {}
+        target_data = getattr(target, "data", None) or {}
         if target_params:
             ep_params = target_params.copy()
-            logger.debug(f"[XSS] 使用 target.params={list(ep_params.keys())} 检测 {target.url}")
+            logger.debug(f"[XSS] Using target.params={list(ep_params.keys())} testing {target.url}")
             await self._scan_endpoint(target.url, ep_params, "GET", "query")
         elif target_data:
             ep_params = target_data.copy()
-            logger.debug(f"[XSS] 使用 target.data={list(ep_params.keys())} 检测 {target.url}")
+            logger.debug(f"[XSS] Using target.data={list(ep_params.keys())} testing {target.url}")
             await self._scan_endpoint(target.url, ep_params, "POST", "body")
 
-        # ── 2. 补充：用 _extract_endpoints 获取更多端点 ──
+        # ── 2. Supplement: use _extract_endpoints to get more endpoints ──
         endpoints = self._extract_endpoints(target)
-        logger.info(f"[XSS] 开始检测，共 {len(endpoints)} 个端点")
+        logger.info(f"[XSS] Starting detection, {len(endpoints)} endpoints total")
 
         for endpoint in endpoints:
             url = endpoint["url"]
@@ -80,9 +75,9 @@ class XSSDetector(DetectionModule):
             try:
                 await self._scan_endpoint(url, params, method, param_type)
             except Exception as e:
-                logger.debug(f"[XSS] 检测 {url} 时出错: {e}")
+                logger.debug(f"[XSS] Error testing {url}: {e}")
 
-        logger.info(f"[XSS] 检测完成，发现 {len(self._found_vulns)} 个漏洞")
+        logger.info(f"[XSS] Detection complete, found {len(self._found_vulns)} vulnerabilities")
         return self._found_vulns
 
     async def _scan_endpoint(
@@ -95,21 +90,37 @@ class XSSDetector(DetectionModule):
         if not params:
             return
 
+        # P23: Limit parameters per endpoint to avoid form-storm on dense pages.
+        # Forms like add-to-your-blog.php with 8+ inputs generate 24+ XSS tests
+        # per endpoint. Sample the most promising parameter names first.
+        param_names = list(params.keys())
+        if len(param_names) > 4:
+            # Prioritize parameters whose names suggest user-facing output
+            high_priority = {"page", "q", "query", "search", "text", "msg", "message", "comment",
+                             "content", "body", "title", "subject", "name", "username", "cat",
+                             "category", "id", "uid", "pid"}
+            prioritized = [p for p in param_names if p.lower() in high_priority]
+            remaining = [p for p in param_names if p.lower() not in high_priority]
+            param_names = prioritized + remaining[:max(4 - len(prioritized), 1)]
+            self.logger.debug(f"[XSS] Sampled {len(param_names)}/{len(params)} params for {url}")
+
         baseline = await self._send_request(method, url, params, param_type)
         if baseline is None:
             return
 
         baseline_text = baseline.get("text", "")
 
-        for param_name in params.keys():
-            # 反射检测
+        for param_name in param_names:
+            # Reflected XSS test
             await self._test_reflected(url, params, param_name, method, param_type, baseline_text)
 
-            # DOM 检测
+            # DOM-based XSS test
             await self._test_dom(url, params, param_name, param_type, baseline_text)
 
-            # 存储型 XSS 检测（Blind XSS）
-            await self._test_stored_xss(url, params, param_name, method, param_type)
+            # Stored XSS test — skip POST forms to avoid data pollution
+            # (add-to-your-blog, register, comment forms)
+            if method == "GET":
+                await self._test_stored_xss(url, params, param_name, method, param_type)
 
     async def _test_stored_xss(
         self,
@@ -120,57 +131,68 @@ class XSSDetector(DetectionModule):
         param_type: str,
     ) -> None:
         """
-        检测存储型 XSS / Blind XSS
+        Detect stored XSS / Blind XSS
 
-        两种检测方式：
-        1. OOB 检测（推荐）：注入回调 payload，检查是否收到回调
-        2. 本地检测：注入标记，在关联页面查找标记是否出现
+        Two detection methods:
+        1. OOB detection (recommended): inject callback payload, check for callbacks
+        2. Local detection: inject marker, check related pages for marker appearance
         """
-        # 方式 1: 使用 OOBManager（推荐）
+        # Method 1: Use OOBManager (recommended)
         if self._oob_manager and self._oob_manager.is_initialized:
             await self._test_stored_oob(url, params, param_name, method, param_type)
             return
 
-        # 方式 2: 本地检测 — 注入后回查多个可能的展示位置
+        # Method 2: Local detection — inject and then check multiple possible display locations
         marker = generate_stored_xss_marker()
 
-        # 构建存储型 payload
+        # Build stored payload
         test_params = params.copy()
         test_params[param_name] = marker
 
-        # 发送注入请求
+        # Send injection request
         resp = await self._send_request(method, url, test_params, param_type)
         if resp is None:
             return
 
-        # 构建回查 URL 列表（动态生成 + 常见路径）
+        # Build list of URLs to re-check (dynamically generated + common paths)
         parsed = urlparse(url)
         base = f"{parsed.scheme}://{parsed.netloc}"
-        path_parts = parsed.path.rstrip('/').split('/')
+        path_parts = parsed.path.rstrip("/").split("/")
 
         display_urls = []
 
-        # 1. 同页面回查（存储型 XSS 常见于同页显示）
+        # 1. Same page check (stored XSS often appears on the same page)
         display_urls.append(url)
 
-        # 2. 父级目录索引页
+        # 2. Parent directory index pages
         for i in range(len(path_parts) - 1, 0, -1):
-            parent = '/'.join(path_parts[:i]) or '/'
+            parent = "/".join(path_parts[:i]) or "/"
             display_urls.append(base + parent)
-            display_urls.append(base + parent + '/index.php')
-            display_urls.append(base + parent + '/index.html')
+            display_urls.append(base + parent + "/index.php")
+            display_urls.append(base + parent + "/index.html")
 
-        # 3. 同级常见展示页
+        # 3. Sibling common display pages
         sibling_names = [
-            "view.php", "show.php", "display.php", "read.php", "detail.php",
-            "list.php", "index.php", "home.php", "guestbook.php", "comments.php",
-            "add-to-your-blog.php", "blog.php", "forum.php", "board.php",
+            "view.php",
+            "show.php",
+            "display.php",
+            "read.php",
+            "detail.php",
+            "list.php",
+            "index.php",
+            "home.php",
+            "guestbook.php",
+            "comments.php",
+            "add-to-your-blog.php",
+            "blog.php",
+            "forum.php",
+            "board.php",
         ]
-        parent_dir = '/'.join(path_parts[:-1]) if len(path_parts) > 1 else ''
+        parent_dir = "/".join(path_parts[:-1]) if len(path_parts) > 1 else ""
         for name in sibling_names:
             display_urls.append(f"{base}{parent_dir}/{name}")
 
-        # 4. 根目录常见页
+        # 4. Root common pages
         for name in ["index.php", "index.html", "home.php", "guestbook.php"]:
             display_urls.append(f"{base}/{name}")
 
@@ -195,7 +217,7 @@ class XSSDetector(DetectionModule):
                         evidence=f"Stored XSS marker '{marker}' reflected on {display_url}",
                     )
                     self._found_vulns.append(vuln)
-                    logger.warning(f"[XSS] Stored XSS 检测到: {url} [{param_name}] reflected on {display_url}")
+                    logger.warning(f"[XSS] Stored XSS detected: {url} [{param_name}] reflected on {display_url}")
                     return
             except Exception:
                 continue
@@ -208,23 +230,19 @@ class XSSDetector(DetectionModule):
         method: str,
         param_type: str,
     ) -> None:
-        """使用 OOB 检测 Blind XSS"""
+        """Use OOB detection for Blind XSS"""
         try:
-            token = await self._oob_manager.generate_token({
-                "url": url,
-                "param": param_name,
-                "module": "xss"
-            })
+            token = await self._oob_manager.generate_token({"url": url, "param": param_name, "module": "xss"})
             callback_url = self._oob_manager.get_callback_url(token)
 
-            # 构建 Blind XSS payload
+            # Build Blind XSS payload
             payload = f"<script src='{callback_url}'></script>"
 
             test_params = params.copy()
             test_params[param_name] = payload
             await self._send_request(method, url, test_params, param_type)
 
-            # 等待回调
+            # Wait for callback
             callback = await self._oob_manager.check_callback(token, timeout=30)
 
             if callback:
@@ -238,10 +256,10 @@ class XSSDetector(DetectionModule):
                     evidence=f"Blind XSS OOB callback received from {callback.source_ip}",
                 )
                 self._found_vulns.append(vuln)
-                logger.warning(f"[XSS] Blind XSS 检测到: {url} [{param_name}]")
+                logger.warning(f"[XSS] Blind XSS detected: {url} [{param_name}]")
 
         except Exception as e:
-            logger.debug(f"[XSS] Blind XSS 检测失败: {e}")
+            logger.debug(f"[XSS] Blind XSS detection failed: {e}")
 
     async def _test_reflected(
         self,
@@ -253,12 +271,12 @@ class XSSDetector(DetectionModule):
         baseline_text: str,
     ) -> None:
         """
-        检测反射型 XSS
-        流程：注入 payload → 检测是否原样/变形反射在 HTML 中 → 二次验证
+        Detect reflected XSS
+        Process: inject payload -> check if reflected verbatim/transformed in HTML -> secondary verification
         """
-        logger.debug(f"[XSS] 开始反射型检测: {url} [{param_name}]")
+        logger.debug(f"[XSS] Starting reflected XSS test: {url} [{param_name}]")
 
-        # 第一轮：测试最可能触发的 payload (P7: +polyglot +WAF bypass)
+        # Round 1: test the most likely triggering payloads (P7: +polyglot +WAF bypass)
         priority_payloads = [
             "<script>alert(1)</script>",
             "<img src=x onerror=alert(1)>",
@@ -281,7 +299,7 @@ class XSSDetector(DetectionModule):
         for payload in priority_payloads:
             test_params = params.copy()
             test_params[param_name] = payload
-            logger.debug(f"[XSS] 测试 payload: {payload[:30]}")
+            logger.debug(f"[XSS] Testing payload: {payload[:30]}")
 
             resp = await self._send_request(method, url, test_params, param_type)
             if resp is None:
@@ -289,14 +307,14 @@ class XSSDetector(DetectionModule):
 
             resp_text = resp.get("text", "")[:20000]
 
-            # 检测反射
+            # Check for reflection
             reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
             if reflected:
                 if self._is_echo_server(url, resp_text, payload):
-                    logger.debug(f"[XSS] 忽略 echo-server 反射: {url}")
+                    logger.debug(f"[XSS] Ignoring echo-server reflection: {url}")
                     continue
-                logger.info(f"[XSS] 发现反射: {url} [{param_name}] payload={payload[:30]}")
-                # 二次验证：换不同 payload
+                logger.info(f"[XSS] Found reflection: {url} [{param_name}] payload={payload[:30]}")
+                # Secondary verification: try a different payload
                 if await self._verify_reflected(url, params, param_name, method, param_type):
                     vuln = self._create_vuln(
                         url=url,
@@ -308,10 +326,10 @@ class XSSDetector(DetectionModule):
                         evidence=evidence or f"Reflected XSS: payload '{payload}' reflected in response",
                     )
                     self._found_vulns.append(vuln)
-                    logger.warning(f"[XSS] Reflected 确认: {url} [{param_name}]")
+                    logger.warning(f"[XSS] Reflected confirmed: {url} [{param_name}]")
                     return
 
-        # 第二轮：测试更多 payloads
+        # Round 2: test more payloads
         test_payloads = list(REFLECTED_PAYLOADS[:15])
         test_payloads.extend(ENCODED_PAYLOADS[:5])
 
@@ -327,13 +345,13 @@ class XSSDetector(DetectionModule):
 
             resp_text = resp.get("text", "")[:20000]
 
-            # 检测反射
+            # Check for reflection
             reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
             if reflected:
                 if self._is_echo_server(url, resp_text, payload):
-                    logger.debug(f"[XSS] 忽略 echo-server 反射 (round 2): {url}")
+                    logger.debug(f"[XSS] Ignoring echo-server reflection (round 2): {url}")
                     continue
-                # 二次验证：换不同 payload
+                # Secondary verification: try a different payload
                 if await self._verify_reflected(url, params, param_name, method, param_type):
                     vuln = self._create_vuln(
                         url=url,
@@ -345,7 +363,7 @@ class XSSDetector(DetectionModule):
                         evidence=evidence or f"Reflected XSS: payload '{payload}' reflected in response",
                     )
                     self._found_vulns.append(vuln)
-                    logger.warning(f"[XSS] Reflected 检测到: {url} [{param_name}]")
+                    logger.warning(f"[XSS] Reflected detected: {url} [{param_name}]")
                     return
 
     async def _test_dom(
@@ -357,8 +375,8 @@ class XSSDetector(DetectionModule):
         baseline_text: str,
     ) -> None:
         """
-        检测 DOM-based XSS
-        通过注入特殊标记，观察 URL 中是否有可控点
+        Detect DOM-based XSS
+        By injecting special markers, observe controllable points in the URL
         """
         dom_markers = [
             "#<script>alert(1)</script>",
@@ -366,7 +384,7 @@ class XSSDetector(DetectionModule):
             "#'><script>alert(document.domain)</script>",
         ]
 
-        # 将 DOM payload 注入到 URL fragment
+        # Inject DOM payload into URL fragment
         for payload in dom_markers[:2]:
             test_url = url + payload
 
@@ -376,7 +394,7 @@ class XSSDetector(DetectionModule):
 
             resp_text = resp.get("text", "")[:20000]
 
-            # DOM XSS 的特征：payload 出现在响应中（可能编码）
+            # DOM XSS characteristic: payload appears in response (possibly encoded)
             reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
             if reflected:
                 vuln = self._create_vuln(
@@ -389,23 +407,22 @@ class XSSDetector(DetectionModule):
                     evidence=evidence or f"DOM-based XSS: fragment payload '{payload}' reflected in response",
                 )
                 self._found_vulns.append(vuln)
-                logger.warning(f"[XSS] DOM-based 检测到: {url}")
+                logger.warning(f"[XSS] DOM-based detected: {url}")
                 return
 
     def _check_reflection(self, resp_text: str, payload: str, baseline_text: str) -> Tuple[bool, str]:
         """
-        检测 payload 是否被反射（可能在不同编码形式下）
+        Detect if the payload is reflected (possibly in different encoding forms).
 
         P9 fix: Guarantee evidence is never empty. Every return path
         now includes a specific evidence string describing what was found.
 
         Returns:
-            (is_reflected, evidence) — 是否被反射 + 详细证据（never empty on True）
+            (is_reflected, evidence) — Whether reflected + detailed evidence (never empty on True)
         """
         # 1. Payload appears verbatim in response AND not in baseline (strongest)
         if payload in resp_text and payload not in baseline_text:
             idx = resp_text.find(payload)
-            context = resp_text[max(0, idx-30):idx+len(payload)+30]
             return True, f"XSS payload reflected verbatim in response body at offset {idx}"
 
         # 2. HTML-decoded payload appears (and not in baseline)
@@ -416,7 +433,8 @@ class XSSDetector(DetectionModule):
 
         # P7: URL-encoded payload reflected as decoded HTML
         from urllib.parse import quote
-        encoded = quote(payload, safe='')
+
+        encoded = quote(payload, safe="")
         if encoded != payload and encoded not in baseline_text:
             decoded_from_encoded = self._html_decode(encoded)
             if decoded_from_encoded in resp_text and decoded_from_encoded not in baseline_text:
@@ -428,13 +446,13 @@ class XSSDetector(DetectionModule):
         evidence = ""
 
         # Check for new <script> tags with content
-        script_re = re.compile(r'<script[^>]*>.*?</script>', re.IGNORECASE | re.DOTALL)
+        script_re = re.compile(r"<script[^>]*>.*?</script>", re.IGNORECASE | re.DOTALL)
         resp_scripts = script_re.findall(resp_text)
         base_scripts = script_re.findall(baseline_text)
         if len(resp_scripts) > len(base_scripts):
             for s in resp_scripts:
                 if "alert" in s.lower() or "prompt" in s.lower():
-                    evidence = f"New <script> tag with alert/prompt injected in response"
+                    evidence = "New <script> tag with alert/prompt injected in response"
                     break
 
         # Check for new event handlers with alert/prompt
@@ -471,12 +489,14 @@ class XSSDetector(DetectionModule):
         return False, ""
 
     def _html_decode(self, text: str) -> str:
-        """HTML 解码 + URL 解码"""
+        """HTML decode + URL decode"""
         import html as _html
+
         result = _html.unescape(text)
         # URL-decode: servers may reflect %3Cscript%3E as <script>
         try:
             from urllib.parse import unquote
+
             result = unquote(result)
         except Exception:
             pass
@@ -490,12 +510,12 @@ class XSSDetector(DetectionModule):
         method: str,
         param_type: str,
     ) -> bool:
-        """二次验证：用不同的 payload 确认 — P8: tightened to require structural injection evidence"""
-        logger.debug(f"[XSS] 开始二次验证: {url} [{param_name}]")
+        """Secondary verification: confirm with a different payload — P8: tightened to require structural injection evidence"""
+        logger.debug(f"[XSS] Starting secondary verification: {url} [{param_name}]")
 
         verify_payloads = [
-            '<svg onload=alert(1)>',
-            '<img src=x onerror=alert(1)>',
+            "<svg onload=alert(1)>",
+            "<img src=x onerror=alert(1)>",
             "<script>alert(String.fromCharCode(88,83,83))</script>",
             '<img src=x onerror="alert(1)">',
             "<SCRIPT>alert(1)</SCRIPT>",
@@ -517,15 +537,14 @@ class XSSDetector(DetectionModule):
             # P8: Use _check_reflection for consistent structural detection
             reflected, _ = self._check_reflection(resp_text, verify_payload, baseline_text)
             if reflected:
-                logger.debug(f"[XSS] 验证成功: structural reflection detected")
+                logger.debug("[XSS] Verification successful: structural reflection detected")
                 return True
 
             # P8: Also check verbatim reflection (but must NOT be in baseline)
             if verify_payload in resp_text and verify_payload not in baseline_text:
-                logger.debug(f"[XSS] 验证成功: payload verbatim reflected (not in baseline)")
+                logger.debug("[XSS] Verification successful: payload verbatim reflected (not in baseline)")
                 return True
 
         return False
 
-    # 注：_send_request, _extract_endpoints, _create_vuln 方法已移至基类 DetectionModule
-
+    # Note: _send_request, _extract_endpoints, _create_vuln methods have been moved to base class DetectionModule

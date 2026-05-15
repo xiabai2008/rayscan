@@ -20,8 +20,6 @@ from .payloads import (
     SOAP_PAYLOADS,
     SVG_PAYLOADS,
     WAF_BYPASS_PAYLOADS,
-    OOB_PAYLOADS,
-    XXE_ERROR_PATTERNS,
     XXE_SUCCESS_PATTERNS,
 )
 
@@ -63,14 +61,14 @@ class XXEDetector(DetectionModule):
         return MODULE_INFO
 
     # ----------------------------------------------------------
-    # 核心入口
+    # Core Entry Point
     # ----------------------------------------------------------
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
-        """扫描目标，检测 XXE"""
+        """Scan target for XXE"""
         self._found_vulns = []
 
-        # 1. 直接用 target.params/data（来自 scanner/crawler）
+        # 1. Use target.params/data directly (from scanner/crawler)
         target_params = getattr(target, "params", None) or {}
         target_data = getattr(target, "data", None) or {}
         if target_params:
@@ -78,9 +76,9 @@ class XXEDetector(DetectionModule):
         elif target_data:
             await self._scan_endpoint(target.url, target_data.copy(), "POST", "body")
 
-        # 2. 补充端点
+        # 2. Supplement endpoints
         endpoints = self._extract_endpoints(target)
-        logger.info(f"[XXE] 开始检测，共 {len(endpoints)} 个端点")
+        logger.info(f"[XXE] Starting detection, {len(endpoints)} endpoints total")
 
         for endpoint in endpoints:
             url = endpoint["url"]
@@ -95,13 +93,13 @@ class XXEDetector(DetectionModule):
             try:
                 await self._scan_endpoint(url, params, method, param_type)
             except Exception as e:
-                logger.debug(f"[XXE] 检测 {url} 出错: {e}")
+                logger.debug(f"[XXE] Error testing {url}: {e}")
 
-        logger.info(f"[XXE] 检测完成，发现 {len(self._found_vulns)} 个漏洞")
+        logger.info(f"[XXE] Detection complete, found {len(self._found_vulns)} vulnerabilities")
         return self._found_vulns
 
     # ----------------------------------------------------------
-    # 主要检测流程
+    # Main Detection Flow
     # ----------------------------------------------------------
 
     async def _scan_endpoint(
@@ -111,21 +109,16 @@ class XXEDetector(DetectionModule):
         method: str,
         param_type: str,
     ) -> None:
-        """对单个端点进行 XXE 检测"""
+        """Run XXE detection on a single endpoint"""
         if not params:
             return
 
         # P10: merged payloads — limit to most effective ones
-        all_payloads = (
-            CLASSIC_PAYLOADS[:4]
-            + PARAM_ENTITY_PAYLOADS[:3]
-            + SOAP_PAYLOADS[:2]
-            + WAF_BYPASS_PAYLOADS[:2]
-        )
+        all_payloads = CLASSIC_PAYLOADS[:4] + PARAM_ENTITY_PAYLOADS[:3] + SOAP_PAYLOADS[:2] + WAF_BYPASS_PAYLOADS[:2]
 
         for payload in all_payloads:
             try:
-                # 对每个参数尝试 XXE payload
+                # Try XXE payload on each parameter
                 test_params = params.copy()
                 for param_name in params:
                     test_params[param_name] = payload
@@ -140,8 +133,7 @@ class XXEDetector(DetectionModule):
                         severity=Severity.HIGH,
                         url=url,
                         title="XML External Entity Injection (XXE)",
-                        description="The application is vulnerable to XXE. "
-                        "Attackers can read arbitrary files from the server.",
+                        description="The application is vulnerable to XXE. Attackers can read arbitrary files from the server.",
                         evidence="File content detected after sending XXE payload",
                         payload=payload[:200] + "..." if len(payload) > 200 else payload,
                         method=method,
@@ -152,8 +144,8 @@ class XXEDetector(DetectionModule):
                         confidence=Confidence.HIGH,
                     )
                     self._found_vulns.append(vuln)
-                    logger.info(f"[XXE] 发现漏洞: {url}")
-                    return  # 找到一个就停止
+                    logger.info(f"[XXE] Found vulnerability: {url}")
+                    return  # Stop after finding one
 
             except Exception as e:
                 logger.debug(f"[XXE] Error testing {url}: {e}")
@@ -182,12 +174,12 @@ class XXEDetector(DetectionModule):
                             confidence=Confidence.HIGH,
                         )
                         self._found_vulns.append(vuln)
-                        logger.info(f"[XXE] 发现漏洞 (full XML body): {url}")
+                        logger.info(f"[XXE] Found vulnerability (full XML body): {url}")
                         return
                 except Exception as e:
                     logger.debug(f"[XXE] XML body test error {url}: {e}")
 
-        # OOB 检测（如果配置了 OOB 管理器）
+        # OOB detection (if OOB manager is configured)
         if self._oob_manager:
             await self._test_oob_xxe(url, params, method, param_type)
 
@@ -199,26 +191,26 @@ class XXEDetector(DetectionModule):
         param_type: str,
     ) -> None:
         """
-        OOB XXE 检测：发送带回调 URL 的 payload，等待服务器发起外带请求
+        OOB XXE detection: send payload with callback URL, wait for server to initiate outbound request
 
-        使用基类的 _test_oob_payload 方法实现自动回调验证
+        Uses base class _test_oob_payload method for automatic callback verification
         """
         if not self._oob_manager:
             return
 
-        # 构造 OOB payload 模板
+        # Build OOB payload templates
         oob_templates = [
-            '''<?xml version="1.0"?>
+            """<?xml version="1.0"?>
 <!DOCTYPE foo [
   <!ENTITY % xxe SYSTEM "{callback_url}">
   %xxe;
 ]>
-<foo>test</foo>''',
-            '''<?xml version="1.0"?>
+<foo>test</foo>""",
+            """<?xml version="1.0"?>
 <!DOCTYPE foo [
   <!ENTITY xxe SYSTEM "{callback_url}">
 ]>
-<foo>&xxe;</foo>''',
+<foo>&xxe;</foo>""",
         ]
 
         vuln = await self._test_oob_payload(
@@ -232,11 +224,11 @@ class XXEDetector(DetectionModule):
         )
 
         if vuln:
-            # 更新漏洞信息
+            # Update vulnerability info
             vuln.title = "XXE (Out-of-Band)"
             vuln.description = "XXE vulnerability confirmed via OOB callback"
             self._found_vulns.append(vuln)
-            logger.warning(f"[XXE] OOB 回调确认: {url}")
+            logger.warning(f"[XXE] OOB callback confirmed: {url}")
 
     async def _send_request(
         self,
@@ -245,7 +237,7 @@ class XXEDetector(DetectionModule):
         params: Dict[str, str],
         param_type: str,
     ) -> Optional[Dict[str, Any]]:
-        """发送 HTTP 请求"""
+        """Send HTTP request"""
         headers = {"Content-Type": "application/xml"}
         try:
             if method.upper() == "GET":
@@ -259,47 +251,54 @@ class XXEDetector(DetectionModule):
             return None
 
     # ----------------------------------------------------------
-    # 辅助方法
+    # Helper Methods
     # ----------------------------------------------------------
 
     def _extract_endpoints(self, target: ScanTarget) -> List[Dict]:
-        """从 ScanTarget 提取端点（含表单参数）"""
+        """Extract endpoints from ScanTarget (including form parameters)"""
         endpoints = []
         url = target.url.rstrip("/")
 
-        # 1. 解析 URL query string
+        # 1. Parse URL query string
         parsed = urlparse(url)
         if parsed.query:
             params = {k: v[0] if v else "test" for k, v in parse_qs(parsed.query).items()}
-            endpoints.append({
-                "url": f"{parsed.scheme}://{parsed.netloc}{parsed.path}",
-                "params": params,
-                "method": "GET",
-                "param_type": "query",
-            })
+            endpoints.append(
+                {
+                    "url": f"{parsed.scheme}://{parsed.netloc}{parsed.path}",
+                    "params": params,
+                    "method": "GET",
+                    "param_type": "query",
+                }
+            )
 
         # 2. target.data / target.params
         target_data = getattr(target, "data", None) or {}
         if target_data:
-            endpoints.append({
-                "url": url,
-                "params": dict(target_data),
-                "method": "POST",
-                "param_type": "body",
-            })
+            endpoints.append(
+                {
+                    "url": url,
+                    "params": dict(target_data),
+                    "method": "POST",
+                    "param_type": "body",
+                }
+            )
         target_params = getattr(target, "params", None) or {}
         if target_params:
-            endpoints.append({
-                "url": url,
-                "params": dict(target_params),
-                "method": "GET",
-                "param_type": "query",
-            })
+            endpoints.append(
+                {
+                    "url": url,
+                    "params": dict(target_params),
+                    "method": "GET",
+                    "param_type": "query",
+                }
+            )
 
-        # 3. 从 HTML 表单提取参数（解决 Metasploitable2 表单注入点漏检）
+        # 3. Extract parameters from HTML forms (solves Metasploitable2 form injection point misses)
         html = getattr(target, "html", "") or ""
         if html:
             import re
+
             form_re = re.compile(
                 r'<form[^>]*\baction\s*=\s*["\']([^"\']*)["\'][^>]*>',
                 re.IGNORECASE,
@@ -337,30 +336,42 @@ class XXEDetector(DetectionModule):
                         params[name] = value
 
                 if params and form_url.startswith(parsed.scheme):
-                    endpoints.append({
-                        "url": form_url.rstrip("/"),
-                        "params": params,
-                        "method": method,
-                        "param_type": "body" if method == "POST" else "query",
-                    })
+                    endpoints.append(
+                        {
+                            "url": form_url.rstrip("/"),
+                            "params": params,
+                            "method": method,
+                            "param_type": "body" if method == "POST" else "query",
+                        }
+                    )
 
         # P10: Reduced synthetic XML endpoints — crawler discovers real ones
         xml_paths = [
-            "/upload", "/import", "/api/xml", "/soap",
-            "/webservice", "/xmlrpc", "/xml-rpc",
-            "/services", "/api/upload", "/api/import",
-            "/callback", "/webhook",
+            "/upload",
+            "/import",
+            "/api/xml",
+            "/soap",
+            "/webservice",
+            "/xmlrpc",
+            "/xml-rpc",
+            "/services",
+            "/api/upload",
+            "/api/import",
+            "/callback",
+            "/webhook",
         ]
         base = parsed.scheme + "://" + parsed.netloc
         for path in xml_paths:
             full_url = base + path
             if full_url not in [e["url"] for e in endpoints]:
-                endpoints.append({
-                    "url": full_url,
-                    "params": {"data": "test"},
-                    "method": "POST",
-                    "param_type": "body",
-                })
+                endpoints.append(
+                    {
+                        "url": full_url,
+                        "params": {"data": "test"},
+                        "method": "POST",
+                        "param_type": "body",
+                    }
+                )
 
         return endpoints
 
@@ -395,16 +406,27 @@ class XXEDetector(DetectionModule):
         # matching standard HTML content (e.g. "ubuntu" in page footer)
         file_content_indicators = [
             # /etc/passwd patterns (highly specific)
-            "root:x:0:0:", "nobody:x:", "daemon:x:", "bin:x:",
-            ":/bin/bash", ":/sbin/nologin",
+            "root:x:0:0:",
+            "nobody:x:",
+            "daemon:x:",
+            "bin:x:",
+            ":/bin/bash",
+            ":/sbin/nologin",
             # /etc/hosts (tab-separated)
-            "127.0.0.1\tlocalhost", "::1\tlocalhost",
+            "127.0.0.1\tlocalhost",
+            "::1\tlocalhost",
             # Windows ini files
-            "[fonts]", "[extensions]", "[Mail]",
-            "[boot loader]", "default=multi(0)",
+            "[fonts]",
+            "[extensions]",
+            "[Mail]",
+            "[boot loader]",
+            "default=multi(0)",
             # /proc files (tab-separated key:value)
-            "model name\t:", "MemTotal:", "SwapTotal:",
-            "processor\t:", "vendor_id\t:",
+            "model name\t:",
+            "MemTotal:",
+            "SwapTotal:",
+            "processor\t:",
+            "vendor_id\t:",
         ]
         file_score = sum(1 for ind in file_content_indicators if ind.lower() in text_lower)
         if file_score >= 2:

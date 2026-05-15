@@ -1,20 +1,19 @@
 """
-Nuclei 集成模块
-v18 痛点彻底解决：必须真实调用 nuclei.exe，不允许模拟
+Nuclei Integration Module
 
-策略：
-1. 优先使用真实 CLI：C:\Tools\nuclei\nuclei.exe
-2. CLI 不可用时 fallback 到内置模板（不是假输出）
-3. 自动解析 JSON 输出
-4. 支持自定义模板目录
+Strategy:
+1. Find nuclei CLI via PATH or well-known install locations
+2. When CLI is unavailable, fallback to built-in templates (not fake output)
+3. Auto-parse JSON output
+4. Support custom template directories
 """
+
 import asyncio
 import json
 import logging
 import os
 import shutil
-import subprocess
-from pathlib import Path
+import sys
 from typing import Any, Dict, List, Optional
 
 from ..config import ConfigManager
@@ -24,30 +23,44 @@ from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
 
 logger = logging.getLogger("wvs.integrations.nuclei")
 
-# Nuclei CLI 路径（用正斜杠避免 Windows 路径的 escape sequence warning）
+# Nuclei CLI search paths (OS-agnostic; PATH search via shutil.which() comes first)
 NUCLEI_EXE_PATHS = [
-    "C:/Tools/nuclei/nuclei.exe",
-    "C:/Tools/nuclei/nuclei",
-    "nuclei",  # PATH 中
+    "nuclei",  # From PATH (primary)
 ]
+# Additional platform-specific fallback paths
+if sys.platform == "win32":
+    NUCLEI_EXE_PATHS.extend(
+        [
+            "C:/Tools/nuclei/nuclei.exe",
+            os.path.expandvars("%LOCALAPPDATA%/nuclei/nuclei.exe"),
+        ]
+    )
+else:
+    NUCLEI_EXE_PATHS.extend(
+        [
+            "/usr/local/bin/nuclei",
+            "/usr/bin/nuclei",
+            os.path.expanduser("~/.nuclei/nuclei"),
+        ]
+    )
 
-# 默认 nuclei 扫描使用的 severity 级别
+# Default severity levels used for nuclei scanning
 DEFAULT_SEVERITIES = ["critical", "high", "medium", "low"]
 
 
 class NucleiIntegration:
     """
-    Nuclei 集成
+    Nuclei Integration
 
-    使用真实 nuclei CLI 执行批量漏洞扫描，
-    结果解析为 Vulnerability 对象。
+    Uses real nuclei CLI to perform batch vulnerability scanning,
+    results parsed into Vulnerability objects.
 
-    支持：
-    - JSON 输出解析
-    - 自定义模板目录
-    - HTTP headers / cookies 传递
-    - 超时控制
-    - 自动 fallback
+    Supports:
+    - JSON output parsing
+    - Custom template directories
+    - HTTP headers / cookies passing
+    - Timeout control
+    - Automatic fallback
     """
 
     def __init__(
@@ -68,24 +81,25 @@ class NucleiIntegration:
         }
 
     def _find_nuclei_exe(self) -> Optional[str]:
-        """查找 nuclei.exe 是否存在"""
-        for path in NUCLEI_EXE_PATHS:
-            if os.path.exists(path):
-                logger.info(f"[Nuclei] 找到 nuclei.exe: {path}")
-                return path
-
-        # 尝试从 PATH 查找
+        """Find the nuclei CLI binary, checking PATH first, then known install locations."""
+        # 1. Try PATH via shutil.which (most portable)
         exe = shutil.which("nuclei")
         if exe:
-            logger.info(f"[Nuclei] 从 PATH 找到 nuclei: {exe}")
+            logger.info(f"[Nuclei] Found nuclei in PATH: {exe}")
             return exe
 
-        logger.warning("[Nuclei] 未找到 nuclei.exe，将使用内置模板")
+        # 2. Try known install locations (skip "nuclei" which is just the PATH lookup)
+        for path in NUCLEI_EXE_PATHS:
+            if path != "nuclei" and os.path.exists(path):
+                logger.info(f"[Nuclei] Found nuclei: {path}")
+                return path
+
+        logger.warning("[Nuclei] nuclei binary not found; using built-in templates")
         return None
 
     @property
     def is_available(self) -> bool:
-        """Nuclei CLI 是否可用"""
+        """Whether Nuclei CLI is available"""
         return self.nuclei_exe is not None
 
     async def scan(
@@ -96,29 +110,27 @@ class NucleiIntegration:
         severities: Optional[List[str]] = None,
     ) -> List[Vulnerability]:
         """
-        使用 Nuclei 扫描目标 URL
+        Scan the target URL using Nuclei
 
         Args:
-            url: 目标 URL
-            cookies: Cookie 字典
+            url: Target URL
+            cookies: Cookie dictionary
             headers: HTTP headers
-            severities: 要检测的严重级别（默认全部）
+            severities: Severity levels to check (default all)
 
         Returns:
-            发现的安全问题列表（转为 Vulnerability 对象）
+            List of discovered security issues (converted to Vulnerability objects)
         """
         if severities is None:
             severities = DEFAULT_SEVERITIES
 
         if self.is_available:
-            return await self._cli_scan_async(
-                url, cookies, headers, severities
-            )
+            return await self._cli_scan_async(url, cookies, headers, severities)
         else:
             return await self._fallback_scan(url, severities)
 
     # ─────────────────────────────────────────────────────────────
-    # 真实 CLI 调用
+    # Real CLI invocation
     # ─────────────────────────────────────────────────────────────
 
     async def _cli_scan_async(
@@ -129,25 +141,26 @@ class NucleiIntegration:
         severities: List[str],
     ) -> List[Vulnerability]:
         """
-        真实调用 nuclei.exe
+        Actually invoke nuclei.exe
         """
         cmd = [
             self.nuclei_exe,
-            "-u", url,
-            "-json",          # JSON 输出
-            "-no-color",      # 无颜色输出（方便解析）
-            "-silent",         # 静默模式（只输出结果）
+            "-u",
+            url,
+            "-json",  # JSON output
+            "-no-color",  # No color output (easier to parse)
+            "-silent",  # Silent mode (output results only)
         ]
 
-        # 严重级别过滤
+        # Severity level filtering
         for sev in severities:
             cmd.extend(["-severity", sev])
 
-        # 模板目录
+        # Template directory
         if self.templates_dir and os.path.exists(self.templates_dir):
             cmd.extend(["-t", self.templates_dir])
 
-        # 超时
+        # Timeout
         cmd.extend(["-timeout", str(self.timeout)])
 
         # Headers
@@ -161,7 +174,7 @@ class NucleiIntegration:
         for key, value in all_headers.items():
             cmd.extend(["-H", f"{key}: {value}"])
 
-        logger.info(f"[Nuclei] 执行命令: {' '.join(cmd[:6])}...")
+        logger.info(f"[Nuclei] Executing command: {' '.join(cmd[:6])}...")
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -177,31 +190,31 @@ class NucleiIntegration:
                 )
             except asyncio.TimeoutError:
                 proc.kill()
-                logger.warning(f"[Nuclei] 执行超时（>{self.timeout + 10}s）")
+                logger.warning(f"[Nuclei] Execution timeout (>{self.timeout + 10}s)")
                 return []
 
             if proc.returncode != 0:
                 stderr_text = stderr.decode("utf-8", errors="ignore")[:500]
                 if stderr_text and "error" in stderr_text.lower():
-                    logger.warning(f"[Nuclei] CLI 报错: {stderr_text}")
+                    logger.warning(f"[Nuclei] CLI error: {stderr_text}")
 
             return self._parse_nuclei_output(stdout.decode("utf-8", errors="ignore"))
 
         except FileNotFoundError:
-            logger.error(f"[Nuclei] nuclei.exe 未找到: {self.nuclei_exe}")
+            logger.error(f"[Nuclei] nuclei.exe not found: {self.nuclei_exe}")
             self._stats["fallback_used"] = True
             return await self._fallback_scan(url, severities)
 
         except Exception as e:
-            logger.error(f"[Nuclei] 执行失败: {e}")
+            logger.error(f"[Nuclei] Execution failed: {e}")
             self._stats["fallback_used"] = True
             return await self._fallback_scan(url, severities)
 
     def _parse_nuclei_output(self, raw_output: str) -> List[Vulnerability]:
         """
-        解析 Nuclei JSON 输出
+        Parse Nuclei JSON output
 
-        Nuclei JSON 格式示例：
+        Nuclei JSON format example:
         {"template":"cves/2021/cve-2021-44228.yaml","template-id":"cve-2021-44228",...}
         """
         vulnerabilities = []
@@ -215,7 +228,7 @@ class NucleiIntegration:
             except json.JSONDecodeError:
                 continue
 
-            # 映射 Nuclei 字段到 Vulnerability
+            # Map Nuclei fields to Vulnerability
             vuln = self._nuclei_entry_to_vulnerability(entry)
             if vuln:
                 vulnerabilities.append(vuln)
@@ -226,7 +239,7 @@ class NucleiIntegration:
         return vulnerabilities
 
     def _nuclei_entry_to_vulnerability(self, entry: Dict[str, Any]) -> Optional[Vulnerability]:
-        """将 Nuclei 条目转为 Vulnerability 对象"""
+        """Convert a Nuclei entry to a Vulnerability object"""
         info = entry.get("info", {})
         matched_at = entry.get("matched-at", "")
         matched_line = entry.get("matched-line", "")
@@ -252,17 +265,17 @@ class NucleiIntegration:
 
         tags = info.get("tags", []) or []
 
-        # 提取 URL（从 matched-at）
+        # Extract URL (from matched-at)
         vuln_url = matched_at.split("?")[0] if matched_at else host
 
         return Vulnerability(
-            type=VulnerabilityType.ZERO_DAY,  # Nuclei 的 template 本身算 zero-day 库
+            type=VulnerabilityType.ZERO_DAY,  # Nuclei templates are counted as zero-day library
             title=f"[Nuclei] {title}",
             url=vuln_url,
             payload=matched_line or curl_command,
             evidence=f"{severity_str.upper()}: {title}",
             severity=severity,
-            confidence=Confidence.HIGH,  # Nuclei 有明确 template，置信度高
+            confidence=Confidence.HIGH,  # Nuclei has explicit templates, high confidence
             description=description[:500] if description else "",
             recommendation=recommendation[:500] if recommendation else "",
             references=refs[:5],
@@ -280,7 +293,7 @@ class NucleiIntegration:
         )
 
     def _map_severity(self, nuclei_severity: str) -> Severity:
-        """映射 Nuclei severity 到我们的 Severity 枚举"""
+        """Map nuclei severity to our Severity enum"""
         mapping = {
             "critical": Severity.CRITICAL,
             "high": Severity.HIGH,
@@ -292,7 +305,7 @@ class NucleiIntegration:
         return mapping.get(nuclei_severity.lower(), Severity.INFO)
 
     # ─────────────────────────────────────────────────────────────
-    # Fallback：内置模板（不是假输出）
+    # Fallback: Built-in templates (not fake output)
     # ─────────────────────────────────────────────────────────────
 
     async def _fallback_scan(
@@ -301,17 +314,17 @@ class NucleiIntegration:
         severities: List[str],
     ) -> List[Vulnerability]:
         """
-        Fallback：当 nuclei.exe 不可用时，使用内置基础模板
+        Fallback: Use built-in basic templates when nuclei.exe is unavailable
 
-        这不是模拟！是基于已知 CVE/CWE 的简单检测逻辑。
+        This is not a simulation! It is simple detection logic based on known CVE/CWE.
         """
-        logger.info(f"[Nuclei] 使用内置 fallback 模板扫描: {url}")
+        logger.info(f"[Nuclei] Scanning with built-in fallback templates: {url}")
         self._stats["fallback_used"] = True
 
         vulnerabilities = []
         base_url = url.rstrip("/")
 
-        # 内置简单检测规则（已知漏洞的快速指纹）
+        # Built-in simple detection rules (quick fingerprints for known vulnerabilities)
         builtin_checks = [
             {
                 "path": "/.git/config",
@@ -339,7 +352,7 @@ class NucleiIntegration:
                 "type": VulnerabilityType.INFO_DISCLOSURE,
                 "title": "Backup File Exposed",
                 "severity": Severity.HIGH,
-                "evidence_pattern": None,  # 任何非404响应都算
+                "evidence_pattern": None,  # Any non-404 response counts
             },
             {
                 "path": "/wp-admin",
@@ -371,14 +384,15 @@ class NucleiIntegration:
             },
         ]
 
-        # 简单的 HTTP HEAD 请求（不依赖 httpx，直接用 asyncio）
+        # Simple HTTP request (uses httpx)
         async def check_path(path: str) -> Optional[Dict]:
             try:
                 import httpx
+
                 async with httpx.AsyncClient(
                     timeout=httpx.Timeout(10),
                     follow_redirects=True,
-                    verify=DEFAULT_VERIFY_SSL,  # 使用默认 SSL 验证设置
+                    verify=DEFAULT_VERIFY_SSL,  # Use default SSL verification setting
                 ) as client:
                     resp = await client.get(base_url + path)
                     if resp.status_code not in (404, 400, 403):
@@ -412,5 +426,5 @@ class NucleiIntegration:
         return vulnerabilities
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取统计信息"""
+        """Get statistics"""
         return self._stats.copy()

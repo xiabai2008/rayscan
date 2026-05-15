@@ -1,10 +1,12 @@
 """
-WVS v19 CLI 入口
-用法：
+RayScan CLI entry point.
+
+Usage:
     python -m wvs scan http://target.com
     python -m wvs batch targets.txt
     python -m wvs --list-modules
 """
+
 import argparse
 import asyncio
 import json
@@ -12,19 +14,14 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from rich.table import Table
 from rich.panel import Panel
-from rich import print as rprint
 
 from .config import ConfigManager
-from .core import HTTPPool, WAVScanner, WebCrawler
-from .core.scanner import DiscoveredEndpoint
-from .models import ScanTarget, ScanResult, Vulnerability, Severity
-from .modules import SQLiDetector, CMDInjectionDetector, XSSDetector, LFIDetector
+from .core import HTTPPool, WAVScanner
+from .models import ScanTarget, ScanResult, Severity
 from .modules.base import ModuleFactory
 from .plugins.auth import AuthManager
 from .reporting import ConsoleReporter, HTMLReporter, MarkdownReporter
@@ -46,7 +43,8 @@ def setup_logging(verbose: bool = False):
 # CLI 命令
 # ─────────────────────────────────────────────────────────────────
 
-def cmd_scan(args):
+
+def cmd_scan(args):  # noqa: C901
     """执行单目标扫描"""
     target_url = args.url
 
@@ -72,20 +70,32 @@ def cmd_scan(args):
         config.set("rate_mode", args.rate_mode)
 
     # 处理 --insecure 参数（禁用 SSL 验证）
-    if hasattr(args, 'insecure') and args.insecure:
+    if hasattr(args, "insecure") and args.insecure:
         config.set("verify_ssl", False)
         console.print("[yellow][!] 警告: SSL 证书验证已禁用，存在 MITM 攻击风险[/yellow]")
 
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
 
-    # 设置全局扫描超时
-    max_time = args.max_time if hasattr(args, 'max_time') else 0
+    # 设置全局扫描超时（默认 7200s = 2h）
+    max_time = args.max_time if hasattr(args, "max_time") else 7200
+    if max_time <= 0:
+        max_time = 0  # 0 = unlimited
+
+    # 若启用 --resume，则加载上次 checkpoint
+    if hasattr(args, "resume") and args.resume:
+        checkpoint = scanner.load_checkpoint(target_url)
+        if checkpoint:
+            console.print(
+                f"[cyan][*] 从 checkpoint 恢复: {len(checkpoint.get('vulnerabilities', []))} 个已有漏洞, "
+                f"{len(checkpoint.get('modules_done', []))} 个已完成模块[/cyan]"
+            )
 
     # 初始化 OOB 管理器（如果指定了 OOB 服务器）
     oob_manager = None
-    if hasattr(args, 'oob_server') and args.oob_server:
+    if hasattr(args, "oob_server") and args.oob_server:
         from .core.oob import OOBManager
+
         oob_manager = OOBManager(server_url=args.oob_server)
         console.print(f"[cyan][OOB] 使用 OOB 服务器: {args.oob_server}[/cyan]")
 
@@ -179,13 +189,13 @@ def cmd_scan(args):
             async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
                 return await auth_manager.authenticate(tmp_client)
 
-        auth_result = asyncio.run(_do_auth())
+        asyncio.run(_do_auth())
 
         if not auth_manager.is_authenticated:
             console.print(f"[red][X] 认证失败: {auth_manager.auth_error}[/red]")
             return 1
 
-        console.print(f"[green][OK] 认证成功[/green]")
+        console.print("[green][OK] 认证成功[/green]")
         auth_manager.apply_to_target(target)
 
         # 关键：把 auth cookies 同步进 scanner 的 HTTPPool
@@ -195,12 +205,14 @@ def cmd_scan(args):
         console.print(f"[cyan]  已同步 {len(target.cookies)} 个 cookie 到扫描 session[/cyan]")
 
     # 执行扫描
-    console.print(Panel.fit(
-        f"[bold cyan]WVS v19[/bold cyan] 扫描目标: [bold]{target_url}[/bold]\n"
-        f"模块: {', '.join(scanner._loaded_module_names) or '全部'}\n"
-        f"速率: {config.get('rate', 10)} req/s",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]WVS v19[/bold cyan] 扫描目标: [bold]{target_url}[/bold]\n"
+            f"模块: {', '.join(scanner._loaded_module_names) or '全部'}\n"
+            f"速率: {config.get('rate', 10)} req/s",
+            border_style="cyan",
+        )
+    )
 
     start = time.perf_counter()
 
@@ -214,10 +226,7 @@ def cmd_scan(args):
             # 保存 max_time 到 scanner（超时抢救用）
             scanner._scan_max_time = max_time
             if max_time and max_time > 0:
-                result = await asyncio.wait_for(
-                    scanner.scan(target),
-                    timeout=max_time
-                )
+                result = await asyncio.wait_for(scanner.scan(target), timeout=max_time)
             else:
                 result = await scanner.scan(target)
             return result
@@ -232,20 +241,17 @@ def cmd_scan(args):
         console.print("\n[yellow]扫描被中断[/yellow]")
         return 130
     except asyncio.TimeoutError:
-        console.print(f"\n[yellow]扫描超时（>{max_time}秒），保存部分结果...[/yellow]")
-        # 超时时从 scanner 获取已收集的漏洞（通过 _vuln_seen 反推）
-        # wait_for 会取消 task，但 scanner._deduplicate 不会被执行
-        # 所以我们需要从 scanner 的模块实例中捞取部分结果
-        # 从 scanner._partial_vulns 收集超时前的部分结果
-        partial_vulns = getattr(scanner, '_partial_vulns', [])
-        # 兼容旧式模块 _found_vulns（部分模块中途被中断时可能还有残留）
-        for mod_instance in scanner._modules.values():
-            if hasattr(mod_instance, '_found_vulns') and mod_instance._found_vulns:
+        console.print(f"\n[yellow]扫描超时（>{max_time}秒），正在保存部分结果...[/yellow]")
+        partial_vulns = []
+        for mod_name, mod_instance in scanner._modules.items():
+            if hasattr(mod_instance, "_found_vulns"):
                 partial_vulns.extend(mod_instance._found_vulns)
+            elif hasattr(mod_instance, "vulnerabilities"):
+                partial_vulns.extend(mod_instance.vulnerabilities)
 
         if partial_vulns:
             from .models import ScanResult
-            # 去重
+
             seen = set()
             unique = []
             for v in partial_vulns:
@@ -286,25 +292,24 @@ def cmd_batch(args):
         console.print(f"[red]错误：找不到目标文件 {target_file}[/red]")
         return 1
 
-    targets = [line.strip() for line in target_file.read_text(encoding="utf-8").splitlines()
-               if line.strip() and not line.strip().startswith("#")]
+    targets = [line.strip() for line in target_file.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
 
     if not targets:
         console.print("[yellow]警告：目标文件为空[/yellow]")
         return 1
 
-    console.print(Panel.fit(
-        f"[bold cyan]WVS v19 批量扫描[/bold cyan]\n"
-        f"目标数量: [bold]{len(targets)}[/bold]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]WVS v19 批量扫描[/bold cyan]\n目标数量: [bold]{len(targets)}[/bold]",
+            border_style="cyan",
+        )
+    )
 
     config = ConfigManager()
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
     scanner.load_all_modules()
 
-    results = []
     batch_size = args.threads or 3
 
     async def scan_one(url: str) -> tuple:
@@ -317,9 +322,11 @@ def cmd_batch(args):
 
     async def run_batch():
         semaphore = asyncio.Semaphore(batch_size)
+
         async def sem_scan(url):
             async with semaphore:
                 return await scan_one(url)
+
         return await asyncio.gather(*[sem_scan(u) for u in targets])
 
     start = time.perf_counter()
@@ -370,6 +377,7 @@ def cmd_list_modules(args):
     """列出所有检测模块"""
     # 注册所有模块
     from .modules import register_all_modules
+
     register_all_modules()
 
     modules = ModuleFactory.list_modules()
@@ -396,18 +404,19 @@ def cmd_list_modules(args):
 
 def cmd_version(args):
     """显示版本信息"""
-    console.print(Panel.fit(
-        "[bold cyan]WVS v19.0.0[/bold cyan]\n"
-        "实用型 Web 漏洞扫描器\n"
-        "by 代可行 + 18789 agent",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]WVS v19.0.0[/bold cyan]\n实用型 Web 漏洞扫描器\nby 代可行 + 18789 agent",
+            border_style="cyan",
+        )
+    )
     return 0
 
 
 # ─────────────────────────────────────────────────────────────────
 # 结果展示
 # ─────────────────────────────────────────────────────────────────
+
 
 def display_result(result: ScanResult, elapsed: float, args):
     """
@@ -445,6 +454,7 @@ def display_result(result: ScanResult, elapsed: float, args):
 # 主入口
 # ─────────────────────────────────────────────────────────────────
 
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wvs",
@@ -465,30 +475,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 扫描控制选项
     control_group = scan_parser.add_argument_group("扫描控制")
-    control_group.add_argument("--max-time", type=int, default=0,
-                               help="全局扫描超时（秒），0 表示无限制")
-    control_group.add_argument("--rate", type=int, default=10,
-                               help="每秒最大请求数（默认 10）")
-    control_group.add_argument("--rate-mode", choices=["burst", "uniform"], default="burst",
-                               help="速率限制模式：burst(突发) / uniform(均匀)")
-    control_group.add_argument("--delay", type=float, default=0.0,
-                               help="请求间延迟（秒）")
-    control_group.add_argument("-c", "--config", type=str,
-                               help="配置文件路径（YAML/JSON）")
-    control_group.add_argument("--insecure", action="store_true",
-                               help="禁用 SSL 证书验证（不推荐，存在安全风险）")
+    control_group.add_argument("--max-time", type=int, default=7200, help="全局扫描超时（秒），默认 7200（2小时），0 表示无限制")
+    control_group.add_argument("--resume", action="store_true", help="从上次 checkpoint 恢复扫描")
+    control_group.add_argument("--rate", type=int, default=10, help="每秒最大请求数（默认 10）")
+    control_group.add_argument("--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)")
+    control_group.add_argument("--delay", type=float, default=0.0, help="请求间延迟（秒）")
+    control_group.add_argument("-c", "--config", type=str, help="配置文件路径（YAML/JSON）")
+    control_group.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证（不推荐，存在安全风险）")
 
     # OOB 检测选项
     oob_group = scan_parser.add_argument_group("OOB 检测")
-    oob_group.add_argument("--oob-server", type=str,
-                           help="OOB 回调服务器地址（如 https://interactsh.com）")
-    oob_group.add_argument("--oob-timeout", type=int, default=30,
-                           help="OOB 回调等待超时（秒，默认 30）")
+    oob_group.add_argument("--oob-server", type=str, help="OOB 回调服务器地址（如 https://interactsh.com）")
+    oob_group.add_argument("--oob-timeout", type=int, default=30, help="OOB 回调等待超时（秒，默认 30）")
 
     # 认证选项
     auth_group = scan_parser.add_argument_group("认证选项")
-    auth_group.add_argument("--auth-type", choices=["form", "bearer", "basic", "apikey", "cookie"],
-                            help="认证类型（默认自动检测）")
+    auth_group.add_argument("--auth-type", choices=["form", "bearer", "basic", "apikey", "cookie"], help="认证类型（默认自动检测）")
     auth_group.add_argument("--login-url", help="表单登录 URL（auth-type=form 时必填）")
     auth_group.add_argument("--username", help="认证用户名")
     auth_group.add_argument("--password", help="认证密码")
@@ -496,14 +498,10 @@ def build_parser() -> argparse.ArgumentParser:
     auth_group.add_argument("--cookies", help="直接注入 Cookie（格式：name=value; name2=value2）")
     auth_group.add_argument("--api-key", help="API Key")
     auth_group.add_argument("--api-key-header", default="X-API-Key", help="API Key Header 名称（默认 X-API-Key）")
-    auth_group.add_argument("--login-extra", nargs="*", dest="login_extra",
-                            help="额外表单字段（格式：fieldname=value）")
-    auth_group.add_argument("--csrf-fields", nargs="*", dest="csrf_fields",
-                            help="CSRF token 字段名（默认自动检测，如 user_token csrf_token）")
-    auth_group.add_argument("--success-check", dest="success_check",
-                            help="登录成功标识（响应中包含的字符串）")
-    auth_group.add_argument("--fail-check", dest="fail_check",
-                            help="登录失败标识（响应中包含的字符串）")
+    auth_group.add_argument("--login-extra", nargs="*", dest="login_extra", help="额外表单字段（格式：fieldname=value）")
+    auth_group.add_argument("--csrf-fields", nargs="*", dest="csrf_fields", help="CSRF token 字段名（默认自动检测，如 user_token csrf_token）")
+    auth_group.add_argument("--success-check", dest="success_check", help="登录成功标识（响应中包含的字符串）")
+    auth_group.add_argument("--fail-check", dest="fail_check", help="登录失败标识（响应中包含的字符串）")
 
     # batch 命令
     batch_parser = sub.add_parser("batch", help="批量扫描")

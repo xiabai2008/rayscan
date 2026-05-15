@@ -1,18 +1,17 @@
 """
-认证插件
-v18 痛点：认证扫描从未实现，导致需要登录的页面完全扫不了
+Authentication plugin
+v18 pain point: authenticated scanning was never implemented, making login-required pages completely unscannable
 
-支持三种认证方式：
-1. Form Login（表单认证）— 提交登录表单获取 session cookie（v19: 自动提取 CSRF token）
-2. Bearer Token — Authorization: Bearer <token>
-3. Basic Auth — Authorization: Basic <base64>
-4. API Key — 自定义 header（如 X-API-Key）
+Supports four authentication methods:
+1. Form Login - submit login form to get session cookie (v19: auto-extract CSRF token)
+2. Bearer Token - Authorization: Bearer <token>
+3. Basic Auth - Authorization: Basic <base64>
+4. API Key - custom header (e.g. X-API-Key)
 """
-import asyncio
+
 import base64
 import logging
 import re
-import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -26,28 +25,29 @@ logger = logging.getLogger("wvs.auth")
 
 
 # ─────────────────────────────────────────────────────────────────
-# Auth Provider 接口
+# Auth Provider Interface
 # ─────────────────────────────────────────────────────────────────
+
 
 class AuthProvider(ABC):
     """
-    认证提供者基类
+    Base class for auth providers
 
-    子类必须实现：
-    - authenticate(): 执行认证，返回 cookies/headers
-    - is_authenticated(): 检查是否仍然有效
+    Subclasses must implement:
+    - authenticate(): Execute authentication, return cookies/headers
+    - is_authenticated(): Check if still valid
     """
 
     @abstractmethod
     async def authenticate(self, session: httpx.AsyncClient) -> Dict[str, Any]:
         """
-        执行认证
+        Execute authentication
 
         Args:
-            session: httpx 客户端实例
+            session: httpx client instance
 
         Returns:
-            dict，包含：
+            dict containing:
             - cookies: Dict[str, str]
             - headers: Dict[str, str]
             - authenticated: bool
@@ -61,9 +61,9 @@ class AuthProvider(ABC):
         check_url: str,
     ) -> bool:
         """
-        检查认证是否仍然有效（子类可覆盖）
+        Check if authentication is still valid (subclass may override)
 
-        默认：检查响应状态码，2xx = 有效
+        Default: check response status code, 2xx = valid
         """
         try:
             resp = await session.get(check_url, timeout=10)
@@ -73,42 +73,43 @@ class AuthProvider(ABC):
 
 
 # ─────────────────────────────────────────────────────────────────
-# 表单认证
+# Form Login Auth
 # ─────────────────────────────────────────────────────────────────
+
 
 class FormLoginAuth(AuthProvider):
     """
-    表单登录认证（v19: 自动提取 CSRF token）
+    Form login authentication (v19: auto-extract CSRF token)
 
-    流程：
-    1. GET 登录页面 → 提取 CSRF token
-    2. POST 登录表单 → 获取 session cookie
+    Flow:
+    1. GET login page -> extract CSRF token
+    2. POST login form -> get session cookie
 
-    配置参数：
-    - login_url: 登录页面地址（同时作为 GET 和 POST 目标）
-    - username_field: 用户名 input 的 name 属性（默认 username）
-    - password_field: 密码 input 的 name 属性（默认 password）
-    - extra_fields: 额外表单字段
-    - csrf_fields: 自定义 CSRF 字段名列表（默认自动检测常见名称）
-    - success_check: 登录成功判断字符串
-    - fail_check: 登录失败判断字符串
+    Configuration parameters:
+    - login_url: Login page URL (target for both GET and POST)
+    - username_field: Name attribute of username input (default: username)
+    - password_field: Name attribute of password input (default: password)
+    - extra_fields: Additional form fields
+    - csrf_fields: Custom CSRF field name list (default: auto-detect common names)
+    - success_check: Login success indicator string
+    - fail_check: Login failure indicator string
     """
 
-    # 自动检测的 CSRF token 字段名（按常见度排序）
+    # Auto-detected CSRF token field names (ordered by commonality)
     CSRF_FIELD_NAMES = [
-        "user_token",        # DVWA
-        "csrf_token",        # 通用
-        "csrfmiddlewaretoken", # Django
+        "user_token",  # DVWA
+        "csrf_token",  # Generic
+        "csrfmiddlewaretoken",  # Django
         "authenticity_token",  # Rails
-        "_token",            # Laravel
-        "token",             # 通用
+        "_token",  # Laravel
+        "token",  # Generic
         "anti_forgery_token",  # ASP.NET
         "__requestverificationtoken",  # ASP.NET MVC
-        "nonce",             # WordPress
-        "_wpnonce",          # WordPress
+        "nonce",  # WordPress
+        "_wpnonce",  # WordPress
     ]
 
-    # 登录失败常见标识
+    # Common login failure indicators
     DEFAULT_FAIL_CHECKS = [
         "login failed",
         "Login failed",
@@ -120,9 +121,6 @@ class FormLoginAuth(AuthProvider):
         "Authentication failed",
         "wrong password",
         "Wrong password",
-        "登录失败",
-        "用户名或密码错误",
-        "名或密码不正确",
     ]
 
     def __init__(
@@ -151,9 +149,9 @@ class FormLoginAuth(AuthProvider):
 
     def _extract_csrf_tokens(self, html: str) -> Dict[str, str]:
         """
-        从登录页面 HTML 中提取 CSRF token
+        Extract CSRF tokens from login page HTML
 
-        支持的 HTML 形式：
+        Supported HTML forms:
         - <input type="hidden" name="user_token" value="xxx">
         - <input name="csrf_token" type="hidden" value="xxx">
         - <meta name="csrf-token" content="xxx">
@@ -163,12 +161,12 @@ class FormLoginAuth(AuthProvider):
         """
         tokens: Dict[str, str] = {}
 
-        # 优先检查用户指定的字段
+        # Check user-specified fields first
         field_names = list(self.csrf_fields)
 
         for field_name in field_names:
-            # 模式1: <input ... name="field_name" ... value="xxx">
-            # 匹配 name 在 value 前面或后面的情况
+            # Pattern 1: <input ... name="field_name" ... value="xxx">
+            # Match name before or after value
             patterns = [
                 # name="xxx" value="yyy"
                 rf'<input[^>]*\bname\s*=\s*["\']?{re.escape(field_name)}["\']?[^>]*\bvalue\s*=\s*["\']([^"\']+)["\']',
@@ -181,17 +179,17 @@ class FormLoginAuth(AuthProvider):
                 m = re.search(pattern, html, re.IGNORECASE)
                 if m:
                     tokens[field_name] = m.group(1)
-                    logger.debug(f"[Auth:FormLogin] 提取 CSRF token: {field_name}={m.group(1)[:8]}...")
-                    break  # 找到一个就够
+                    logger.debug(f"[Auth:FormLogin] Extracted CSRF token: {field_name}={m.group(1)[:8]}...")
+                    break  # One match is enough
 
         return tokens
 
     def _extract_submit_buttons(self, html: str) -> Dict[str, str]:
         """
-        从登录页面 HTML 中提取 submit 按钮
+        Extract submit buttons from login page HTML
 
-        许多登录表单需要提交按钮的 name=value 才能正常工作
-        （如 DVWA 要求 Login=Login）
+        Many login forms require the submit button's name=value to work properly
+        (e.g. DVWA requires Login=Login)
 
         Returns:
             dict: {button_name: button_value}
@@ -201,34 +199,34 @@ class FormLoginAuth(AuthProvider):
         # <input type="submit" name="Login" value="Login">
         patterns = [
             # <input type="submit" name="xxx" value="yyy">
-            rf'<input[^>]*type\s*=\s*["\']?submit["\']?[^>]*\bname\s*=\s*["\']([^"\']+)["\']?[^>]*\bvalue\s*=\s*["\']([^"\']*)["\']',
+            r'<input[^>]*type\s*=\s*["\']?submit["\']?[^>]*\bname\s*=\s*["\']([^"\']+)["\']?[^>]*\bvalue\s*=\s*["\']([^"\']*)["\']',
             # <input type="submit" value="yyy" name="xxx">
-            rf'<input[^>]*type\s*=\s*["\']?submit["\']?[^>]*\bvalue\s*=\s*["\']([^"\']*)["\']?[^>]*\bname\s*=\s*["\']([^"\']+)["\']',
+            r'<input[^>]*type\s*=\s*["\']?submit["\']?[^>]*\bvalue\s*=\s*["\']([^"\']*)["\']?[^>]*\bname\s*=\s*["\']([^"\']+)["\']',
             # <button type="submit" name="xxx" value="yyy">
-            rf'<button[^>]*type\s*=\s*["\']?submit["\']?[^>]*\bname\s*=\s*["\']([^"\']+)["\']?[^>]*\bvalue\s*=\s*["\']([^"\']*)["\']',
+            r'<button[^>]*type\s*=\s*["\']?submit["\']?[^>]*\bname\s*=\s*["\']([^"\']+)["\']?[^>]*\bvalue\s*=\s*["\']([^"\']*)["\']',
         ]
 
         for pattern in patterns:
             for m in re.finditer(pattern, html, re.IGNORECASE):
-                # 取 name 和 value（位置取决于模式）
+                # Get name and value (position depends on pattern)
                 groups = m.groups()
                 if len(groups) == 2:
-                    # 第一个模式：name, value
+                    # First pattern: name, value
                     name, value = groups[0], groups[1]
                     if name and value:
                         buttons[name] = value
-                        logger.debug(f"[Auth:FormLogin] 发现 submit 按钮: {name}={value}")
+                        logger.debug(f"[Auth:FormLogin] Found submit button: {name}={value}")
                     elif name:
                         buttons[name] = ""
-                        logger.debug(f"[Auth:FormLogin] 发现 submit 按钮: {name}=(empty)")
-                break  # 只取第一个 submit 按钮
+                        logger.debug(f"[Auth:FormLogin] Found submit button: {name}=(empty)")
+                break  # Only take the first submit button
 
         return buttons
 
     async def authenticate(self, session: httpx.AsyncClient) -> Dict[str, Any]:
         try:
-            # ── Step 1: GET 登录页面，提取 CSRF token ──
-            logger.info(f"[Auth:FormLogin] GET {self.login_url} (提取 CSRF token)")
+            # -- Step 1: GET login page, extract CSRF token --
+            logger.info(f"[Auth:FormLogin] GET {self.login_url} (extract CSRF token)")
             get_resp = await session.get(self.login_url, timeout=30, follow_redirects=True)
 
             csrf_tokens = {}
@@ -237,46 +235,46 @@ class FormLoginAuth(AuthProvider):
                 csrf_tokens = self._extract_csrf_tokens(get_resp.text)
                 submit_buttons = self._extract_submit_buttons(get_resp.text)
                 if csrf_tokens:
-                    logger.info(f"[Auth:FormLogin] 发现 {len(csrf_tokens)} 个 CSRF token: {list(csrf_tokens.keys())}")
+                    logger.info(f"[Auth:FormLogin] Found {len(csrf_tokens)} CSRF tokens: {list(csrf_tokens.keys())}")
                 else:
-                    logger.debug("[Auth:FormLogin] 未发现 CSRF token（可能不需要）")
+                    logger.debug("[Auth:FormLogin] No CSRF token found (may not be required)")
                 if submit_buttons:
-                    logger.info(f"[Auth:FormLogin] 发现 {len(submit_buttons)} 个 submit 按钮: {list(submit_buttons.keys())}")
+                    logger.info(f"[Auth:FormLogin] Found {len(submit_buttons)} submit buttons: {list(submit_buttons.keys())}")
             else:
-                logger.debug(f"[Auth:FormLogin] GET 返回 {get_resp.status_code}，跳过 CSRF 提取")
+                logger.debug(f"[Auth:FormLogin] GET returned {get_resp.status_code}, skipping CSRF extraction")
 
-            # ── Step 2: 构建登录 POST data ──
+            # -- Step 2: Build login POST data --
             data = {
                 self.username_field: self.username,
                 self.password_field: self.password,
             }
-            # Submit 按钮（很多表单需要，如 DVWA 的 Login=Login）
+            # Submit button (many forms require it, e.g. DVWA's Login=Login)
             data.update(submit_buttons)
-            # CSRF token 优先级：extra_fields > 自动提取
+            # CSRF token priority: extra_fields > auto-extracted
             data.update(csrf_tokens)
             data.update(self.extra_fields)
 
             logger.info(f"[Auth:FormLogin] {self.method} {self.login_url}")
-            logger.debug(f"[Auth:FormLogin] 字段: {list(data.keys())}")
+            logger.debug(f"[Auth:FormLogin] Fields: {list(data.keys())}")
 
-            # ── Step 3: POST 登录表单 ──
+            # -- Step 3: POST login form --
             if self.method == "POST":
                 resp = await session.post(self.login_url, data=data, timeout=30, follow_redirects=True)
             else:
                 resp = await session.request(self.method, self.login_url, data=data, timeout=30, follow_redirects=True)
 
-            # ── Step 4: 检查登录结果 ──
+            # -- Step 4: Check login result --
 
-            # 4a. 最强信号：POST 后 URL 不再是登录页 → 登录成功
+            # 4a. Strongest signal: POST URL no longer login page -> login success
             login_path = self.login_url.rstrip("/").split("/")[-1]
             current_path = str(resp.url).rstrip("/")
             if login_path not in current_path.split("/")[-1]:
                 cookies = dict(session.cookies)
                 if cookies:
-                    logger.info(f"[Auth:FormLogin] ✅ 登录成功（已跳转到 {resp.url}，{len(cookies)} cookie）")
+                    logger.info(f"[Auth:FormLogin] Login successful (redirected to {resp.url}, {len(cookies)} cookies)")
                     return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
 
-            # 4b. 检查失败标识
+            # 4b. Check failure indicators
             fail_checks = [self.fail_check] if self.fail_check else self.DEFAULT_FAIL_CHECKS
             for fc in fail_checks:
                 if fc and fc in resp.text:
@@ -284,59 +282,59 @@ class FormLoginAuth(AuthProvider):
                         "cookies": {},
                         "headers": {},
                         "authenticated": False,
-                        "error": f"登录失败：响应包含失败标识 '{fc}'",
+                        "error": f"Login failed: response contains failure indicator '{fc}'",
                     }
 
-            # 4b. 检查是否还在登录页（说明没跳转成功）
+            # 4b. Check if still on login page (didn't redirect)
             login_form_indicators = [
                 f'name="{self.username_field}"',
                 f'name="{self.password_field}"',
-                f'name=\'{self.username_field}\'',
-                f'name=\'{self.password_field}\'',
+                f"name='{self.username_field}'",
+                f"name='{self.password_field}'",
             ]
             still_on_login = any(ind in resp.text for ind in login_form_indicators)
-            # 只有当 URL 仍然是登录页时才认为失败
+            # Only consider failed if URL is still the login page
             if still_on_login and self.login_url.rstrip("/") in resp.url.path:
-                # 再确认：如果页面也有成功标识，那不算失败
+                # Double-check: if page also has success marker, it's not a failure
                 if not self.success_check or self.success_check not in resp.text:
                     return {
                         "cookies": {},
                         "headers": {},
                         "authenticated": False,
-                        "error": "登录后仍停留在登录页面，可能用户名/密码错误或 CSRF token 无效",
+                        "error": "Still on login page after login, possibly incorrect username/password or invalid CSRF token",
                     }
 
-            # 4c. 检查成功标识
+            # 4c. Check success indicator
             if self.success_check:
                 if self.success_check in resp.text:
                     cookies = dict(session.cookies)
-                    logger.info(f"[Auth:FormLogin] ✅ 登录成功，获取 {len(cookies)} 个 cookie")
+                    logger.info(f"[Auth:FormLogin] Login successful, got {len(cookies)} cookies")
                     return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
                 else:
-                    # 没有成功标识，但也没有失败标识 → 尝试检查 cookie
+                    # No success marker, but no failure marker either -- try checking cookies
                     cookies = dict(session.cookies)
                     if cookies:
-                        logger.info(f"[Auth:FormLogin] ⚠ 无成功标识但有 {len(cookies)} cookie，视为登录成功")
+                        logger.info(f"[Auth:FormLogin] No success marker but {len(cookies)} cookies present, treating as login success")
                         return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
                     return {
                         "cookies": {},
                         "headers": {},
                         "authenticated": False,
-                        "error": f"登录成功标识 '{self.success_check}' 未在响应中找到",
+                        "error": f"Login success indicator '{self.success_check}' not found in response",
                     }
 
-            # 4d. 默认：有 cookie 就算成功
+            # 4d. Default: cookies = success
             if resp.status_code in (200, 302, 303):
                 cookies = dict(session.cookies)
                 if cookies:
-                    logger.info(f"[Auth:FormLogin] ✅ 登录成功（{len(cookies)} cookie）")
+                    logger.info(f"[Auth:FormLogin] Login successful ({len(cookies)} cookies)")
                     return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
                 else:
                     return {
                         "cookies": {},
                         "headers": {},
                         "authenticated": False,
-                        "error": "未获取到任何 cookie",
+                        "error": "No cookies received",
                     }
 
             return {
@@ -347,7 +345,7 @@ class FormLoginAuth(AuthProvider):
             }
 
         except Exception as e:
-            logger.error(f"[Auth:FormLogin] 异常: {e}")
+            logger.error(f"[Auth:FormLogin] Exception: {e}")
             return {"cookies": {}, "headers": {}, "authenticated": False, "error": str(e)}
 
 
@@ -355,11 +353,12 @@ class FormLoginAuth(AuthProvider):
 # Bearer Token
 # ─────────────────────────────────────────────────────────────────
 
+
 class BearerTokenAuth(AuthProvider):
     """
-    Bearer Token 认证
+    Bearer Token authentication
 
-    用于 JWT、OAuth2 access_token 等场景
+    Used for JWT, OAuth2 access_token, etc.
     """
 
     def __init__(self, token: str, header_name: str = "Authorization"):
@@ -380,9 +379,10 @@ class BearerTokenAuth(AuthProvider):
 # Basic Auth
 # ─────────────────────────────────────────────────────────────────
 
+
 class BasicAuth(AuthProvider):
     """
-    HTTP Basic 认证
+    HTTP Basic authentication
     """
 
     def __init__(self, username: str, password: str):
@@ -390,9 +390,7 @@ class BasicAuth(AuthProvider):
         self.password = password
 
     async def authenticate(self, session: httpx.AsyncClient) -> Dict[str, Any]:
-        credentials = base64.b64encode(
-            f"{self.username}:{self.password}".encode()
-        ).decode()
+        credentials = base64.b64encode(f"{self.username}:{self.password}".encode()).decode()
         return {
             "cookies": {},
             "headers": {"Authorization": f"Basic {credentials}"},
@@ -405,9 +403,10 @@ class BasicAuth(AuthProvider):
 # API Key
 # ─────────────────────────────────────────────────────────────────
 
+
 class APIKeyAuth(AuthProvider):
     """
-    API Key 认证（自定义 Header）
+    API Key authentication (custom Header)
     """
 
     def __init__(self, key: str, header_name: str = "X-API-Key"):
@@ -424,17 +423,18 @@ class APIKeyAuth(AuthProvider):
 
 
 # ─────────────────────────────────────────────────────────────────
-# Cookie Auth（直接注入已有 cookie）
+# Cookie Auth (directly inject existing cookies)
 # ─────────────────────────────────────────────────────────────────
+
 
 class CookieAuth(AuthProvider):
     """
-    直接注入 Cookie（手动获取或从浏览器复制）
+    Directly inject Cookies (manually obtained or copied from browser)
     """
 
     def __init__(self, cookies: Dict[str, str]):
         if isinstance(cookies, str):
-            # 支持 "PHPSESSID=abc; user=admin" 格式的字符串
+            # Supports "PHPSESSID=abc; user=admin" formatted strings
             self.cookie_dict = {}
             for part in cookies.split(";"):
                 if "=" in part:
@@ -444,7 +444,7 @@ class CookieAuth(AuthProvider):
             self.cookie_dict = cookies
 
     async def authenticate(self, session: httpx.AsyncClient) -> Dict[str, Any]:
-        # 直接设置 cookies 到 session
+        # Directly set cookies on session
         for name, value in self.cookie_dict.items():
             session.cookies.set(name, value)
         return {
@@ -459,15 +459,16 @@ class CookieAuth(AuthProvider):
 # Auth Manager
 # ─────────────────────────────────────────────────────────────────
 
+
 class AuthManager:
     """
-    认证管理器
+    Authentication manager
 
-    统一管理认证流程：
-    1. 构建 AuthProvider
-    2. 执行认证
-    3. 将认证结果注入 ScanTarget
-    4. 验证认证状态
+    Unified management of the authentication workflow:
+    1. Build AuthProvider
+    2. Execute authentication
+    3. Inject authentication result into ScanTarget
+    4. Verify authentication status
     """
 
     def __init__(self, config: Optional[ConfigManager] = None):
@@ -482,7 +483,7 @@ class AuthManager:
         password: str,
         **kwargs,
     ) -> "AuthManager":
-        """配置表单登录"""
+        """Configure form login"""
         self._provider = FormLoginAuth(
             login_url=login_url,
             username=username,
@@ -509,13 +510,13 @@ class AuthManager:
 
     async def authenticate(self, session: httpx.AsyncClient) -> Dict[str, Any]:
         """
-        执行认证，返回认证信息
+        Execute authentication and return auth info
 
         Returns:
-            dict，同 AuthProvider.authenticate() 返回值
+            dict, same as AuthProvider.authenticate() return value
         """
         if not self._provider:
-            logger.warning("[AuthManager] 未配置任何认证方式")
+            logger.warning("[AuthManager] No authentication method configured")
             return {"cookies": {}, "headers": {}, "authenticated": False, "error": "No auth configured"}
 
         self._auth_result = await self._provider.authenticate(session)
@@ -523,22 +524,22 @@ class AuthManager:
 
     def apply_to_target(self, target: ScanTarget) -> ScanTarget:
         """
-        将认证结果应用到 ScanTarget
+        Apply authentication result to ScanTarget
 
-        修改 target.cookies 和 target.headers
+        Modifies target.cookies and target.headers
         """
         if not self._auth_result:
-            logger.warning("[AuthManager] 尚未执行认证")
+            logger.warning("[AuthManager] Authentication has not been performed yet")
             return target
 
         if self._auth_result.get("cookies"):
             for k, v in self._auth_result["cookies"].items():
                 target.cookies[k] = v
-                logger.debug(f"[AuthManager] 应用 Cookie: {k}=...")
+                logger.debug(f"[AuthManager] Applied Cookie: {k}=...")
 
         if self._auth_result.get("headers"):
             target.headers.update(self._auth_result["headers"])
-            logger.debug(f"[AuthManager] 应用 Header: {list(self._auth_result['headers'].keys())}")
+            logger.debug(f"[AuthManager] Applied Header: {list(self._auth_result['headers'].keys())}")
 
         return target
 

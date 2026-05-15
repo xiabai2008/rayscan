@@ -1,18 +1,20 @@
 """
-WVS 检测模块
+RayScan Detection Modules
 
-已注册模块：
-- sqli      : SQL 注入检测（error-based / union / boolean-blind / time-based）
-- cmdi     : 命令注入检测（echo 回显 / time-based / OOB）
-- xss       : XSS 检测（reflected / stored / DOM-based）
-- lfi       : 本地文件包含检测
-- rce       : 远程代码执行检测（code injection / deserialization）
-- api       : API 安全检测（auth bypass / JWT / CORS）
-- ssrf      : 服务端请求伪造检测
-- xxe       : XML 外部实体注入检测
-- sensitive : 敏感信息泄露检测（备份文件 / 配置 / 源码）
-- waf       : WAF 检测与绕过
+Registered modules:
+- sqli      : SQL injection (error-based / union / boolean-blind / time-based)
+- cmdi      : Command injection (echo / time-based / OOB)
+- xss       : Cross-site scripting (reflected / stored / DOM-based)
+- lfi       : Local file inclusion
+- rce       : Remote code execution (code injection / deserialization)
+- api       : API security (auth bypass / JWT / CORS)
+- ssrf      : Server-side request forgery
+- xxe       : XML external entity injection
+- sensitive : Sensitive information disclosure (backup files / config / source code)
+- waf       : WAF detection and bypass
+- jspathfinder : JavaScript endpoint discovery
 """
+
 from .sqli import SQLiDetector
 from .cmdi import CMDInjectionDetector
 from .xss import XSSDetector
@@ -41,17 +43,9 @@ __all__ = [
 
 
 def register_all_modules():
-    """确保所有模块被注册到 ModuleFactory（触发 @register_module 装饰器）"""
-    _ = [
-        SQLiDetector,
-        CMDInjectionDetector,
-        XSSDetector,
-        LFIDetector,
-        RCEDetector,
-        APIDetector,
-        SSRFDetector,
-        XXEDetector,
-        SensitiveDetector,
-        WAFDetector,
-        JSPathfinderDetector,
-    ]
+    """Ensure all modules are registered with ModuleFactory.
+
+    Modules register themselves via @register_module decorator at import time,
+    so this function is a no-op — it exists for backward compatibility.
+    """
+    pass

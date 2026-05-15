@@ -7,12 +7,12 @@ Handles:
 - Session state persistence across scan
 - CSRF token refresh across multi-step flows
 """
+
 import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import urlparse
 
 import httpx
 
@@ -65,8 +65,7 @@ class SessionManager:
             expires_at=time.time() + session_duration if session_duration else float("inf"),
         )
         self._sessions[host] = state
-        logger.debug(f"[Session] registered {host}: {len(cookies)} cookies, "
-                     f"authenticated={authenticated}")
+        logger.debug(f"[Session] registered {host}: {len(cookies)} cookies, authenticated={authenticated}")
 
     def register_auth_provider(self, host: str, provider: Callable):
         """Register a coroutine that re-authenticates and returns new cookies."""
@@ -143,9 +142,7 @@ class SessionManager:
                 state.authenticated = False
             return state.authenticated
 
-    async def ensure_authenticated(
-        self, host: str, client: httpx.AsyncClient
-    ) -> Dict[str, str]:
+    async def ensure_authenticated(self, host: str, client: httpx.AsyncClient) -> Dict[str, str]:
         """Ensure session is authenticated; re-authenticate if needed."""
         is_healthy = await self.check_health(host, client)
         if is_healthy:
@@ -180,18 +177,20 @@ class SessionManager:
         return self.get_cookies(host)
 
     async def extract_csrf_from_page(
-        self, host: str, client: httpx.AsyncClient, url: str,
+        self,
+        host: str,
+        client: httpx.AsyncClient,
+        url: str,
         csrf_names: Optional[List[str]] = None,
     ) -> Optional[str]:
         """Extract CSRF token from a page."""
-        default_names = ["csrf_token", "_csrf", "csrf", "xsrf_token",
-                         "_token", "authenticity_token", "user_token",
-                         "nonce", "_wpnonce"]
+        default_names = ["csrf_token", "_csrf", "csrf", "xsrf_token", "_token", "authenticity_token", "user_token", "nonce", "_wpnonce"]
         names = csrf_names or default_names
 
         try:
             resp = await client.get(url, follow_redirects=True, timeout=10.0)
             from bs4 import BeautifulSoup
+
             soup = BeautifulSoup(resp.text, "lxml")
 
             for name in names:

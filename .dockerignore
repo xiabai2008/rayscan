@@ -1,0 +1,42 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Reports (generated at runtime)
+scan_reports/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archive (old versions)
+archive/
+
+# Large binary deps
+node_modules/

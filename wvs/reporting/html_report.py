@@ -1,12 +1,13 @@
 """
-HTML 报告生成器
-生成自包含的单文件 HTML 报告（无需外部网络）
+HTML Report Generator
+Generates a self-contained single-file HTML report (no external network required)
 """
+
 import html
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..models import ScanResult, Vulnerability, Severity, Confidence
 
@@ -24,27 +25,27 @@ SEV_ORDER = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Se
 
 class HTMLReporter:
     """
-    HTML 报告生成器
+    HTML Report Generator
 
-    生成完全自包含的单文件 HTML 报告：
-    - 响应式设计，适合手机和电脑
-    - 所有 CSS/JS 内联，无需外部依赖
-    - 漏洞按严重程度分组
-    - 点击展开漏洞详情
-    - 导出为 JSON
+    Generates a fully self-contained single-file HTML report:
+    - Responsive design, suitable for mobile and desktop
+    - All CSS/JS inline, no external dependencies
+    - Vulnerabilities grouped by severity
+    - Click to expand vulnerability details
+    - Export to JSON
     """
 
     def __init__(self):
         self._counter = 0
 
     def generate(self, result: ScanResult, output_path: Path):
-        """生成 HTML 报告"""
+        """Generate HTML report"""
         html_content = self._build_html(result)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html_content, encoding="utf-8")
 
     def generate_json(self, result: ScanResult, output_path: Path):
-        """生成 JSON 报告"""
+        """Generate JSON report"""
         data = self._build_json(result)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -53,16 +54,15 @@ class HTMLReporter:
         return result.to_dict()
 
     def _build_html(self, result: ScanResult) -> str:
-        """构建完整 HTML"""
+        """Build complete HTML"""
         has_vulns = bool(result.vulnerabilities)
         vuln_stats = result.severity_count
 
         groups = self._group_by_severity(result.vulnerabilities)
-        vuln_rows = self._build_vuln_rows(result.vulnerabilities)
 
         stats_html = self._build_stats_html(result, vuln_stats)
 
-        # JSON 数据（供 JS 使用）
+        # JSON data (for JS use)
         vuln_json = json.dumps(
             [self._vuln_to_json(v) for v in result.vulnerabilities],
             ensure_ascii=False,
@@ -184,7 +184,7 @@ body {{
 .section-body.open {{ display: block; }}
 
 table {{ width: 100%; border-collapse: collapse; }}
-th {{ text-align: left; padding: 8px 12px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--card-border); }}
+th {{ text-align: left; padding: 8px 12px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--card-border); }}  # noqa: E501
 td {{ padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.05); }}
 tr:last-child td {{ border-bottom: none; }}
 tr:hover td {{ background: rgba(255,255,255,0.02); }}
@@ -279,7 +279,7 @@ tr:hover td {{ background: rgba(255,255,255,0.02); }}
     <span>📍 {html.escape(result.target.url)}</span>
     <span>⏱ {result.duration:.1f}s</span>
     <span>🌐 {result.requests_made} 请求</span>
-    <span>📅 {result.scan_time.strftime('%Y-%m-%d %H:%M:%S') if result.scan_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</span>
+    <span>📅 {result.scan_time.strftime("%Y-%m-%d %H:%M:%S") if result.scan_time else datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</span>
   </div>
 </div>
 
@@ -398,12 +398,15 @@ document.querySelectorAll('.section-header').forEach(h => {{
         color_cls = v.severity.value.lower()
         badge_cls = f"badge-{color_cls}"
         conf_cls = "badge-high-confidence" if v.confidence in (Confidence.HIGH, Confidence.CERTAIN) else "badge-medium-confidence"
-        payload_display = html.escape(v.payload[:80] + "...") if v.payload and len(v.payload) > 80 else html.escape(v.payload or "-")
         detail_rows = []
         if v.description:
-            detail_rows.append(f'<div class="detail-row"><span class="detail-label">描述</span><span class="detail-value">{html.escape(v.description[:300])}</span></div>')
+            detail_rows.append(
+                f'<div class="detail-row"><span class="detail-label">描述</span><span class="detail-value">{html.escape(v.description[:300])}</span></div>'  # noqa: E501
+            )
         if v.recommendation:
-            detail_rows.append(f'<div class="detail-row"><span class="detail-label">修复建议</span><span class="detail-value">{html.escape(v.recommendation[:300])}</span></div>')
+            detail_rows.append(
+                f'<div class="detail-row"><span class="detail-label">修复建议</span><span class="detail-value">{html.escape(v.recommendation[:300])}</span></div>'  # noqa: E501
+            )
         if v.references:
             refs = " | ".join(f'<a href="{html.escape(r)}" target="_blank" style="color:#58a6ff">{html.escape(r[:50])}</a>' for r in v.references[:3])
             detail_rows.append(f'<div class="detail-row"><span class="detail-label">参考</span><span class="detail-value">{refs}</span></div>')
@@ -413,22 +416,20 @@ document.querySelectorAll('.section-header').forEach(h => {{
   <td>{i + 1}</td>
   <td><span class="badge {badge_cls}">{v.type.value.upper()}</span></td>
   <td class="vuln-url">{html.escape(v.url)}</td>
-  <td class="vuln-param">{html.escape(v.parameter or '-')}</td>
+  <td class="vuln-param">{html.escape(v.parameter or "-")}</td>
   <td><span class="badge {conf_cls}">{v.confidence.value.upper()}</span></td>
   <td>
     <div style="cursor:pointer;color:#e57373" onclick="
       const d = document.getElementById('{vuln_id}');
       d.style.display = d.style.display === 'none' ? 'block' : 'none';
     ">查看 Payload ▼</div>
-    <div class="payload-block" id="{vuln_id}" style="display:none">{html.escape(v.payload or 'N/A')}</div>
-    <div class="detail-panel" style="display:none">{''.join(detail_rows)}</div>
+    <div class="payload-block" id="{vuln_id}" style="display:none">{html.escape(v.payload or "N/A")}</div>
+    <div class="detail-panel" style="display:none">{"".join(detail_rows)}</div>
   </td>
 </tr>"""
 
     def _build_vuln_rows(self, vulns: List[Vulnerability]) -> str:
-        return "\n".join(
-            self._build_vuln_row(v, i) for i, v in enumerate(vulns)
-        )
+        return "\n".join(self._build_vuln_row(v, i) for i, v in enumerate(vulns))
 
     def _vuln_to_json(self, v: Vulnerability) -> Dict[str, Any]:
         return {

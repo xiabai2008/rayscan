@@ -1,65 +1,59 @@
 """
-JSON 报告生成器
-支持标准 JSON 和 SARIF 格式
+JSON Report Generator
+Supports standard JSON and SARIF formats
 """
+
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..models import ScanResult, Vulnerability, Severity, VulnerabilityType
 
 
 class JSONReporter:
     """
-    JSON 报告生成器
-    
-    支持格式：
-    - standard: 标准 JSON 格式
-    - sarif: GitHub Code Scanning SARIF 格式
+    JSON Report Generator
+
+    Supported formats:
+    - standard: Standard JSON format
+    - sarif: GitHub Code Scanning SARIF format
     """
-    
+
     def __init__(self, indent: int = 2, ensure_ascii: bool = False):
         """
         Args:
-            indent: JSON 缩进
-            ensure_ascii: 是否转义非 ASCII 字符
+            indent: JSON indentation
+            ensure_ascii: Whether to escape non-ASCII characters
         """
         self.indent = indent
         self.ensure_ascii = ensure_ascii
-    
+
     def generate(self, result: ScanResult, output_path: Path) -> None:
-        """生成标准 JSON 报告"""
+        """Generate a standard JSON report"""
         data = self._build_standard(result)
         self._write_json(output_path, data)
-    
+
     def generate_sarif(self, result: ScanResult, output_path: Path) -> None:
-        """生成 SARIF 格式报告（GitHub Code Scanning）"""
+        """Generate a SARIF format report (GitHub Code Scanning)"""
         data = self._build_sarif(result)
         self._write_json(output_path, data)
-    
+
     def _write_json(self, path: Path, data: Dict[str, Any]) -> None:
-        """写入 JSON 文件"""
+        """Write JSON file"""
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(data, indent=self.indent, ensure_ascii=self.ensure_ascii),
-            encoding="utf-8"
-        )
-    
+        path.write_text(json.dumps(data, indent=self.indent, ensure_ascii=self.ensure_ascii), encoding="utf-8")
+
     # ─────────────────────────────────────────────────────────────
-    # 标准 JSON 格式
+    # Standard JSON format
     # ─────────────────────────────────────────────────────────────
-    
+
     def _build_standard(self, result: ScanResult) -> Dict[str, Any]:
-        """构建标准 JSON 格式"""
+        """Build standard JSON format"""
         return {
             "schema": "wvs-report-v1",
             "generated_at": datetime.now().isoformat(),
-            "scanner": {
-                "name": "WVS",
-                "version": "19.0.0",
-                "vendor": "OpenClaw"
-            },
+            "scanner": {"name": "WVS", "version": "19.0.0", "vendor": "OpenClaw"},
             "target": result.target.to_dict(),
             "scan_info": {
                 "url": result.target.url,
@@ -77,9 +71,9 @@ class JSONReporter:
             "vulnerabilities": [self._vuln_to_dict(v) for v in result.vulnerabilities],
             "errors": result.errors if result.errors else [],
         }
-    
+
     def _vuln_to_dict(self, v: Vulnerability) -> Dict[str, Any]:
-        """漏洞转字典"""
+        """Convert vulnerability to dictionary"""
         data = {
             "id": v.id,
             "type": v.type.value,
@@ -89,8 +83,8 @@ class JSONReporter:
             "url": v.url,
             "method": v.method,
         }
-        
-        # 可选字段
+
+        # Optional fields
         optional = [
             ("parameter", v.parameter),
             ("parameter_type", v.parameter_type),
@@ -104,120 +98,99 @@ class JSONReporter:
             ("tags", v.tags),
             ("module", v.module),
         ]
-        
+
         for key, value in optional:
             if value is not None:
                 data[key] = value
-        
+
         return data
-    
+
     # ─────────────────────────────────────────────────────────────
-    # SARIF 格式（GitHub Code Scanning）
+    # SARIF format (GitHub Code Scanning)
     # ─────────────────────────────────────────────────────────────
-    
+
     def _build_sarif(self, result: ScanResult) -> Dict[str, Any]:
-        """构建 SARIF 格式"""
+        """Build SARIF format"""
         return {
             "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
             "version": "2.1.0",
-            "runs": [{
-                "tool": {
-                    "driver": {
-                        "name": "WVS",
-                        "version": "19.0.0",
-                        "informationUri": "https://github.com/openclaw/wvs",
-                        "rules": self._build_sarif_rules(result.vulnerabilities),
-                    }
-                },
-                "results": [self._vuln_to_sarif(v) for v in result.vulnerabilities],
-                "invocations": [{
-                    "startTimeUtc": result.scan_time.isoformat() + "Z",
-                    "endTimeUtc": datetime.now().isoformat() + "Z",
-                    "executionSuccessful": True,
-                }],
-            }]
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "WVS",
+                            "version": "19.0.0",
+                            "informationUri": "https://github.com/openclaw/wvs",
+                            "rules": self._build_sarif_rules(result.vulnerabilities),
+                        }
+                    },
+                    "results": [self._vuln_to_sarif(v) for v in result.vulnerabilities],
+                    "invocations": [
+                        {
+                            "startTimeUtc": result.scan_time.isoformat() + "Z",
+                            "endTimeUtc": datetime.now().isoformat() + "Z",
+                            "executionSuccessful": True,
+                        }
+                    ],
+                }
+            ],
         }
-    
+
     def _build_sarif_rules(self, vulns: List[Vulnerability]) -> List[Dict[str, Any]]:
-        """构建 SARIF 规则（去重）"""
+        """Build SARIF rules (deduplicated)"""
         seen = set()
         rules = []
-        
+
         for v in vulns:
             rule_id = v.type.value
             if rule_id in seen:
                 continue
             seen.add(rule_id)
-            
+
             rule = {
                 "id": rule_id,
                 "name": v.type.name,
-                "shortDescription": {
-                    "text": self._get_rule_description(v.type)
-                },
-                "defaultConfiguration": {
-                    "level": self._severity_to_sarif_level(v.severity)
-                }
+                "shortDescription": {"text": self._get_rule_description(v.type)},
+                "defaultConfiguration": {"level": self._severity_to_sarif_level(v.severity)},
             }
-            
+
             if v.cwe_id:
-                rule["relationships"] = [{
-                    "target": {
-                        "id": f"CWE-{v.cwe_id}",
-                        "toolComponent": {
-                            "name": "CWE"
-                        }
-                    },
-                    "kinds": ["superset"]
-                }]
-            
+                rule["relationships"] = [{"target": {"id": f"CWE-{v.cwe_id}", "toolComponent": {"name": "CWE"}}, "kinds": ["superset"]}]
+
             rules.append(rule)
-        
+
         return rules
-    
+
     def _vuln_to_sarif(self, v: Vulnerability) -> Dict[str, Any]:
-        """漏洞转 SARIF 格式"""
+        """Convert vulnerability to SARIF format"""
         result = {
             "ruleId": v.type.value,
             "level": self._severity_to_sarif_level(v.severity),
-            "message": {
-                "text": v.title or f"{v.type.name} vulnerability detected"
-            },
-            "locations": [{
-                "physicalLocation": {
-                    "artifactLocation": {
-                        "uri": v.url
-                    }
-                }
-            }],
+            "message": {"text": v.title or f"{v.type.name} vulnerability detected"},
+            "locations": [{"physicalLocation": {"artifactLocation": {"uri": v.url}}}],
             "properties": {
                 "confidence": v.confidence.value,
                 "severity": v.severity.value,
-            }
+            },
         }
-        
-        # 添加可选字段
+
+        # Add optional fields
         if v.parameter:
-            result["locations"][0]["physicalLocation"]["region"] = {
-                "startLine": 1,
-                "snippet": {
-                    "text": f"Parameter: {v.parameter}"
-                }
-            }
-        
+            result["locations"][0]["physicalLocation"]["region"] = {"startLine": 1, "snippet": {"text": f"Parameter: {v.parameter}"}}
+
         if v.payload:
             result["properties"]["payload"] = v.payload
-        
+
         if v.evidence:
             result["properties"]["evidence"] = v.evidence
-        
+
         if v.cwe_id:
             result["properties"]["cwe"] = f"CWE-{v.cwe_id}"
-        
+
         return result
-    
+
     def _severity_to_sarif_level(self, severity: Severity) -> str:
-        """严重程度转 SARIF level"""
+        """Convert severity to SARIF level"""
         mapping = {
             Severity.CRITICAL: "error",
             Severity.HIGH: "error",
@@ -226,9 +199,9 @@ class JSONReporter:
             Severity.INFO: "none",
         }
         return mapping.get(severity, "note")
-    
+
     def _get_rule_description(self, vuln_type: VulnerabilityType) -> str:
-        """获取规则描述"""
+        """Get rule description"""
         descriptions = {
             VulnerabilityType.SQL_INJECTION: "SQL Injection vulnerability allows attackers to execute arbitrary SQL commands",
             VulnerabilityType.XSS: "Cross-Site Scripting allows attackers to inject malicious scripts",

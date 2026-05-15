@@ -1,15 +1,10 @@
 """
-WVS v19 优先级任务调度器
-====================
+RayScan priority task scheduler.
 
-提供优先级队列和智能任务调度，提高扫描效率。
-
-功能：
-- 优先级队列（heapq）
-- 任务去重
-- 并发控制
-- 任务状态追踪
+Provides a priority queue with deduplication, concurrency control,
+and task status tracking for efficient scan orchestration.
 """
+
 import asyncio
 import heapq
 import logging
@@ -19,23 +14,24 @@ from enum import IntEnum
 from typing import Any, Callable, Dict, List, Optional
 
 from ..models import ScanTarget
-from ..core.session import HTTPPool
 
 logger = logging.getLogger(__name__)
 
 
 class TaskPriority(IntEnum):
-    """任务优先级（数字越小优先级越高）"""
-    CRITICAL = 0   # 已确认漏洞的利用
-    HIGH = 1       # SQLi, CMDi, RCE
-    MEDIUM = 2     # XSS, LFI, SSRF
-    LOW = 3        # Info disclosure
-    BACKGROUND = 4 # 爬虫、被动扫描
+    """Task priority (lower number = higher priority)"""
+
+    CRITICAL = 0  # Confirmed vulnerability exploitation
+    HIGH = 1  # SQLi, CMDi, RCE
+    MEDIUM = 2  # XSS, LFI, SSRF
+    LOW = 3  # Info disclosure
+    BACKGROUND = 4  # Crawler, passive scanning
 
 
 @dataclass(order=True)
 class PrioritizedTask:
-    """优先级任务"""
+    """Prioritized task"""
+
     priority: int
     task_id: str = field(compare=False)
     module: str = field(compare=False)
@@ -47,13 +43,13 @@ class PrioritizedTask:
 
 class TaskScheduler:
     """
-    优先级任务调度器
+    Priority task scheduler
 
-    特性：
-    - 基于堆的优先级队列
-    - 自动并发控制
-    - 任务状态追踪
-    - 统计信息
+    Features:
+    - Heap-based priority queue
+    - Automatic concurrency control
+    - Task status tracking
+    - Statistics
     """
 
     def __init__(
@@ -62,11 +58,11 @@ class TaskScheduler:
         max_queue_size: int = 1000,
     ):
         """
-        初始化调度器
+        Initialize scheduler
 
         Args:
-            max_concurrent: 最大并发任务数
-            max_queue_size: 队列最大容量
+            max_concurrent: Maximum concurrent tasks
+            max_queue_size: Maximum queue capacity
         """
         self.max_concurrent = max_concurrent
         self.max_queue_size = max_queue_size
@@ -89,26 +85,26 @@ class TaskScheduler:
         callback: Optional[Callable] = None,
     ) -> bool:
         """
-        提交任务到队列
+        Submit a task to the queue
 
         Args:
-            task_id: 唯一任务 ID
-            module: 检测模块名
-            target: 扫描目标
-            priority: 任务优先级
-            callback: 完成后回调函数
+            task_id: Unique task ID
+            module: Detection module name
+            target: Scan target
+            priority: Task priority
+            callback: Callback function after completion
 
         Returns:
-            是否提交成功
+            Whether submission was successful
         """
-        # 检查队列是否已满
+        # Check if queue is full
         if len(self._queue) >= self.max_queue_size:
-            logger.warning(f"[Scheduler] 队列已满，拒绝任务: {task_id}")
+            logger.warning(f"[Scheduler] Queue is full, rejected task: {task_id}")
             return False
 
-        # 检查是否重复
+        # Check for duplicates
         if any(t.task_id == task_id for t in self._queue):
-            logger.debug(f"[Scheduler] 任务重复，跳过: {task_id}")
+            logger.debug(f"[Scheduler] Duplicate task, skipped: {task_id}")
             return False
 
         task = PrioritizedTask(
@@ -123,7 +119,7 @@ class TaskScheduler:
         self._stats["submitted"] += 1
         self._stats["pending"] = len(self._queue)
 
-        logger.debug(f"[Scheduler] 提交任务: {task_id} (priority={priority.name})")
+        logger.debug(f"[Scheduler] Submitted task: {task_id} (priority={priority.name})")
         return True
 
     def submit_batch(
@@ -132,14 +128,14 @@ class TaskScheduler:
         default_priority: TaskPriority = TaskPriority.MEDIUM,
     ) -> int:
         """
-        批量提交任务
+        Submit tasks in batch
 
         Args:
-            tasks: 任务列表，每个元素包含 task_id, module, target, priority(可选)
-            default_priority: 默认优先级
+            tasks: List of tasks, each containing task_id, module, target, priority (optional)
+            default_priority: Default priority
 
         Returns:
-            成功提交的任务数
+            Number of successfully submitted tasks
         """
         count = 0
         for task_info in tasks:
@@ -160,25 +156,25 @@ class TaskScheduler:
 
     async def run(self, executor: Callable) -> List[Any]:
         """
-        执行队列中的所有任务
+        Execute all tasks in the queue
 
         Args:
-            executor: 异步执行函数，签名为 async def(task) -> result
+            executor: Async execution function with signature async def(task) -> result
 
         Returns:
-            所有任务的结果列表
+            List of results from all tasks
         """
         results = []
         active_tasks = []
 
         while self._queue or active_tasks:
-            # 从队列取出最高优先级任务
+            # Take highest priority task from queue
             while self._queue and len(active_tasks) < self.max_concurrent:
                 task = heapq.heappop(self._queue)
                 task.status = "running"
                 self._stats["pending"] = len(self._queue)
 
-                # 创建异步任务
+                # Create async task
                 async def run_task(t=task):
                     async with self._semaphore:
                         try:
@@ -187,7 +183,7 @@ class TaskScheduler:
                             self._stats["completed"] += 1
                             return result
                         except Exception as e:
-                            logger.error(f"[Scheduler] 任务执行失败: {t.task_id}, {e}")
+                            logger.error(f"[Scheduler] Task execution failed: {t.task_id}, {e}")
                             t.status = "failed"
                             self._stats["failed"] += 1
                             return None
@@ -196,29 +192,23 @@ class TaskScheduler:
                 active_tasks.append(async_task)
                 self._running_tasks[task.task_id] = async_task
 
-            # 等待任意任务完成
+            # Wait for any task to complete
             if active_tasks:
-                done, active_tasks = await asyncio.wait(
-                    active_tasks,
-                    return_when=asyncio.FIRST_COMPLETED
-                )
+                done, active_tasks = await asyncio.wait(active_tasks, return_when=asyncio.FIRST_COMPLETED)
 
-                # 收集结果
+                # Collect results
                 for task in done:
                     try:
                         result = task.result()
                         if result is not None:
                             results.append(result)
                     except Exception as e:
-                        logger.debug(f"[Scheduler] 任务异常: {e}")
+                        logger.debug(f"[Scheduler] Task exception: {e}")
 
-                # 清理已完成的任务
-                self._running_tasks = {
-                    tid: t for tid, t in self._running_tasks.items()
-                    if not t.done()
-                }
+                # Clean up completed tasks
+                self._running_tasks = {tid: t for tid, t in self._running_tasks.items() if not t.done()}
 
-            # 短暂让出控制权
+            # Brief yield of control
             await asyncio.sleep(0.01)
 
         return results
@@ -229,20 +219,20 @@ class TaskScheduler:
         max_tasks: Optional[int] = None,
     ) -> List[Any]:
         """
-        执行任务直到完成指定数量
+        Execute tasks until a specified number is completed
 
         Args:
-            executor: 异步执行函数
-            max_tasks: 最大执行任务数（可选）
+            executor: Async execution function
+            max_tasks: Maximum number of tasks to execute (optional)
 
         Returns:
-            结果列表
+            List of results
         """
         results = []
         completed = 0
 
         while (max_tasks is None or completed < max_tasks) and (self._queue or self._running_tasks):
-            # 取任务
+            # Take task
             if self._queue:
                 task = heapq.heappop(self._queue)
                 task.status = "running"
@@ -255,7 +245,7 @@ class TaskScheduler:
                             t.status = "completed"
                             self._stats["completed"] += 1
                             return result
-                        except Exception as e:
+                        except Exception:
                             t.status = "failed"
                             self._stats["failed"] += 1
                             return None
@@ -263,12 +253,9 @@ class TaskScheduler:
                 async_task = asyncio.create_task(run_task(task))
                 self._running_tasks[task.task_id] = async_task
 
-            # 等待
+            # Wait
             if self._running_tasks:
-                done, self._running_tasks = await asyncio.wait(
-                    self._running_tasks.values(),
-                    return_when=asyncio.FIRST_COMPLETED
-                )
+                done, self._running_tasks = await asyncio.wait(self._running_tasks.values(), return_when=asyncio.FIRST_COMPLETED)
 
                 for task in done:
                     try:
@@ -282,7 +269,7 @@ class TaskScheduler:
         return results
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取调度器统计信息"""
+        """Get scheduler statistics"""
         return {
             **self._stats,
             "queue_size": len(self._queue),
@@ -291,27 +278,27 @@ class TaskScheduler:
         }
 
     def get_pending_tasks(self) -> List[PrioritizedTask]:
-        """获取待执行任务列表"""
+        """Get list of pending tasks"""
         return list(self._queue)
 
     def clear(self):
-        """清空队列"""
+        """Clear the queue"""
         self._queue.clear()
         self._stats["pending"] = 0
 
     def cancel_all(self):
-        """取消所有运行中的任务"""
+        """Cancel all running tasks"""
         for task in self._running_tasks.values():
             task.cancel()
         self._running_tasks.clear()
 
     @property
     def is_empty(self) -> bool:
-        """队列是否为空"""
+        """Check if queue is empty"""
         return len(self._queue) == 0 and len(self._running_tasks) == 0
 
 
-# 便捷函数
+# Convenience function
 def create_task_for_module(
     module_name: str,
     url: str,
@@ -319,18 +306,18 @@ def create_task_for_module(
     target_url: str,
 ) -> Dict[str, Any]:
     """
-    为检测模块创建任务配置
+    Create a task configuration for a detection module
 
     Args:
-        module_name: 模块名 (sqli, xss, cmdi, lfi, ssrf, xxe)
-        url: 目标 URL
-        params: 参数
-        target_url: 原始目标 URL
+        module_name: Module name (sqli, xss, cmdi, lfi, ssrf, xxe)
+        url: Target URL
+        params: Parameters
+        target_url: Original target URL
 
     Returns:
-        任务配置字典
+        Task configuration dictionary
     """
-    # 优先级映射
+    # Priority mapping
     priority_map = {
         "sqli": TaskPriority.HIGH,
         "cmdi": TaskPriority.HIGH,

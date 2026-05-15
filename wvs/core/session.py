@@ -1,12 +1,13 @@
 """
-HTTP Session 管理器
-- httpx.AsyncClient 全局单例
-- retry=3（exponential backoff: 1s → 2s → 4s）
-- 智能速率限制：IntelligentRateLimiter（自适应 + WAF 规避）
-- 自动跟随重定向
-- Cookie 持久化（session 文件）
-- 超时默认 30s
+RayScan HTTP session manager.
+
+- httpx.AsyncClient with connection pooling
+- Retry with exponential backoff
+- Intelligent rate limiting (adaptive + WAF evasion)
+- Cookie persistence (encrypted session file)
+- Configurable timeout and SSL verification
 """
+
 import asyncio
 import hashlib
 import json
@@ -21,9 +22,14 @@ import httpx
 
 from ..config import ConfigManager
 from ..constants import (
-    DEFAULT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT, DEFAULT_RETRY_COUNT,
-    DEFAULT_MAX_RPS, DEFAULT_RETRY_DELAYS, DEFAULT_VERIFY_SSL,
-    COOKIE_STORAGE_PATH, COOKIE_PLAINTEXT_PATH
+    DEFAULT_TIMEOUT,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_RETRY_COUNT,
+    DEFAULT_MAX_RPS,
+    DEFAULT_RETRY_DELAYS,
+    DEFAULT_VERIFY_SSL,
+    COOKIE_STORAGE_PATH,
+    COOKIE_PLAINTEXT_PATH,
 )
 from ..exceptions import RequestError, TimeoutError, RateLimitError
 from .rate_limiter import IntelligentRateLimiter
@@ -32,31 +38,32 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# Cookie 安全存储
+# Secure Cookie Storage
 # ============================================================
+
 
 class SecureCookieStorage:
     """
-    加密的 Cookie 存储类
+    Encrypted Cookie storage class
 
-    使用 Fernet 对称加密保护 Cookie 数据，防止敏感信息泄露。
-    密钥从机器特定数据派生，确保同一台机器上的会话可恢复。
+    Uses Fernet symmetric encryption to protect Cookie data from sensitive information leakage.
+    Keys are derived from machine-specific data, ensuring session recoverability on the same machine.
     """
 
     def __init__(self, storage_path: Path, legacy_path: Optional[Path] = None):
         """
-        初始化安全存储
+        Initialize secure storage
 
         Args:
-            storage_path: 加密存储文件路径
-            legacy_path: 旧明文文件路径（用于迁移）
+            storage_path: Path to encrypted storage file
+            legacy_path: Path to legacy plaintext file (for migration)
         """
         self.storage_path = storage_path
         self.legacy_path = legacy_path
         self._fernet = self._init_fernet()
 
     def _init_fernet(self):
-        """初始化 Fernet 加密器"""
+        """Initialize Fernet encryptor"""
         try:
             from cryptography.fernet import Fernet
             from cryptography.hazmat.primitives import hashes
@@ -64,7 +71,7 @@ class SecureCookieStorage:
             import base64
             import platform
 
-            # 从机器特定数据派生密钥
+            # Derive key from machine-specific data
             key_source = f"{platform.node()}-{platform.system()}-{os.environ.get('USERNAME', 'default')}"
             salt = hashlib.sha256(key_source.encode()).digest()[:16]
 
@@ -78,11 +85,11 @@ class SecureCookieStorage:
             return Fernet(key)
 
         except ImportError:
-            logger.warning("[Cookie] cryptography 库未安装，Cookie 将以明文存储。建议: pip install cryptography")
+            logger.warning("[Cookie] cryptography library not installed, Cookies will be stored in plaintext. Suggestion: pip install cryptography")
             return None
 
     def save(self, cookies: Dict[str, Any]) -> None:
-        """加密并保存 Cookie"""
+        """Encrypt and save Cookies"""
         try:
             self.storage_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -91,24 +98,24 @@ class SecureCookieStorage:
             if self._fernet:
                 encrypted = self._fernet.encrypt(data.encode())
                 self.storage_path.write_bytes(encrypted)
-                logger.debug(f"[Cookie] 已加密保存 {len(cookies)} 个 host 的 Cookie")
+                logger.debug(f"[Cookie] Encrypted and saved Cookies for {len(cookies)} hosts")
             else:
-                # 回退到明文存储
+                # Fallback to plaintext storage
                 self.storage_path.write_text(data, encoding="utf-8")
-                logger.debug(f"[Cookie] 已明文保存 {len(cookies)} 个 host 的 Cookie")
+                logger.debug(f"[Cookie] Saved Cookies in plaintext for {len(cookies)} hosts")
 
-            # 设置文件权限（仅限 Windows 通过隐藏属性，Linux 通过 chmod）
-            if hasattr(os, 'chmod'):
+            # Set file permissions (Windows via hidden attribute, Linux via chmod)
+            if hasattr(os, "chmod"):
                 os.chmod(self.storage_path, 0o600)
 
         except Exception as e:
-            logger.warning(f"[Cookie] 保存失败: {e}")
+            logger.warning(f"[Cookie] Save failed: {e}")
 
     def load(self) -> Dict[str, Any]:
-        """加载并解密 Cookie"""
+        """Load and decrypt Cookies"""
         cookies = {}
 
-        # 尝试加载加密文件
+        # Try to load encrypted file
         if self.storage_path.exists():
             try:
                 data = self.storage_path.read_bytes()
@@ -119,19 +126,19 @@ class SecureCookieStorage:
                 else:
                     cookies = json.loads(data.decode())
 
-                logger.debug(f"[Cookie] 已加载 {len(cookies)} 个 host 的 Cookie")
+                logger.debug(f"[Cookie] Loaded Cookies for {len(cookies)} hosts")
 
             except Exception as e:
-                logger.debug(f"[Cookie] 加载加密文件失败: {e}")
+                logger.debug(f"[Cookie] Failed to load encrypted file: {e}")
 
-        # 尝试迁移旧明文文件
+        # Try to migrate legacy plaintext file
         if not cookies and self.legacy_path and self.legacy_path.exists():
             cookies = self._migrate_from_plaintext()
 
         return cookies
 
     def _migrate_from_plaintext(self) -> Dict[str, Any]:
-        """迁移旧明文 Cookie 文件"""
+        """Migrate legacy plaintext Cookie file"""
         cookies = {}
 
         try:
@@ -139,49 +146,49 @@ class SecureCookieStorage:
             cookies = json.loads(data)
 
             if cookies:
-                # 保存到新的加密位置
+                # Save to new encrypted location
                 self.save(cookies)
 
-                # 创建备份
+                # Create backup
                 backup_path = self.legacy_path.with_suffix(".json.bak")
                 self.legacy_path.rename(backup_path)
 
-                logger.info(f"[Cookie] 已迁移明文 Cookie 到加密存储，原文件备份: {backup_path}")
+                logger.info(f"[Cookie] Migrated plaintext Cookies to encrypted storage, original backed up: {backup_path}")
 
         except Exception as e:
-            logger.warning(f"[Cookie] 迁移明文文件失败: {e}")
+            logger.warning(f"[Cookie] Failed to migrate plaintext file: {e}")
 
         return cookies
 
 
 class HTTPPool:
     """
-    HTTP Session 管理器
+    HTTP Session Manager
 
-    提供统一的异步 HTTP 请求接口，内置：
-    - 自动重试（exponential backoff）
-    - per-host 速率限制
-    - Cookie 持久化
-    - 统一的错误处理
+    Provides a unified asynchronous HTTP request interface with:
+    - Automatic retry (exponential backoff)
+    - Per-host rate limiting
+    - Cookie persistence
+    - Unified error handling
 
-    使用 httpx.AsyncClient 底层实现，支持 HTTP/2。
+    Uses httpx.AsyncClient under the hood, supports HTTP/2.
     """
 
     def __init__(self, config: Optional[ConfigManager] = None):
         """
-        初始化 HTTPPool
+        Initialize HTTPPool
 
         Args:
-            config: 配置管理器（从中读取 timeout / retry_count / max_requests_per_second 等）
+            config: Config manager (reads timeout / retry_count / max_requests_per_second etc.)
         """
         self.config = config or ConfigManager()
-        self._sc = None  # httpx.AsyncClient 单例
+        self._sc = None  # httpx.AsyncClient singleton
 
         # P8: Request-level dedup cache — avoids identical GET requests across modules
         self._request_cache: Dict[str, httpx.Response] = {}
         self._cache_hits: int = 0
 
-        # 从配置读取参数
+        # Read parameters from config
         self.timeout = self.config.get("timeout", DEFAULT_TIMEOUT)
         self.retry_count = self.config.get("retry_count", DEFAULT_RETRY_COUNT)
         self.max_rps = self.config.get("max_requests_per_second", DEFAULT_MAX_RPS)
@@ -189,19 +196,19 @@ class HTTPPool:
         # User-Agent
         self.user_agent = self.config.get("user_agent", "WVS/19.0")
 
-        # 跟随重定向
+        # Follow redirects
         self.follow_redirects = self.config.get("follow_redirects", True)
 
-        # SSL 验证（默认启用）
+        # SSL verification (enabled by default)
         self.verify_ssl = self.config.get("verify_ssl", DEFAULT_VERIFY_SSL)
 
-        # Cookie 持久化路径和安全存储
+        # Cookie persistence path and secure storage
         self._cookie_jar: Dict[str, Dict[str, str]] = {}  # host -> {key: value}
         self._cookie_file = Path(COOKIE_STORAGE_PATH).expanduser()
         self._legacy_cookie_file = Path(COOKIE_PLAINTEXT_PATH).expanduser()
         self._cookie_storage = SecureCookieStorage(self._cookie_file, self._legacy_cookie_file)
 
-        # 初始化智能限速器（替代原始 Semaphore）
+        # Initialize intelligent rate limiter (replaces raw Semaphore)
         rate_config = {
             "max_rps": self.max_rps,
             "mode": self.config.get("rate_mode", "burst"),
@@ -214,75 +221,76 @@ class HTTPPool:
         }
         self._rate_limiter = IntelligentRateLimiter(rate_config)
 
-        # 每个 host 的请求计数（用于日志和统计）
+        # Request counts per host (for logging and statistics)
         self._request_counts: Dict[str, int] = {}
 
-        # 重试退避参数（使用常量）
+        # Retry backoff parameters (using constants)
         self._backoff_delays = DEFAULT_RETRY_DELAYS
 
-        # 运行时统计
+        # Runtime statistics
         self._stats = {
             "total_requests": 0,
             "total_errors": 0,
             "total_retries": 0,
         }
 
-        # 加载已保存的 Cookie
+        # Load saved Cookies
         self._load_cookies()
 
     # ─────────────────────────────────────────────────────────────
-    # 内部工具
+    # Internal Utilities
     # ─────────────────────────────────────────────────────────────
 
     def _ensure_client(self) -> httpx.AsyncClient:
-        """确保 httpx.AsyncClient 已初始化（懒加载单例）"""
+        """Ensure httpx.AsyncClient is initialized (lazy-loading singleton)"""
         if self._sc is None:
             self._sc = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout, connect=DEFAULT_CONNECT_TIMEOUT),
                 follow_redirects=self.follow_redirects,
                 verify=self.verify_ssl,
                 headers={"User-Agent": self.user_agent},
-                http2=False,  # HTTP/1.1（避免 HTTP/2 的 cookie 处理差异）
+                http2=False,  # HTTP/1.1 (avoid HTTP/2 cookie handling differences)
                 limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
             )
         return self._sc
 
     def _get_httpx_client(self) -> httpx.AsyncClient:
-        """暴露原始 httpx client 给 auth plugin 使用"""
+        """Expose raw httpx client for auth plugin use"""
         return self._ensure_client()
 
     def set_cookie(self, url: str, name: str, value: str, domain: Optional[str] = None):
-        """手动注入 cookie（用于登录后的 session 保持）
-        
-        直接写入 httpx client 的 cookiejar，httpx 会在后续请求中自动发送。
+        """Manually inject a cookie (for session persistence after login)
+
+        Writes directly to the httpx client's cookiejar; httpx will automatically send it in subsequent requests.
         """
         sc = self._ensure_client()
         if domain is None:
             from urllib.parse import urlparse as _urlparse
+
             domain = _urlparse(url).netloc
         sc.cookies.set(name, value, domain=domain)
 
     def set_header(self, name: str, value: str):
-        """手动注入 auth header（对所有请求生效）"""
+        """Manually inject an auth header (applies to all requests)"""
         sc = self._ensure_client()
         if sc.headers is None:
             sc.headers = httpx.Headers()
         sc.headers[name] = value
 
     def _get_host(self, url: str) -> str:
-        """从 URL 提取 host（用于统计）"""
+        """Extract host from URL (for statistics)"""
         parsed = urlparse(url)
         return parsed.netloc or url
 
     def _merge_headers(self, url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        """合并默认 headers，并将 jar 里的 cookies 追加到 Cookie header（解决 httpx jar 不自动发送的问题）"""
+        """Merge default headers and append jar cookies to the Cookie header (fixes httpx jar not auto-sending issue)"""
         headers = {"User-Agent": self.user_agent}
         if "headers" in kwargs and kwargs["headers"]:
             headers.update(kwargs["headers"])
 
-        # 从 httpx jar 读 cookies，显式写 Cookie header 兜底
-        # 注意：httpx 0.28.x 的 cookies.items() 在有同名 cookie 时抛 CookieConflict，
-        # 改用 list(cookies.jar) 遍历 CookieJar，自动处理同名 cookie
+        # Read cookies from httpx jar, explicitly write Cookie header as fallback
+        # Note: httpx 0.28.x cookies.items() throws CookieConflict when duplicate cookies exist,
+        # use list(cookies.jar) to iterate CookieJar instead, handles duplicate cookies automatically
         sc = self._ensure_client()
         cookie_parts = [f"{c.name}={c.value}" for c in list(sc.cookies.jar)]
         if cookie_parts:
@@ -294,24 +302,24 @@ class HTTPPool:
         return kwargs
 
     # ─────────────────────────────────────────────────────────────
-    # Cookie 管理
+    # Cookie Management
     # ─────────────────────────────────────────────────────────────
 
     def get_cookie(self, host: str, key: str) -> Optional[str]:
         """
-        获取指定 host 的 Cookie 值
+        Get Cookie value for the specified host
 
         Args:
-            host: 主机名（如 "example.com"）
-            key: Cookie 名称
+            host: Hostname (e.g. "example.com")
+            key: Cookie name
 
         Returns:
-            Cookie 值，不存在返回 None
+            Cookie value, or None if not found
         """
         return self._cookie_jar.get(host, {}).get(key)
 
     def _inject_cookies(self, url: str, kwargs: Dict[str, Any]) -> None:
-        """将持久化 Cookie 注入请求"""
+        """Inject persisted Cookies into the request"""
         host = self._get_host(url)
         cookies = self.get_all_cookies(host)
         if cookies:
@@ -321,11 +329,11 @@ class HTTPPool:
             kwargs["headers"] = existing
 
     def _extract_response_cookies(self, url: str, response: httpx.Response) -> None:
-        """从响应中提取并持久化 Set-Cookie"""
+        """Extract and persist Set-Cookie from response"""
         host = self._get_host(url)
         set_cookie = response.headers.get_list("set-cookie")
         for sc in set_cookie:
-            # 简单解析：name=value; ...
+            # Simple parse: name=value; ...
             parts = sc.split(";")
             if parts:
                 kv = parts[0].strip()
@@ -334,54 +342,48 @@ class HTTPPool:
                     self.set_cookie(host, name.strip(), value.strip())
 
     def _load_cookies(self) -> None:
-        """从加密文件加载持久化 Cookie"""
+        """Load persisted Cookies from encrypted file"""
         try:
             self._cookie_jar = self._cookie_storage.load()
             if self._cookie_jar:
-                logger.debug(f"已加载 {len(self._cookie_jar)} 个 host 的 Cookie")
+                logger.debug(f"Loaded Cookies for {len(self._cookie_jar)} hosts")
         except Exception as e:
-            logger.warning(f"加载 Cookie 失败: {e}")
+            logger.warning(f"Failed to load Cookies: {e}")
 
     def _save_cookies(self) -> None:
-        """将 Cookie 加密后持久化到文件"""
+        """Encrypt and persist Cookies to file"""
         try:
             self._cookie_storage.save(self._cookie_jar)
         except Exception as e:
-            logger.warning(f"保存 Cookie 失败: {e}")
+            logger.warning(f"Failed to save Cookies: {e}")
 
     # ─────────────────────────────────────────────────────────────
-    # 核心请求入口
+    # Core Request Entry Point
     # ─────────────────────────────────────────────────────────────
 
-    async def request(
-        self,
-        method: str,
-        url: str,
-        follow_redirects=None,
-        **kwargs
-    ) -> httpx.Response:
+    async def request(self, method: str, url: str, follow_redirects=None, **kwargs) -> httpx.Response:  # noqa: C901
         """
-        统一 HTTP 请求入口
+        Unified HTTP request entry point
 
-        内置：
-        - retry=3（指数退避 1s → 2s → 4s）
-        - 智能速率限制（IntelligentRateLimiter）
-        - Cookie 自动注入 + 提取
-        - P8: GET 请求去重缓存（减少跨模块重复请求）
-        - 统一错误处理
+        Built-in:
+        - retry=3 (exponential backoff 1s -> 2s -> 4s)
+        - Intelligent rate limiting (IntelligentRateLimiter)
+        - Automatic Cookie injection + extraction
+        - P8: GET request dedup cache (reduce cross-module duplicate requests)
+        - Unified error handling
 
         Args:
-            method: HTTP 方法（GET / POST / PUT / DELETE 等）
-            url: 目标 URL
-            **kwargs: 传递给 httpx 的其他参数
+            method: HTTP method (GET / POST / PUT / DELETE etc.)
+            url: Target URL
+            **kwargs: Additional parameters passed to httpx
 
         Returns:
             httpx.Response
 
         Raises:
-            RequestError: 请求失败（状态码错误 / 连接失败）
-            TimeoutError: 请求超时
-            RateLimitError: 速率限制（429）
+            RequestError: Request failed (status code error / connection failed)
+            TimeoutError: Request timed out
+            RateLimitError: Rate limited (429)
         """
         # P8: GET request dedup cache — skip identical requests across modules
         if method.upper() == "GET":
@@ -396,31 +398,31 @@ class HTTPPool:
 
         host = self._get_host(url)
 
-        # 合并默认 headers（url 用于 cookie 追加）
+        # Merge default headers (url used for cookie appending)
         kwargs = self._merge_headers(url, kwargs)
 
-        # 注入 WAF 规避 headers（UA 轮换等）
+        # Inject WAF evasion headers (UA rotation, etc.)
         evasion_headers = self._rate_limiter.get_evasion_headers()
         if evasion_headers:
             kwargs.setdefault("headers", {}).update(evasion_headers)
 
-        # follow_redirects 覆盖（支持爬虫禁用外部重定向）
+        # follow_redirects override (supports crawler disabling external redirects)
         _fr = follow_redirects if follow_redirects is not None else self.follow_redirects
 
-        # 确保 client 已初始化
+        # Ensure client is initialized
         sc = self._ensure_client()
 
         last_exc: Optional[Exception] = None
 
-        # 手动处理重定向（避免 httpx 内部重定向丢失 Cookie 问题）
+        # Handle redirects manually (avoid httpx internal redirect losing Cookie issues)
         should_follow = _fr
 
         for attempt in range(self.retry_count + 1):
-            # ── 智能速率限制等待 ──
+            # ── Intelligent rate limit wait ──
             await self._rate_limiter.acquire()
 
             if attempt > 0:
-                # 重试时额外等一下，避免立刻重试
+                # Extra wait on retry to avoid immediate retry
                 delay = self._backoff_delays[min(attempt - 1, len(self._backoff_delays) - 1)]
                 await asyncio.sleep(delay)
 
@@ -430,61 +432,54 @@ class HTTPPool:
             request_start_time = time.perf_counter()
 
             try:
-                # 始终 follow_redirects=False，手动处理重定向链以保留 Cookie
+                # Always follow_redirects=False, handle redirect chain manually to preserve Cookies
                 resp = await sc.request(method, url, follow_redirects=False, **kwargs)
                 self._stats["total_retries"] += max(0, attempt)
 
-                # 更新限速器指标
+                # Update rate limiter metrics
                 response_time = time.perf_counter() - request_start_time
                 self._rate_limiter.update_metrics(resp.status_code, response_time)
 
-                # 手动处理重定向（仅对同 host 跳转）
+                # Handle redirects manually (same host only)
                 if should_follow and resp.status_code in (301, 302, 303, 307, 308):
                     loc = resp.headers.get("location") or resp.headers.get("Location")
                     if loc:
                         from urllib.parse import urljoin
+
                         final_url = urljoin(str(resp.url), loc)
                         final_parsed = urlparse(final_url)
-                        # 仅跟随同 host 重定向
+                        # Only follow same-host redirects
                         if final_parsed.netloc == urlparse(url).netloc:
                             method = "GET" if resp.status_code in (301, 302, 303) else method
                             url = final_url
-                            continue  # 重试新 URL（不抛异常）
+                            continue  # Retry new URL (no exception)
                         else:
-                            # 外部重定向：停止，返回重定向响应（让调用者处理）
+                            # External redirect: stop, return redirect response (let caller handle)
                             return resp
                     else:
                         return resp
 
-                # 4xx 客户端错误
+                # 4xx client errors
                 if 400 <= resp.status_code < 500:
                     if resp.status_code == 429:
-                        # 429 = 被目标站点限速，等长一点再试
+                        # 429 = rate limited by target site, wait longer
                         retry_after = int(resp.headers.get("retry-after", "5"))
                         logger.warning(f"Rate limited by {host}, waiting {retry_after}s")
                         await asyncio.sleep(retry_after)
                         last_exc = RateLimitError(f"Rate limited by {host}", retry_after=retry_after)
                         continue
                     else:
-                        raise RequestError(
-                            f"HTTP {resp.status_code}: {resp.reason_phrase}",
-                            status_code=resp.status_code,
-                            url=url
-                        )
+                        raise RequestError(f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url)
 
-                # 5xx 服务端错误 → 重试
+                # 5xx server errors -> retry
                 if 500 <= resp.status_code < 600:
-                    last_exc = RequestError(
-                        f"HTTP {resp.status_code}: {resp.reason_phrase}",
-                        status_code=resp.status_code,
-                        url=url
-                    )
+                    last_exc = RequestError(f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url)
                     if attempt < self.retry_count:
                         logger.warning(f"Server error {resp.status_code} for {url}, retrying...")
                         continue
                     raise last_exc
 
-                # 成功 — cache GET responses for cross-module dedup
+                # Success — cache GET responses for cross-module dedup
                 if method.upper() == "GET" and resp.status_code < 400:
                     cache_key_parts = [method.upper(), url]
                     if "params" in kwargs and kwargs["params"]:
@@ -493,7 +488,7 @@ class HTTPPool:
                     self._request_cache["|".join(cache_key_parts)] = resp
                 return resp
 
-            except httpx.TimeoutException as e:
+            except httpx.TimeoutException:
                 last_exc = TimeoutError(f"Timeout after {self.timeout}s for {url}", timeout=float(self.timeout), url=url)
                 if attempt < self.retry_count:
                     logger.debug(f"Timeout for {url}, retrying ({attempt + 1}/{self.retry_count})...")
@@ -511,20 +506,20 @@ class HTTPPool:
                 self._stats["total_errors"] += 1
                 raise RequestError(f"Unexpected error for {url}: {e}", url=url) from e
 
-        # 所有重试都失败
+        # All retries exhausted
         raise last_exc or RequestError(f"All retries exhausted for {url}", url=url)
 
     # ─────────────────────────────────────────────────────────────
-    # 快捷方法
+    # Convenience Methods
     # ─────────────────────────────────────────────────────────────
 
     async def get(self, url: str, **kwargs) -> httpx.Response:
         """
-        GET 请求
+        GET request
 
         Args:
-            url: 目标 URL
-            **kwargs: 其他 httpx 参数（params, headers, timeout 等）
+            url: Target URL
+            **kwargs: Additional httpx parameters (params, headers, timeout, etc.)
 
         Returns:
             httpx.Response
@@ -533,11 +528,11 @@ class HTTPPool:
 
     async def post(self, url: str, **kwargs) -> httpx.Response:
         """
-        POST 请求
+        POST request
 
         Args:
-            url: 目标 URL
-            **kwargs: 其他 httpx 参数（data, json, headers, timeout 等）
+            url: Target URL
+            **kwargs: Additional httpx parameters (data, json, headers, timeout, etc.)
 
         Returns:
             httpx.Response
@@ -545,47 +540,47 @@ class HTTPPool:
         return await self.request("POST", url, **kwargs)
 
     async def put(self, url: str, **kwargs) -> httpx.Response:
-        """PUT 请求"""
+        """PUT request"""
         return await self.request("PUT", url, **kwargs)
 
     async def delete(self, url: str, **kwargs) -> httpx.Response:
-        """DELETE 请求"""
+        """DELETE request"""
         return await self.request("DELETE", url, **kwargs)
 
     async def head(self, url: str, **kwargs) -> httpx.Response:
-        """HEAD 请求（获取响应头，不读 body）"""
+        """HEAD request (get response headers, no body)"""
         return await self.request("HEAD", url, **kwargs)
 
     # ─────────────────────────────────────────────────────────────
-    # 速率限制
+    # Rate Limiting
     # ─────────────────────────────────────────────────────────────
 
     async def rate_limit_wait(self, host: str) -> None:
         """
-        手动等待指定 host 的速率限制令牌
+        Manually wait for the rate limit token for the specified host
 
-        正常情况下无需调用（request() 已自动处理）。
-        适用于想在发请求前预先等待的场景。
+        Normally not needed (request() handles it automatically).
+        Useful for scenarios where you want to pre-wait before sending a request.
 
         Args:
-            host: 主机名
+            host: Hostname
         """
         sem = self._get_semaphore(host)
         await sem.acquire()
         try:
-            # 空块，acquire 后立即 release
+            # Empty block, acquire then immediately release
             pass
         finally:
             sem.release()
 
     def rate_limit_per_host(self, host: str) -> asyncio.Semaphore:
         """
-        获取指定 host 的速率限制信号量
+        Get the rate limiter semaphore for the specified host
 
-        用于需要自行控制并发上限的场景。
+        For scenarios where manual concurrency control is needed.
 
         Args:
-            host: 主机名
+            host: Hostname
 
         Returns:
             asyncio.Semaphore
@@ -593,34 +588,34 @@ class HTTPPool:
         return self._get_semaphore(host)
 
     def get_rps(self, host: str) -> int:
-        """获取指定 host 的当前请求计数"""
+        """Get the current request count for the specified host"""
         return self._request_counts.get(host, 0)
 
     # ─────────────────────────────────────────────────────────────
-    # 生命周期管理
+    # Lifecycle Management
     # ─────────────────────────────────────────────────────────────
 
     async def close(self) -> None:
         """
-        关闭所有连接，清理资源
+        Close all connections and clean up resources
 
-        每次扫描结束后必须调用，或使用 async with 上下文管理器。
+        Must be called after each scan, or use the async with context manager.
         """
         if self._sc is not None:
             await self._sc.aclose()
             self._sc = None
             logger.debug("HTTPPool closed")
 
-        # 保存 Cookie
+        # Save Cookies
         self._save_cookies()
 
-        # 清空统计
+        # Clear statistics
         self._request_counts.clear()
         self._request_cache.clear()
         self._cache_hits = 0
 
     def get_stats(self) -> Dict[str, Any]:
-        """获取运行时统计信息"""
+        """Get runtime statistics"""
         return {
             **self._stats,
             "active_hosts": len(self._request_counts),
@@ -631,15 +626,12 @@ class HTTPPool:
         }
 
     async def __aenter__(self) -> "HTTPPool":
-        """async with 入口"""
+        """async with entry"""
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """async with 退出"""
+        """async with exit"""
         await self.close()
 
     def __repr__(self) -> str:
-        return (
-            f"HTTPPool(timeout={self.timeout}s, retry={self.retry_count}, "
-            f"rps={self.max_rps}, hosts={len(self._request_counts)})"
-        )
+        return f"HTTPPool(timeout={self.timeout}s, retry={self.retry_count}, rps={self.max_rps}, hosts={len(self._request_counts)})"

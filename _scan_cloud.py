@@ -8,8 +8,7 @@ CONCURRENT = 2           # mild concurrency (safe for ECS)
 REQUEST_DELAY = 0.3       # 300ms between requests
 TASK_TIMEOUT = 90          # per-endpoint timeout
 
-sys.path.insert(0, r'C:\Users\HZR\Desktop\wvs-v19.2')
-
+# Import from project root (pip install -e . first)
 import urllib3; urllib3.disable_warnings()
 import requests
 from wvs.config import ConfigManager

