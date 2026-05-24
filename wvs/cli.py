@@ -11,8 +11,10 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console
@@ -421,6 +423,8 @@ def cmd_version(args):
 def display_result(result: ScanResult, elapsed: float, args):
     """
     使用真实 Reporter 输出扫描结果
+
+    未指定 --output 时自动保存到 scan_reports/ 目录。
     """
     # 确保 result.duration 和其他字段与实际耗时一致
     result.duration = elapsed
@@ -432,22 +436,29 @@ def display_result(result: ScanResult, elapsed: float, args):
     # 控制台报告
     reporter.report(result)
 
-    # 保存文件报告
+    # 确定输出路径和格式
     if args.output:
         output_file = Path(args.output)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-
         fmt = args.format or ("html" if output_file.suffix == ".html" else "json" if output_file.suffix == ".json" else "json")
+    else:
+        # 未指定 -o：自动生成路径
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fmt = args.format or "json"
+        reports_dir = Path("scan_reports")
+        reports_dir.mkdir(exist_ok=True)
+        safe_name = re.sub(r"[^\w\-.]", "_", result.target.url.split("//")[-1].rstrip("/"))
+        output_file = reports_dir / f"report_{safe_name}_{timestamp}.{fmt}"
 
-        if fmt == "html":
-            html_reporter.generate(result, output_file)
-            console.print(f"[green]HTML 报告已保存: {output_file}[/green]")
-        elif fmt == "json":
-            html_reporter.generate_json(result, output_file)
-            console.print(f"[green]JSON 报告已保存: {output_file}[/green]")
-        elif fmt == "markdown":
-            md_reporter.generate(result, output_file)
-            console.print(f"[green]Markdown 报告已保存: {output_file}[/green]")
+    # 保存文件报告
+    if fmt == "html":
+        html_reporter.generate(result, output_file)
+    elif fmt == "json":
+        html_reporter.generate_json(result, output_file)
+    elif fmt == "markdown":
+        md_reporter.generate(result, output_file)
+
+    console.print(f"[green]📄 {fmt.upper()} 报告已保存: {output_file.resolve()}[/green]")
 
 
 # ─────────────────────────────────────────────────────────────────

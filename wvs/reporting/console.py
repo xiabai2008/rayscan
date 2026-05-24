@@ -3,6 +3,7 @@ Console Reporter
 Outputs color-formatted scan results using the Rich library
 """
 
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional

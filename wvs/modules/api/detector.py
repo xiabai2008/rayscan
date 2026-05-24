@@ -40,6 +40,40 @@ class APIDetector(DetectionModule):
             tags=["api", "auth", "jwt", "cors", "info-disclosure"],
         )
 
+    @staticmethod
+    def _is_public_path(url: str) -> bool:
+        """Check if a URL is a known public path (login, assets, etc.) to skip auth bypass tests."""
+        public_patterns = [
+            "/login",
+            "/logout",
+            "/register",
+            "/signup",
+            "/signin",
+            "/forgot-password",
+            "/reset-password",
+            "/assets/",
+            "/static/",
+            "/public/",
+            "/css/",
+            "/js/",
+            "/images/",
+            "/img/",
+            "/favicon",
+            "/robots.txt",
+            "/sitemap.xml",
+            "/.well-known/",
+            "/swagger",
+            "/api-docs",
+            "/doc/",
+            "/health",
+            "/healthz",
+            "/ping",
+            "/status",
+            "/version",
+        ]
+        url_lower = url.lower()
+        return any(pattern in url_lower for pattern in public_patterns)
+
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
         """
         Main API security detection logic
