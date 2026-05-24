@@ -1,0 +1,60 @@
+name: 🐛 Bug 报告
+description: 报告 RayScan 的异常行为
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你花时间报告这个 Bug！请尽可能详细地描述。
+  - type: input
+    id: version
+    attributes:
+      label: RayScan 版本
+      description: 运行 `python -m wvs version` 查看
+      placeholder: "1.0.2"
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: 扫描目标
+      description: 你扫描的是什么目标（不需要提供真实网址，描述即可）
+      placeholder: "例如：DVWA / 自建靶场"
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么？你期望什么结果？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 如何让我们复现这个问题？
+      placeholder: |
+        1. 运行 `python -m wvs scan http://xxx`
+        2. 看到...
+        3. 报错...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 报错信息
+      description: 复制完整的终端输出或截图
+      render: shell
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options: [Windows, macOS, Linux, Docker]
+    validations:
+      required: true
+  - type: dropdown
+    id: python
+    attributes:
+      label: Python 版本
+      options: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    validations:
+      required: true
