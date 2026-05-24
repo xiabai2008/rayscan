@@ -34,15 +34,77 @@ class ScanSession:
         self._found_vulns = []
         self._module_order = []
 
+    def _setup_log_capture(self):
+        """劫持扫描器所有模块的 logger，输出实时发到 SSE 队列"""
+        class QueueHandler(logging.Handler):
+            def __init__(self, q):
+                super().__init__()
+                self.q = q
+                self.setFormatter(logging.Formatter("%(message)s"))
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    msg = re.sub(r'\033\[[0-9;]*m', '', msg)
+                    if msg.strip():
+                        self.q.put(("log", {
+                            "level": record.levelname,
+                            "text": msg,
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                        }))
+                    # 解析日志里的漏洞发现 → 即时推送到结果表
+                    m = re.search(r'Found\s+(\S+)\s+in\s+(\S+)', msg, re.I)
+                    m2 = re.search(r'🔴\s+发现\s+\[(\w+)\]\s+(\S+)', msg)
+                    m3 = re.search(r'injection|XSS|LFI|SSRF|RCE|CMDi|XXE|sensitive|WAF', msg, re.I)
+                    if m or m2 or m3:
+                        self.q.put(("found", {"text": msg}))
+                except Exception:
+                    pass
+
+        self._log_handler = QueueHandler(self.queue)
+        for name in ["wvs.core.scanner", "wvs.core.crawler",
+                      "wvs.modules", "wvs.core.session", "wvs"]:
+            lg = logging.getLogger(name)
+            lg.setLevel(logging.INFO)
+            lg.addHandler(self._log_handler)
+            lg.propagate = False
+
     def start(self, url: str, modules: list, config: dict):
         self.scanning = True
         self._start_time = time_module.time()
         self._found_vulns = []
         self._module_order = modules
+        self._setup_log_capture()
+        # 捕获 scanner 的 print() 输出
+        self._orig_stdout = sys.stdout
+        sys.stdout = self._StdoutCapture(self.queue, self._orig_stdout)
         self._thread = threading.Thread(
             target=self._worker, args=(url, modules, config), daemon=True
         )
         self._thread.start()
+
+    class _StdoutCapture:
+        """劫持 print() 输出发到 SSE 队列 + 同时保持终端显示"""
+        def __init__(self, q, original_stdout):
+            self.q = q
+            self.orig = original_stdout
+            self._buffer = ""
+        def write(self, text):
+            self.orig.write(text)
+            self.orig.flush()
+            self._buffer += text
+            if "\n" in self._buffer or "\r" in self._buffer:
+                lines = self._buffer.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+                for line in lines[:-1]:
+                    clean = re.sub(r'\033\[[0-9;]*m', '', line).strip()
+                    if clean:
+                        self.q.put(("log", {
+                            "level": "INFO",
+                            "text": clean,
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                        }))
+                self._buffer = lines[-1]
+        def flush(self):
+            self.orig.flush()
 
     def stop(self):
         self.scanning = False
@@ -77,6 +139,8 @@ class ScanSession:
                 if line.strip():
                     self._log("ERROR", line)
         finally:
+            # 恢复 stdout
+            sys.stdout = self._orig_stdout
             self.scanning = False
             self.queue.put(("done", {"msg": "扫描结束"}))
 

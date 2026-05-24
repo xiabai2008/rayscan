@@ -321,6 +321,18 @@ function startScan() {
         onScanDone();
     });
 
+    // 日志中解析到漏洞关键词 → 即时加入结果表
+    eventSource.addEventListener('found', e => {
+        const d = JSON.parse(e.data);
+        // 尝试从日志文本解析漏洞信息
+        const text = d.text || '';
+        // 模式: "🔴 发现 [HIGH] SQL_INJECTION @ /page?id=1"
+        const m = text.match(/发现\s*\[(\w+)\]\s*(\S+)\s*@\s*(\S+)/);
+        if (m) {
+            addResultRow({severity: m[1], type: m[2], url: m[3], parameter: '', evidence: ''});
+        }
+    });
+
     eventSource.onerror = () => {
         // 自动重连
     };
