@@ -62,6 +62,25 @@
         [data-bs-theme="light"] .table td { border-color: #dee2e6; }
         [data-bs-theme="light"] #results-table tbody tr:hover { background: #f8f9fa; }
 
+        /* ── 结果筛选按钮 ── */
+        .filter-btn { font-size: 0.75rem; padding: 2px 10px; border-radius: 12px; border: 1px solid #30363d; background: transparent; color: #8b949e; cursor: pointer; transition: all 0.2s; }
+        .filter-btn:hover { background: #21262d; color: #e1e4e8; }
+        .filter-btn.active { background: #238636; color: #fff; border-color: #238636; }
+        .filter-btn.active-crit { background: #f85149; border-color: #f85149; color: #fff; }
+        .filter-btn.active-high { background: #d29922; border-color: #d29922; color: #fff; }
+        .filter-btn.active-med { background: #db6d28; border-color: #db6d28; color: #fff; }
+        .filter-btn.active-low { background: #58a6ff; border-color: #58a6ff; color: #fff; }
+        .search-input { font-size: 0.8rem; padding: 2px 8px; border-radius: 4px; }
+        .stats-summary { font-size: 0.75rem; display: flex; gap: 12px; }
+        .stats-summary span { padding: 0 4px; }
+        .stats-crit { color: #f85149; font-weight: 600; }
+        .stats-high { color: #d29922; font-weight: 600; }
+        .stats-med { color: #db6d28; font-weight: 600; }
+        .stats-low { color: #58a6ff; font-weight: 600; }
+        .stats-info { color: #8b949e; }
+        [data-bs-theme="light"] .filter-btn { border-color: #ced4da; color: #6c757d; }
+        [data-bs-theme="light"] .filter-btn:hover { background: #e9ecef; color: #212529; }
+        [data-bs-theme="light"] .filter-btn.active { background: #198754; border-color: #198754; color: #fff; }
         .toast-container { z-index: 9999; }
         @media (max-width: 768px) {
             #log-area { height: 150px; font-size: 11px; }
@@ -195,13 +214,33 @@
             <!-- 结果表格 -->
             <div class="card mb-3">
                 <div class="card-header py-2 d-flex justify-content-between align-items-center">
-                    <span>发现结果（实时更新）</span>
+                    <span id="results-title">发现结果（实时更新）</span>
                     <div>
                         <button class="btn btn-sm btn-outline-secondary me-1" onclick="exportJSON()">📥 JSON</button>
+                        <button class="btn btn-sm btn-outline-secondary me-1" onclick="exportHTML()">📄 HTML</button>
                         <button class="btn btn-sm btn-outline-secondary" onclick="clearResults()">🗑 清空</button>
                     </div>
                 </div>
-                <div class="card-body p-0">
+                <div class="card-body px-2 py-2">
+                    <!-- 统计摘要 -->
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-1" id="result-toolbar" style="display:none;">
+                        <div class="stats-summary" id="stats-summary">
+                            <span>全部 <strong id="stats-total">0</strong></span>
+                            <span class="stats-crit">● <span id="stats-crit">0</span></span>
+                            <span class="stats-high">● <span id="stats-high">0</span></span>
+                            <span class="stats-med">● <span id="stats-med">0</span></span>
+                            <span class="stats-low">● <span id="stats-low">0</span></span>
+                            <span class="stats-info">● <span id="stats-info">0</span></span>
+                        </div>
+                        <div class="d-flex gap-1 flex-wrap align-items-center">
+                            <button class="filter-btn active" data-filter="all" onclick="setFilter('all', this)">全部</button>
+                            <button class="filter-btn" data-filter="critical" onclick="setFilter('critical', this)" style="border-color:#f85149;">CRITICAL</button>
+                            <button class="filter-btn" data-filter="high" onclick="setFilter('high', this)" style="border-color:#d29922;">HIGH</button>
+                            <button class="filter-btn" data-filter="medium" onclick="setFilter('medium', this)" style="border-color:#db6d28;">MEDIUM</button>
+                            <button class="filter-btn" data-filter="low" onclick="setFilter('low', this)" style="border-color:#58a6ff;">LOW</button>
+                            <input class="search-input form-control form-control-sm ms-1" id="search-input" placeholder="搜索 URL/类型..." style="width:140px;" oninput="filterResults()">
+                        </div>
+                    </div>
                     <div style="overflow-x:auto;">
                         <table class="table table-dark table-hover mb-0" id="results-table">
                             <thead>
@@ -392,31 +431,122 @@ function clearLog() {
     document.getElementById('log-area').innerHTML = '';
 }
 
-// ── 结果 ──
+// ── 结果数据 ──
+let _allResults = [];
+let _currentFilter = 'all';
+
 function addResultRow(v) {
     const tbody = document.getElementById('results-body');
     const sev = (v.severity || 'info').toLowerCase();
     const badgeCls = `badge-${sev}`;
     const tr = document.createElement('tr');
+    tr.dataset.severity = sev;
+    const typeText = escapeHtml(v.type || '');
+    const urlText = escapeHtml(v.url || '');
     tr.innerHTML = `
         <td><span class="severity-badge ${badgeCls}">${sev.toUpperCase()}</span></td>
-        <td>${escapeHtml(v.type || '')}</td>
-        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(v.url || '')}</td>
+        <td class="result-type">${typeText}</td>
+        <td class="result-url" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${urlText}</td>
         <td>${escapeHtml(v.parameter || '')}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(v.evidence || '')}</td>
     `;
+    _allResults.push({sev, type: typeText, url: urlText, el: tr});
     tbody.appendChild(tr);
 
-    // 更新计数
+    updateStats();
+    filterResults();
+}
+
+function updateStats() {
+    const tbody = document.getElementById('results-body');
     const rows = tbody.querySelectorAll('tr').length;
-    document.getElementById('vuln-badge').textContent = `漏洞: ${rows}`;
-    document.getElementById('vuln-badge').className = rows > 0 ? 'badge bg-danger' : 'badge bg-secondary';
+
+    // 更新计数 badge
+    document.getElementById('vuln-badge').textContent = `漏洞: ${_allResults.length}`;
+    document.getElementById('vuln-badge').className = _allResults.length > 0 ? 'badge bg-danger' : 'badge bg-secondary';
+
+    // 更新统计
+    document.getElementById('stats-total').textContent = _allResults.length;
+    const counts = {critical: 0, high: 0, medium: 0, low: 0, info: 0};
+    _allResults.forEach(r => { if (counts[r.sev] !== undefined) counts[r.sev]++; });
+    document.getElementById('stats-crit').textContent = counts.critical;
+    document.getElementById('stats-high').textContent = counts.high;
+    document.getElementById('stats-med').textContent = counts.medium;
+    document.getElementById('stats-low').textContent = counts.low;
+    document.getElementById('stats-info').textContent = counts.info;
+
+    // 有结果时显示工具栏
+    document.getElementById('result-toolbar').style.display = _allResults.length > 0 ? 'flex' : 'none';
+}
+
+function setFilter(filter, btn) {
+    _currentFilter = filter;
+    // 更新按钮状态
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        b.className = 'filter-btn';
+        if (b.dataset.filter === filter) {
+            const cls = filter === 'all' ? 'active' : `active-${filter}`;
+            b.classList.add(cls);
+        }
+    });
+    filterResults();
+}
+
+function filterResults() {
+    const search = document.getElementById('search-input').value.toLowerCase().trim();
+    const showAll = _currentFilter === 'all';
+
+    _allResults.forEach(r => {
+        const matchSeverity = showAll || r.sev === _currentFilter;
+        const matchSearch = !search || r.type.toLowerCase().includes(search) || r.url.toLowerCase().includes(search);
+        r.el.style.display = matchSeverity && matchSearch ? '' : 'none';
+    });
 }
 
 function clearResults() {
     document.getElementById('results-body').innerHTML = '';
+    _allResults = [];
+    _currentFilter = 'all';
+    document.querySelectorAll('.filter-btn').forEach(b => {
+        b.className = 'filter-btn';
+        if (b.dataset.filter === 'all') b.classList.add('active');
+    });
+    document.getElementById('search-input').value = '';
     document.getElementById('vuln-badge').textContent = '漏洞: 0';
     document.getElementById('vuln-badge').className = 'badge bg-secondary';
+    document.getElementById('result-toolbar').style.display = 'none';
+    document.getElementById('stats-total').textContent = '0';
+    ['crit','high','med','low','info'].forEach(id => document.getElementById('stats-' + id).textContent = '0');
+}
+
+function exportHTML() {
+    if (_allResults.length === 0) { alert('没有结果可导出'); return; }
+    let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>RayScan Report</title>
+<style>body{font-family:system-ui;margin:20px;background:#f5f5f5}
+h1{color:#333}table{width:100%;border-collapse:collapse;background:#fff}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #ddd}
+th{background:#f0f0f0}.crit{color:#d73a49;font-weight:600}.high{color:#d29922;font-weight:600}
+.med{color:#db6d28;font-weight:600}.low{color:#0366d6}.sum{margin:10px 0;padding:10px;background:#fff;border-radius:4px}
+</style></head><body>
+<h1>RayScan Scan Report</h1>
+<p>${new Date().toLocaleString()} | ${_allResults.length} vulnerabilities</p>
+<div class="sum">`;
+    const counts = {critical: 0, high: 0, medium: 0, low: 0, info: 0};
+    _allResults.forEach(r => { if (counts[r.sev] !== undefined) counts[r.sev]++; });
+    for (const [k,v] of Object.entries(counts)) {
+        if (v > 0) html += `<strong class="${k}">${k.toUpperCase()}: ${v}</strong>  `;
+    }
+    html += `</div><table><tr><th>Severity</th><th>Type</th><th>URL</th><th>Parameter</th><th>Evidence</th></tr>`;
+    _allResults.forEach(r => {
+        html += `<tr><td class="${r.sev}">${r.sev.toUpperCase()}</td><td>${r.type}</td><td>${r.url}</td><td></td><td></td></tr>`;
+    });
+    html += `</table></body></html>`;
+
+    const blob = new Blob([html], {type: 'text/html'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rayscan_report_${new Date().toISOString().slice(0,10)}.html`;
+    a.click();
 }
 
 // ── 导出 ──
