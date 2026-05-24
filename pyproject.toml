@@ -63,6 +63,13 @@ integrations = [
 gui = [
     "ttkbootstrap>=1.20.0",
 ]
+web = [
+    "flask>=3.0",
+]
+
+[project.scripts]
+wvs = "wvs.cli:main"
+rayscan = "wvs.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/xiabai2004/RayScan"
@@ -115,10 +122,6 @@ module = [
     "wvs.core.scanner_integrations",
 ]
 ignore_errors = true
-
-[project.scripts]
-wvs = "wvs.cli:main"
-rayscan = "wvs.cli:main"
 
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
