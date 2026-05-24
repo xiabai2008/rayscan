@@ -902,13 +902,13 @@ class WAVScanner(ScannerIntegrationsMixin):
                         ep.parameters = trimmed
 
             # P11: Stricter per-module endpoint cap + early exit for better performance
-            MAX_EP_PER_MODULE = 25  # P14: tighter cap (was 40) — most labs have <10 truly dynamic endpoints
+            MAX_EP_PER_MODULE = 50  # increased from 25 — more endpoints = more findings
             if module_name in PARAM_REQUIRED_MODULES and len(module_endpoints) > MAX_EP_PER_MODULE:
                 # Prioritize and keep the most promising endpoints
                 module_endpoints = self._prioritize_endpoints(module_endpoints)[:MAX_EP_PER_MODULE]
 
             # P11: More aggressive early exit — test first 5 endpoints; 3 consecutive no-finds → skip module
-            EARLY_EXIT_SAMPLE = 3  # P14: faster skip (was 5)
+            EARLY_EXIT_SAMPLE = 6  # increased from 3 — more samples before early exit
             if len(module_endpoints) > EARLY_EXIT_SAMPLE and module_name in PARAM_REQUIRED_MODULES:
                 sample_eps = module_endpoints[:EARLY_EXIT_SAMPLE]
                 concurrency = self.config.get("concurrent_endpoints", 12)

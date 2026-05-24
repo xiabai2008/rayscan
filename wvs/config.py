@@ -48,7 +48,7 @@ class ConfigManager:
         "crawl_depth": 4,  # P11: increased from 3 for deeper coverage
         "crawl_max_urls": 300,  # P11: increased from 200 for multiservice targets
         # New: concurrency
-        "concurrent_endpoints": 6,  # P11: reduced from 8 to reduce server overload
+        "concurrent_endpoints": 10,  # increased from 6 for faster scanning
         "concurrent_modules": 2,  # P10: reduced from 3 to reduce server load
         # New: WAF detection
         "enable_waf_detection": True,
