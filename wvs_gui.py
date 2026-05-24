@@ -41,7 +41,7 @@ MODULE_INFO = {
 ALL_MODULES = list(MODULE_INFO.keys())
 
 
-class WVSGUI:
+class RayScanGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("RayScan 1.0 — Web Vulnerability Scanner")
@@ -551,5 +551,5 @@ th{{background: #333; color: #fff}} tr:hover{{background: #f0f0f0}}
 
 if __name__ == '__main__':
     root = tk.Tk()
-    app = WVSGUI(root)
+    app = RayScanGUI(root)
     root.mainloop()
