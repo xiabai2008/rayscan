@@ -36,6 +36,16 @@
 
 ## 🎯 实战验证
 
+<p align="center">
+  <img src="images/cli运行截图1.png" alt="RayScan CLI 扫描过程" width="80%">
+  <br><em>RayScan CLI 实时扫描输出</em>
+</p>
+
+<p align="center">
+  <img src="images/cli运行截图2.png" alt="RayScan CLI 扫描结果" width="80%">
+  <br><em>RayScan CLI 扫描结果与漏洞详情</em>
+</p>
+
 RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
 
 ```
@@ -169,6 +179,11 @@ python web_ui/app.py
 ---
 
 ### 🖥️ Web UI 模式（推荐）
+
+<p align="center">
+  <img src="images/web_ui截图.png" alt="RayScan Web UI" width="90%">
+  <br><em>RayScan Web UI — 深色主题 + 实时日志流</em>
+</p>
 
 适合不想敲命令的用户，浏览器图形化操作，支持实时日志流。
 
