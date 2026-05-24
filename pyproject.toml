@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rayscan"
-version = "1.0.0"
+version = "1.0.2"
 description = "RayScan 1.0 — A practical web vulnerability scanner (based on WVS v19.2)"
 readme = "README.md"
 license = {text = "MIT"}

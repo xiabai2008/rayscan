@@ -90,3 +90,13 @@ probe_*.py
 # Test artifacts (not for distribution)
 test_*.py
 tests/
+
+# Temp scan scripts
+_*.py
+_*.md
+
+# Scan reports
+scan_reports/
+
+# Checkpoint files
+.wvs_checkpoint_*.json

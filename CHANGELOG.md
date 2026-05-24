@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.2] - 2026-05-24
+
+### Added
+- 在 Metasploitable 2 靶场完整验证：发现 83 个漏洞（3 medium + 80 low）
+- 支持手动设置 DVWA 安全等级（security cookie）以获取最佳扫描结果
+- 自动识别 DVWA/Mutillidae 实验室环境并适配认证流程
+
+### Fixed
+- `_lab_profile` / `_lab_base_url` 初始化缺失 → 靶机自动识别崩溃（#2）
+- `_max_time` 属性命名不一致 → `AttributeError: '_max_time'`（#2）
+- `_MODULE_PRIORITY` 常量缺失 → 模块排序 `NameError`（#2）
+- `_integrations_enabled` 初始化缺失 → Phase 2b `AttributeError`（#2）
+- `hashlib` / `gc` 模块导入缺失 → `NameError: name 'gc' is not defined`（#2）
+- `_run_module_concurrent` 方法缺失 → 批处理模块运行崩溃（#2）
+- `_deduplicate` 中 `seen` 误用 `Dict` → `dict` object has no attribute `add`（#2）
+
+### Changed
+- 批量清理项目根目录的测试临时文件（_*.py / _*.md / checkpoint JSON）
+
 ## [1.0.1] - 2026-05-24
 
 ### Added

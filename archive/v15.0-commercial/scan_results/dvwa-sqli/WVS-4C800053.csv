@@ -1,2 +1,0 @@
-﻿序号,漏洞名称,严重等级,URL,Payload,描述,修复建议,置信度
-1,敏感路径泄露: .git/HEAD,高危,http://47.95.192.41:8081/vulnerabilities/sqli/?id=1&Submit=Submit/.git/HEAD,.git/HEAD,发现敏感路径 .git/HEAD 可被直接访问,禁止敏感路径的外部访问,90%

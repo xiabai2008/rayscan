@@ -8,6 +8,8 @@ No hardcoded lab paths — lab-specific logic lives in core/lab_profiles.py.
 """
 
 import asyncio
+import gc
+import hashlib
 import logging
 import time
 from pathlib import Path
@@ -33,6 +35,21 @@ except ImportError:
         return detect_lab_profile(url)
 
 logger = logging.getLogger(__name__)
+
+# Module execution priority — faster/critical modules run first
+_MODULE_PRIORITY = [
+    "sensitive",   # fast pattern-based checks
+    "waf",         # WAF detection (informational, runs first)
+    "xss",         # relatively fast
+    "sqli",        # critical but can take time
+    "cmdi",        # command injection
+    "lfi",         # file inclusion
+    "ssrf",        # server-side request forgery
+    "xxe",         # XML external entity
+    "rce",         # time-based (slowest)
+    "api",         # API security
+    "jspathfinder",# JS analysis
+]
 
 
 class WAVScanner(ScannerIntegrationsMixin):
@@ -91,6 +108,13 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         # 启用的模块列表（按优先级顺序）
         self._enabled_modules = self._resolve_enabled_modules()
+
+        # 靶机自动识别（lab profiles）
+        self._lab_profile = None
+        self._lab_base_url = None
+
+        # 集成开关（默认关闭，避免未导入的集成模块导致崩溃）
+        self._integrations_enabled = False
 
     @staticmethod
     def _ensure_params(ep: DiscoveredEndpoint) -> tuple:
@@ -434,6 +458,73 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._partial_vulns.extend(vulns)
         return vulns
 
+    # ── Concurrent module runner ─────────────────────────────────
+
+    async def _run_module_concurrent(
+        self,
+        module_name: str,
+        target: "ScanTarget",
+        endpoints: List["DiscoveredEndpoint"],
+        concurrency: int,
+        global_sem: asyncio.Semaphore,
+    ) -> List[Vulnerability]:
+        """运行单个检测模块，端点级别并发扫描。"""
+        if module_name not in self._modules:
+            return []
+
+        module = self._modules[module_name]
+        ep_sem = asyncio.Semaphore(concurrency)
+
+        async def _scan_one(ep: "DiscoveredEndpoint") -> List[Vulnerability]:
+            async with ep_sem:
+                if not ep.url:
+                    return []
+                ep_url = ep.url
+                parsed = urlparse(ep_url)
+                if not parsed.query and "." not in parsed.path.split("/")[-1] and not parsed.path.endswith("/"):
+                    ep_url = ep_url.rstrip("/") + "/"
+
+                if ep.method.upper() == "POST":
+                    ep_target = ScanTarget(
+                        url=ep_url,
+                        methods=[ep.method],
+                        cookies=target.cookies,
+                        headers=target.headers,
+                        auth=target.auth,
+                        data=ep.parameters,
+                    )
+                else:
+                    ep_target = ScanTarget(
+                        url=ep_url,
+                        methods=[ep.method],
+                        cookies=target.cookies,
+                        headers=target.headers,
+                        auth=target.auth,
+                        params=ep.parameters,
+                    )
+                try:
+                    found = await module.scan(ep_target)
+                except Exception as e:
+                    logger.debug(f"[Scanner] {module_name} EP {ep.url}: {e}")
+                    found = []
+                for v in found:
+                    v.module = module_name
+                    v.parameter = list(ep.parameters.keys())[0] if ep.parameters else None
+                    v.parameter_type = ep.param_types.get(v.parameter or "", "query")
+                return found
+
+        async with global_sem:
+            tasks = [_scan_one(ep) for ep in endpoints]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            all_vulns: List[Vulnerability] = []
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.debug(f"[Scanner] {module_name} concurrent scan error: {res}")
+                elif isinstance(res, list):
+                    all_vulns.extend(res)
+            self._partial_vulns.extend(all_vulns)
+            return all_vulns
+
     # ── Dedup (P5 improved: aggressive URL+param normalization to merge dupes) ──
 
     @staticmethod
@@ -473,7 +564,8 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     def _deduplicate(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
         """During dedup, keep the highest severity vulnerability; if same severity, keep higher confidence."""
-        seen: Dict[str, Vulnerability] = {}
+        seen: Set[str] = set()
+        unique: List[Vulnerability] = []
         severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
         conf_order = {"certain": 0, "high": 1, "medium": 2, "low": 3}
 
@@ -492,9 +584,9 @@ class WAVScanner(ScannerIntegrationsMixin):
         return time.time() - self._stats["start_time"]
 
     def _timeout_remaining(self) -> float:
-        if not self._max_time or self._max_time <= 0:
+        if not self._scan_max_time or self._scan_max_time <= 0:
             return float("inf")
-        return max(0.0, self._max_time - self._elapsed())
+        return max(0.0, self._scan_max_time - self._elapsed())
 
     # ── Checkpoint save/load ─────────────────────────────────────
 
@@ -864,37 +956,6 @@ class WAVScanner(ScannerIntegrationsMixin):
             gc.collect()
             # P8: Auto-save checkpoint after each batch for crash/timeout resilience
             self._save_checkpoint(target.url, all_vulns, endpoints)
-
-        # ── Phase 2b: External tool integrations ──
-        if self._integrations_enabled:
-            logger.info("[*] Phase 2b/4: External integrations...")
-            try:
-                vulns = await self._run_module_no_semaphore(
-                    module_name, target, endpoints
-                )
-                async with lock:
-                    completed_tasks += len(endpoints)
-                    self._print_progress(completed_tasks, total_tasks, module_name)
-                    self._modules_completed.append(module_name)
-                return vulns
-            except asyncio.CancelledError:
-                # 超时取消：保存已经找到的部分结果
-                return []
-
-        # 启动所有模块
-        tasks = []
-        for module_name in self._modules:
-            tasks.append(run_and_track(module_name))
-
-        # 并发等待
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        for res in results:
-            if isinstance(res, Exception):
-                logger.error(f"[Scanner] 模块执行异常: {res}")
-                self._stats["errors"] += 1
-            elif isinstance(res, list):
-                all_vulns.extend(res)
 
         # ── Merge JSPathfinder findings ──
         if getattr(self, "_jspathfinder_vulns", None):
