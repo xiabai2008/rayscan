@@ -585,6 +585,14 @@ class WAVScanner(ScannerIntegrationsMixin):
                         unique[sig] = v
         return list(unique.values())
 
+    def _call_progress(self, module_name: str, done: int, total: int, pct: int = 0):
+        """向 GUI 发送进度回调（如果有注册回调的话）"""
+        if hasattr(self, "_progress_callback") and self._progress_callback:
+            try:
+                self._progress_callback(module_name, done, total, pct)
+            except Exception:
+                pass
+
     # ── Timeout helpers ────────────────────────────────────────
 
     def _elapsed(self) -> float:
@@ -707,12 +715,14 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         # ── Crawl ──
         logger.info("\n[*] Phase 1/4: Crawling...")
+        self._call_progress("crawl", 0, 100, 3)
         try:
             endpoints = await self.crawler.crawl(target.url, self.session)
         except Exception as e:
             logger.error(f"[Scanner] 爬取失败: {e}")
             endpoints = []
             self._stats["errors"] += 1
+        self._call_progress("crawl", 100, 100, 10)
 
         self._stats["endpoints_discovered"] = len(endpoints)
         crawler_stats = self.crawler.get_stats()
@@ -776,15 +786,17 @@ class WAVScanner(ScannerIntegrationsMixin):
                     ep.parameters = enriched[i].parameters
                     ep.param_types = enriched[i].param_types
 
-        # ── v19.2: Phase 1.5 — JS endpoint & secret analysis (JSPathfinder) ──
+        # ── Phase 1.5 — JS endpoint & secret analysis (JSPathfinder) ──
         if self.config.get("modules.jspathfinder.enabled", True):
             logger.info("\n[*] Phase 1.5/4: JS analysis (JSPathFinder)...")
+            self._call_progress("jspathfinder", 0, 1, 12)
             try:
                 self._jspathfinder_vulns = await self._run_jspathfinder(target)
                 logger.info(f"[+] JSPathFinder: {len(self._jspathfinder_vulns)} finds")
             except Exception as e:
                 logger.error(f"[Scanner] jspathfinder phase failed: {e}")
                 self._jspathfinder_vulns = []
+            self._call_progress("jspathfinder", 1, 1, 15)
         else:
             self._jspathfinder_vulns = []
 
@@ -949,6 +961,8 @@ class WAVScanner(ScannerIntegrationsMixin):
             if self._timeout_remaining() < 30:
                 logger.warning("[!] Timeout approaching — skipping remaining modules")
                 break
+            for mod_name in batch:
+                self._call_progress(mod_name, 0, 100, 15 + (batch_start / max(len(module_names), 1)) * 75)
             batch_tasks = [run_and_track(name) for name in batch]
             results = await asyncio.gather(*batch_tasks, return_exceptions=True)
             for name, res in zip(batch, results):
