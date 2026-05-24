@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-WVS v19.2 — External Tool Integration Module
+RayScan 1.0.2 — External Tool Integration Module
 
 Integrated tools:
 - nuclei  : ProjectDiscovery template-based vulnerability scanning

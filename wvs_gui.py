@@ -150,7 +150,7 @@ class WVSGUI:
         ver_frame = ttk.LabelFrame(right, text="版本信息", padding=8)
         ver_frame.pack(fill=tk.X, pady=(10, 0))
         ttk.Label(ver_frame, text="RayScan 1.0", font=("", 9, "bold")).pack(anchor=tk.W)
-        ttk.Label(ver_frame, text="基于 WVS v19.2", font=("", 8), foreground="#888").pack(anchor=tk.W)
+        ttk.Label(ver_frame, text="RayScan 1.0.2", font=("", 8), foreground="#888").pack(anchor=tk.W)
         ttk.Label(ver_frame, text="MIT License", font=("", 8), foreground="#888").pack(anchor=tk.W)
         ttk.Label(ver_frame, text="github.com/xiabai2004/RayScan", font=("", 7), foreground="#aaa", wraplength=190).pack(anchor=tk.W)
 

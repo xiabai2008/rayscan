@@ -1,5 +1,5 @@
 """
-WVS v19 — Encoding bypass payload generator (P2 upgrade).
+RayScan 1.0.2 — Encoding bypass payload generator
 
 Generates encoding-variant payloads to evade WAF/IDS detection:
 - URL encoding (single, double, triple)

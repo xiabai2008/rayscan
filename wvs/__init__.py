@@ -1,6 +1,6 @@
 """
 RayScan 1.0 — Practical Web Vulnerability Scanner
-(based on WVS v19.2)
+(RayScan 1.0.2)
 """
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"

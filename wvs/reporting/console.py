@@ -139,7 +139,7 @@ class ConsoleReporter:
         border = "cyan" if not result.vulnerabilities else "red"
         self.console.print(
             Panel.fit(
-                f"[bold cyan]WVS v19.0.0[/bold cyan]  "
+                f"[bold cyan]RayScan 1.0.2[/bold cyan]  "
                 f"[dim]扫描报告[/dim]\n"
                 f"{'─' * 40}\n"
                 f"[bold]目标 URL:[/bold] {result.target.url}\n"
@@ -261,7 +261,7 @@ class ConsoleReporter:
         self.console.print()
         self.console.print(
             f"[dim]{'─' * 60}[/dim]\n"
-            f"[dim]WVS v19.0.0 | "
+            f"[dim]RayScan 1.0.2 | "
             f"总耗时 {result.duration:.1f}s | "
             f"请求 {result.requests_made} | "
             f"端点 {result.endpoints_found or '?'} | "
@@ -277,7 +277,7 @@ class ConsoleReporter:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         lines = [
-            "WVS v19.0.0 扫描报告",
+            "RayScan 1.0.2 扫描报告",
             f"{'=' * 60}",
             f"目标: {result.target.url}",
             f"时间: {result.scan_time.strftime('%Y-%m-%d %H:%M:%S') if result.scan_time else 'N/A'}",

@@ -10,6 +10,7 @@ No hardcoded lab paths — lab-specific logic lives in core/lab_profiles.py.
 import asyncio
 import gc
 import hashlib
+import json
 import logging
 import time
 from pathlib import Path
@@ -40,8 +41,8 @@ logger = logging.getLogger(__name__)
 _MODULE_PRIORITY = [
     "sensitive",   # fast pattern-based checks
     "waf",         # WAF detection (informational, runs first)
+    "sqli",        # critical — test priority
     "xss",         # relatively fast
-    "sqli",        # critical but can take time
     "cmdi",        # command injection
     "lfi",         # file inclusion
     "ssrf",        # server-side request forgery
@@ -552,11 +553,11 @@ class WAVScanner(ScannerIntegrationsMixin):
         计算漏洞去重签名
 
         基于 (type, url, parameter, payload) 的组合。
-        同一漏洞只报告一次。
+        同一漏洞只报告一次。URL 经过归一化（去掉查询参数和锚点）。
         """
         parts = [
             v.type.value,
-            v.url or "",
+            self._normalize_vuln_url(v.url or ""),
             v.parameter or "",
             v.payload or "",
         ]
@@ -565,18 +566,24 @@ class WAVScanner(ScannerIntegrationsMixin):
     def _deduplicate(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
         """During dedup, keep the highest severity vulnerability; if same severity, keep higher confidence."""
         seen: Set[str] = set()
-        unique: List[Vulnerability] = []
+        unique: Dict[str, Vulnerability] = {}
         severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
         conf_order = {"certain": 0, "high": 1, "medium": 2, "low": 3}
 
         for v in vulns:
             sig = self._vuln_signature(v)
-            if sig not in seen:
-                seen.add(sig)
-                unique.append(v)
-        return unique
-
-        return list(seen.values())
+            if sig not in unique:
+                unique[sig] = v
+            else:
+                existing = unique[sig]
+                # Keep higher severity
+                if severity_order.get(v.severity.value, 5) < severity_order.get(existing.severity.value, 5):
+                    unique[sig] = v
+                # Same severity: keep higher confidence
+                elif severity_order.get(v.severity.value, 5) == severity_order.get(existing.severity.value, 5):
+                    if conf_order.get(v.confidence.value, 5) < conf_order.get(existing.confidence.value, 5):
+                        unique[sig] = v
+        return list(unique.values())
 
     # ── Timeout helpers ────────────────────────────────────────
 

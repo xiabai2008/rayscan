@@ -1,5 +1,5 @@
 """
-WVS v19 — Session lifecycle manager (P4 upgrade).
+RayScan 1.0.2 — Session lifecycle manager
 
 Handles:
 - Session health monitoring (cookie expiry, redirect to login)
