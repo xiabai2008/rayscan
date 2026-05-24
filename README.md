@@ -6,6 +6,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Version](https://img.shields.io/badge/Version-1.0.2-orange)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
+[![CI](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/Tests-316%20passing-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2004/RayScan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
