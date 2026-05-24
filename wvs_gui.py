@@ -239,11 +239,16 @@ class RayScanGUI:
         # 实时统计行
         stats_row = ttk.Frame(status_frame)
         stats_row.pack(fill=tk.X, pady=(5, 0))
-        self._make_stat(stats_row, "端点:", self.endpoint_label := ttk.Label(stats_row, text="0", foreground="#2563EB"))
-        self._make_stat(stats_row, "请求:", self.request_label := ttk.Label(stats_row, text="0", foreground="#2563EB"))
-        self._make_stat(stats_row, "用时:", self.time_label := ttk.Label(stats_row, text="0s", foreground="#2563EB"))
-        self._make_stat(stats_row, "模块:", self.mod_stat_label := ttk.Label(stats_row, text="-", foreground="#2563EB"))
-        self._make_stat(stats_row, "当前:", self.current_action_label := ttk.Label(stats_row, text="", foreground="#6B7280", font=("", 8)))
+        self.endpoint_label = ttk.Label(stats_row, text="0", foreground="#2563EB")
+        self._make_stat(stats_row, "端点:", self.endpoint_label)
+        self.request_label = ttk.Label(stats_row, text="0", foreground="#2563EB")
+        self._make_stat(stats_row, "请求:", self.request_label)
+        self.time_label = ttk.Label(stats_row, text="0s", foreground="#2563EB")
+        self._make_stat(stats_row, "用时:", self.time_label)
+        self.mod_stat_label = ttk.Label(stats_row, text="-", foreground="#2563EB")
+        self._make_stat(stats_row, "模块:", self.mod_stat_label)
+        self.current_action_label = ttk.Label(stats_row, text="", foreground="#6B7280", font=("", 8))
+        self._make_stat(stats_row, "当前:", self.current_action_label)
 
         # 日志区域
         log_frame = ttk.LabelFrame(center, text="实时扫描日志", padding=5)
