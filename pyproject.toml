@@ -5,17 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rayscan"
 version = "1.0.2"
-description = "RayScan 1.0 — A practical web vulnerability scanner (based on WVS v19.2)"
+description = "RayScan — 开箱即用的 Web 漏洞扫描器 | SQL注入 / XSS / 命令注入 / LFI / SSRF / XXE / RCE / API安全 | CLI + Web UI 双模式"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
     {name = "xiabai2004"}
 ]
+keywords = ["web-security", "vulnerability-scanner", "penetration-testing", "sql-injection", "xss", "security", "bug-bounty", "metasploitable", "dvwa"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
     "Topic :: Security",
+    "Topic :: Security :: Vulnerability",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
