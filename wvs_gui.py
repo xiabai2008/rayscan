@@ -118,10 +118,17 @@ class RayScanGUI:
         self.root.minsize(960, 640)
 
     def _retheme(self, theme_name: str):
-        """切换主题"""
+        """切换主题——更新 ttk 控件 + 同步日志区背景"""
         if HAS_TTKB:
             self.style.theme_use(theme_name)
             self._theme_name = theme_name
+            # 同步 tk.Text 日志区的背景/前景色
+            dark_themes = {"darkly", "superhero", "solar", "cyborg", "vapor"}
+            if theme_name in dark_themes:
+                bg, fg = "#1a1a2e", "#e0e0e0"
+            else:
+                bg, fg = "#f8f9fa", "#212529"
+            self.log_area.config(bg=bg, fg=fg)
 
     def _setup_log_capture(self):
         handler = QueueLogHandler(self.msg_queue)
@@ -161,7 +168,7 @@ class RayScanGUI:
         self.theme_var = tk.StringVar(value="🌙 Darkly")
         theme_menu = ttk.Combobox(bar, textvariable=self.theme_var,
                                   values=list(THEMES.keys()), state="readonly",
-                                  width=14, font=("", 9))
+                                  width=22, font=("", 10))
         theme_menu.pack(side=tk.LEFT, padx=(4, 0))
         theme_menu.bind("<<ComboboxSelected>>", self._on_theme_change)
 
@@ -180,8 +187,8 @@ class RayScanGUI:
         bar.grid(row=1, column=0, sticky="ew")
         bar.grid_columnconfigure(1, weight=1)
 
-        ttk.Label(bar, text="目标 URL:", font=("", 10)).grid(row=0, column=0, padx=(0, 5))
-        self.url_entry = ttk.Entry(bar, font=("Consolas", 11))
+        ttk.Label(bar, text="目标 URL:", font=("", 12, "bold")).grid(row=0, column=0, padx=(0, 5))
+        self.url_entry = ttk.Entry(bar, font=("Consolas", 13))
         self.url_entry.grid(row=0, column=1, sticky="ew", padx=(0, 5))
         self.url_entry.insert(0, "http://")
         self.url_entry.bind('<Return>', lambda e: self.start_scan())
@@ -271,35 +278,35 @@ class RayScanGUI:
 
         # 状态文字
         self.status_label = ttk.Label(prog_f, text="就绪 ✓ 输入目标 URL 后开始",
-                                      font=("", 9))
+                                      font=("", 11))
         self.status_label.pack(anchor=tk.W)
 
         # 当前模块
-        self.module_label = ttk.Label(prog_f, text="", font=("Consolas", 9))
+        self.module_label = ttk.Label(prog_f, text="", font=("Consolas", 11))
         self.module_label.pack(anchor=tk.W, pady=(2, 0))
 
         # 进度条
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(prog_f, variable=self.progress_var,
                                             maximum=100)
-        self.progress_bar.pack(fill=tk.X, pady=(5, 0))
+        self.progress_bar.pack(fill=tk.X, pady=(6, 0))
 
-        # 统计行
+        # 统计行（字体加大）
         stats = ttk.Frame(prog_f)
-        stats.pack(fill=tk.X, pady=(4, 0))
+        stats.pack(fill=tk.X, pady=(6, 0))
         items = [
             ("端点:", "endpoint_label"),
             ("请求:", "request_label"),
             ("用时:", "time_label"),
         ]
         for text, attr in items:
-            lbl = ttk.Label(stats, text="0", font=("Consolas", 9, "bold"))
+            lbl = ttk.Label(stats, text="0", font=("Consolas", 11, "bold"))
             setattr(self, attr, lbl)
-            ttk.Label(stats, text=text, font=("", 8)).pack(side=tk.LEFT)
-            lbl.pack(side=tk.LEFT, padx=(0, 12))
+            ttk.Label(stats, text=text, font=("", 10)).pack(side=tk.LEFT)
+            lbl.pack(side=tk.LEFT, padx=(0, 16))
 
         # 当前动作
-        self.action_label = ttk.Label(stats, text="", font=("", 8))
+        self.action_label = ttk.Label(stats, text="", font=("", 10))
         self.action_label.pack(side=tk.RIGHT)
 
         # ── 实时日志区域（带颜色） ──
