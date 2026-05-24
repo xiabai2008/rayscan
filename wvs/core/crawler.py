@@ -239,8 +239,8 @@ class WebCrawler(CrawlerParsersMixin):
     def __init__(
         self,
         max_depth: int = 3,
-        max_urls_per_run: int = 200,
-        max_urls_per_prefix: int = 25,
+        max_urls_per_run: int = 500,
+        max_urls_per_prefix: int = 40,
         respect_robots: bool = False,
         user_agent: str = "WVS/19.0",
         seed_paths: Optional[List[str]] = None,
@@ -347,6 +347,17 @@ class WebCrawler(CrawlerParsersMixin):
                     new_url = self._normalize_url(ep.url)
                     if not self._is_visited(new_url):
                         self._urls_to_visit.append((new_url, depth + 1))
+
+            # P24: Parameter discovery — probe common params on page URLs
+            for ep in list(discovered)[:5]:  # Limit to first 5 per page
+                parsed_ep = urllib.parse.urlparse(ep.url)
+                if parsed_ep.query:
+                    # Page already has params; try adding more common ones
+                    for extra_param in ["id", "page", "file", "cat", "type", "sort", "order", "debug"]:
+                        if extra_param not in parsed_ep.query:
+                            new_url = ep.url + ("&" if parsed_ep.query else "?") + f"{extra_param}=1"
+                            if not self._is_visited(new_url):
+                                self._urls_to_visit.append((new_url, depth + 1))
 
             self._stats["pages_crawled"] += 1
             # P14: Stability check — only fire when queue near-empty to
@@ -755,24 +766,71 @@ class WebCrawler(CrawlerParsersMixin):
     # via the normal crawl link extraction.  Avoid deep wiki/forum
     # paths that would trigger unbounded recursive crawling.
     _DEFAULT_SEED_PATHS = [
+        # ── 靶场 / CTF ──
         "/dvwa/",
         "/mutillidae/",
-        "/phpMyAdmin/",
-        "/dav/",
-        "/twiki/",
-        "/tikiwiki/",
+        "/bodgeit/",
+        "/webgoat/",
+        "/juice-shop/",
+        "/hackme/",
+        # ── 管理后台 ──
         "/admin/",
         "/wp-admin/",
-        "/jenkins/",
+        "/administrator/",
+        "/backend/",
+        "/manager/",
+        "/dashboard/",
+        "/controlpanel/",
+        "/cpanel/",
+        # ── 数据库管理 ──
+        "/phpMyAdmin/",
+        "/phpPgAdmin/",
+        "/adminer/",
+        "/pma/",
+        # ── API / 文档 ──
         "/api/",
+        "/api/v1/",
+        "/api/v2/",
         "/swagger/",
+        "/swagger-ui/",
+        "/api-docs/",
         "/graphql/",
+        "/openapi.json",
+        "/v1/",
+        "/v2/",
+        # ── CI/CD / 监控 ──
+        "/jenkins/",
+        "/grafana/",
+        "/prometheus/",
+        "/sonarqube/",
+        "/nexus/",
+        "/artifactory/",
+        # ── 敏感文件 ──
         "/.env",
         "/.git/config",
         "/robots.txt",
-        "/test/",
+        "/sitemap.xml",
+        "/crossdomain.xml",
+        "/phpinfo.php",
+        "/info.php",
+        "/test.php",
+        "/server-status",
+        "/actuator/",
+        "/actuator/health",
+        "/actuator/env",
+        "/elmah.axd",
+        # ── 其它框架 / 路径 ──
+        "/dav/",
+        "/twiki/",
+        "/tikiwiki/",
         "/debug/",
         "/console/",
+        "/.well-known/security.txt",
+        "/wp-content/",
+        "/wp-includes/",
+        "/uploads/",
+        "/backup/",
+        "/backup.zip",
     ]
 
     async def _seed_common_paths(self, target_url: str, session: HTTPPool) -> None:
