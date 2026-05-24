@@ -6,55 +6,73 @@
     <title>RayScan 1.0.2 — Web Vulnerability Scanner</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #0f1419; color: #e1e4e8; font-family: 'Segoe UI', system-ui, sans-serif; }
-        .navbar { background: #161b22 !important; border-bottom: 1px solid #30363d; }
-        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; }
-        .card-header { background: #1c2333; border-bottom: 1px solid #30363d; font-weight: 600; }
-        .form-control, .form-select { background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; }
-        .form-control:focus, .form-select:focus { background: #0d1117; border-color: #58a6ff; box-shadow: 0 0 0 2px rgba(88,166,255,0.2); }
-        .btn-primary { background: #238636; border: none; }
-        .btn-primary:hover { background: #2ea043; }
-        .btn-danger { background: #da3633; border: none; }
-        .btn-danger:hover { background: #f85149; }
+        /* ── 共享基础样式 ── */
+        body { font-family: 'Segoe UI', system-ui, sans-serif; }
+        .card { border-radius: 8px; }
+        .card-header { font-weight: 600; }
         #log-area {
-            background: #0d1117; color: #e1e4e8; font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-family: 'Cascadia Code', 'Consolas', monospace;
             font-size: 12px; height: 250px; overflow-y: auto; padding: 10px;
-            border-radius: 6px; border: 1px solid #30363d; white-space: pre-wrap; word-break: break-all;
+            border-radius: 6px; white-space: pre-wrap; word-break: break-all;
             line-height: 1.5;
         }
-        .log-info { color: #3fb950; }
-        .log-warning { color: #d29922; }
-        .log-error { color: #f85149; }
-        .stat-label { color: #8b949e; font-size: 0.8rem; }
-        .stat-value { color: #58a6ff; font-family: 'Consolas', monospace; font-size: 1.1rem; font-weight: 600; }
-        #progress-bar { height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; }
-        #progress-bar .progress-bar { background: #2ea043; transition: width 0.3s; }
-        .vuln-critical { border-left: 3px solid #f85149; }
-        .vuln-high { border-left: 3px solid #d29922; }
-        .vuln-medium { border-left: 3px solid #db6d28; }
-        .vuln-low { border-left: 3px solid #58a6ff; }
+        .stat-label { font-size: 0.8rem; }
+        .stat-value { font-family: 'Consolas', monospace; font-size: 1.1rem; font-weight: 600; }
+        #progress-bar { height: 6px; border-radius: 3px; overflow: hidden; }
+        #progress-bar .progress-bar { transition: width 0.3s; }
         .table { font-size: 0.85rem; }
-        .table th { border-color: #30363d; color: #8b949e; font-weight: 600; }
-        .table td { border-color: #21262d; vertical-align: middle; }
-        .badge-critical { background: #f85149; color: #fff; }
-        .badge-high { background: #d29922; color: #fff; }
-        .badge-medium { background: #db6d28; color: #fff; }
-        .badge-low { background: #58a6ff; color: #fff; }
         .form-check-label { font-size: 0.85rem; }
-        #results-table tbody tr { transition: background 0.2s; }
-        #results-table tbody tr:hover { background: #1c2333; }
+        .severity-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; }
+
+        /* ── 深色主题 ── */
+        [data-bs-theme="dark"] body { background: #0f1419; color: #e1e4e8; }
+        [data-bs-theme="dark"] #main-navbar { background: #161b22; border-bottom: 1px solid #30363d; }
+        [data-bs-theme="dark"] .card { background: #161b22; border: 1px solid #30363d; }
+        [data-bs-theme="dark"] .card-header { background: #1c2333; border-bottom: 1px solid #30363d; }
+        [data-bs-theme="dark"] .form-control, [data-bs-theme="dark"] .form-select { background: #0d1117; border: 1px solid #30363d; color: #e1e4e8; }
+        [data-bs-theme="dark"] .form-control:focus, [data-bs-theme="dark"] .form-select:focus { background: #0d1117; border-color: #58a6ff; box-shadow: 0 0 0 2px rgba(88,166,255,0.2); }
+        [data-bs-theme="dark"] #log-area { background: #0d1117; color: #e1e4e8; border: 1px solid #30363d; }
+        [data-bs-theme="dark"] .log-info { color: #3fb950; }
+        [data-bs-theme="dark"] .log-warning { color: #d29922; }
+        [data-bs-theme="dark"] .log-error { color: #f85149; }
+        [data-bs-theme="dark"] .stat-label { color: #8b949e; }
+        [data-bs-theme="dark"] .stat-value { color: #58a6ff; }
+        [data-bs-theme="dark"] #progress-bar { background: #21262d; }
+        [data-bs-theme="dark"] #progress-bar .progress-bar { background: #2ea043; }
+        [data-bs-theme="dark"] .table th { border-color: #30363d; color: #8b949e; }
+        [data-bs-theme="dark"] .table td { border-color: #21262d; }
+        [data-bs-theme="dark"] #results-table tbody tr:hover { background: #1c2333; }
+
+        /* ── 浅色主题 ── */
+        [data-bs-theme="light"] body { background: #f5f5f5; color: #212529; }
+        [data-bs-theme="light"] #main-navbar { background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+        [data-bs-theme="light"] .card { background: #ffffff; border: 1px solid #dee2e6; }
+        [data-bs-theme="light"] .card-header { background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+        [data-bs-theme="light"] .form-control, [data-bs-theme="light"] .form-select { background: #ffffff; border: 1px solid #ced4da; color: #212529; }
+        [data-bs-theme="light"] .form-control:focus, [data-bs-theme="light"] .form-select:focus { background: #ffffff; border-color: #86b7fe; box-shadow: 0 0 0 2px rgba(13,110,253,0.2); }
+        [data-bs-theme="light"] #log-area { background: #f8f9fa; color: #212529; border: 1px solid #dee2e6; }
+        [data-bs-theme="light"] .log-info { color: #198754; }
+        [data-bs-theme="light"] .log-warning { color: #a16207; }
+        [data-bs-theme="light"] .log-error { color: #dc3545; }
+        [data-bs-theme="light"] .stat-label { color: #6c757d; }
+        [data-bs-theme="light"] .stat-value { color: #0d6efd; }
+        [data-bs-theme="light"] #progress-bar { background: #e9ecef; }
+        [data-bs-theme="light"] #progress-bar .progress-bar { background: #198754; }
+        [data-bs-theme="light"] .table th { border-color: #dee2e6; color: #6c757d; }
+        [data-bs-theme="light"] .table td { border-color: #dee2e6; }
+        [data-bs-theme="light"] #results-table tbody tr:hover { background: #f8f9fa; }
+
         .toast-container { z-index: 9999; }
         @media (max-width: 768px) {
             #log-area { height: 150px; font-size: 11px; }
             .stat-value { font-size: 0.9rem; }
         }
-        .severity-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; }
     </style>
 </head>
 <body>
 
 <!-- 导航栏 -->
-<nav class="navbar navbar-dark px-3 py-2">
+<nav class="navbar navbar-expand navbar-dark px-3 py-2" id="main-navbar">
     <div class="container-fluid">
         <span class="navbar-brand mb-0 h1">
             <span style="color:#58a6ff;">RayScan</span>
@@ -234,8 +252,14 @@ function toggleAll(state) {
 // ── 主题切换 ──
 function toggleTheme() {
     const dark = document.getElementById('themeSwitch').checked;
-    document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+    const theme = dark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-bs-theme', theme);
+    // 切换标签文字
     document.getElementById('themeSwitch').nextElementSibling.textContent = dark ? '🌙' : '☀️';
+    // 同步 navbar 颜色（Bootstrap 类切换）
+    const nav = document.getElementById('main-navbar');
+    nav.classList.toggle('navbar-dark', dark);
+    nav.classList.toggle('navbar-light', !dark);
 }
 
 // ── SSE 连接 ──
