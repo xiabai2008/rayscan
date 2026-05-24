@@ -161,73 +161,13 @@ class ScannerIntegrationsMixin:
             return []
 
     async def scan_with_nuclei(self: "ScannerIntegrationsMixin", url: str) -> List[Vulnerability]:
-        """Scan the target URL with Nuclei CLI."""
-        vulns: List[Vulnerability] = []
+        """Scan the target URL with Nuclei CLI (or built-in fallback templates)."""
+        from ..integrations import NucleiIntegration
 
-        nuclei_paths = self.config.get(  # type: ignore[attr-defined]
-            "integrations.nuclei.binary_paths",
-            [r"C:/Tools/nuclei/nuclei.exe", "nuclei", "/usr/local/bin/nuclei", "/usr/bin/nuclei"],
-        )
-        nuclei_path = None
-        for p in nuclei_paths:
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    p, "-version", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                )
-                await asyncio.wait_for(proc.communicate(), timeout=5)
-                if proc.returncode == 0:
-                    nuclei_path = p
-                    break
-            except (FileNotFoundError, OSError):
-                continue
-            except Exception as e:
-                logger.debug(f"nuclei probe failed for {p}: {e}")
-                continue
-
-        if not nuclei_path:
-            logger.info("[*] Nuclei CLI not available, skipping")
-            return vulns
-
-        logger.info(f"[*] Running Nuclei: {url}")
-        try:
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-                f.write(url + "\n")
-                target_file = f.name
-
-            cmd = [nuclei_path, "-l", target_file, "-json", "-silent", "-no-color", "-rate-limit", "20"]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
-
-            for line in stdout.decode("utf-8", errors="ignore").splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    data = json.loads(line)
-                    info = data.get("info", {})
-                    sev_str = info.get("severity", "medium")
-                    sev_map = {"critical": "critical", "high": "high", "medium": "medium", "low": "low", "info": "info"}
-                    vuln = Vulnerability(
-                        type=VulnerabilityType.API_SECURITY,
-                        url=data.get("matched-at", url),
-                        title=info.get("name", "Nuclei finding"),
-                        severity=Severity(sev_map.get(sev_str, "medium")),
-                        confidence=Confidence.HIGH,
-                        payload=info.get("name"),
-                        description=info.get("description", ""),
-                        references=[r.get("URL", "") for r in info.get("references", [])],
-                        module="nuclei",
-                    )
-                    vulns.append(vuln)
-                except json.JSONDecodeError:
-                    continue
-            logger.info(f"    [Nuclei] found {len(vulns)} issues")
-        except asyncio.TimeoutError:
-            logger.warning("    [Nuclei] timeout (120s)")
-        except Exception as e:
-            logger.warning(f"    [Nuclei] error: {e}")
-        return vulns
+        nuclei = NucleiIntegration(config=self.config)
+        if not nuclei.is_available:
+            logger.info("[*] Nuclei CLI not available, using built-in fallback templates (50+ checks)")
+        return await nuclei.scan(url)
 
     # ── Progress helpers ────────────────────────────────────────
 

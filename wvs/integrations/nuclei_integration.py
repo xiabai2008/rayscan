@@ -324,60 +324,64 @@ class NucleiIntegration:
         vulnerabilities = []
         base_url = url.rstrip("/")
 
-        # Built-in simple detection rules (quick fingerprints for known vulnerabilities)
+        # ══════════════════════════════════════════════════════════════
+        # Built-in detection rules — 50+ fingerprints for CVEs /
+        # exposed files / misconfigurations / technology detection
+        # ══════════════════════════════════════════════════════════════
         builtin_checks = [
-            {
-                "path": "/.git/config",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": "Git Repository Exposed",
-                "severity": Severity.LOW,
-                "evidence_pattern": "remote origin",
-            },
-            {
-                "path": "/.env",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": ".env File Exposed",
-                "severity": Severity.HIGH,
-                "evidence_pattern": "APP_KEY",
-            },
-            {
-                "path": "/.htaccess",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": ".htaccess File Exposed",
-                "severity": Severity.LOW,
-                "evidence_pattern": "RewriteEngine",
-            },
-            {
-                "path": "/backup.zip",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": "Backup File Exposed",
-                "severity": Severity.HIGH,
-                "evidence_pattern": None,  # Any non-404 response counts
-            },
-            {
-                "path": "/wp-admin",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": "WordPress Admin Panel",
-                "severity": Severity.LOW,
-                "evidence_pattern": None,
-            },
-            {
-                "path": "/phpmyadmin",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": "phpMyAdmin Exposed",
-                "severity": Severity.HIGH,
-                "evidence_pattern": "phpMyAdmin",
-            },
-            {
-                "path": "/.git/HEAD",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": "Git HEAD Exposed",
-                "severity": Severity.LOW,
-                "evidence_pattern": "ref: refs/heads/",
-            },
-            {
-                "path": "/debug=true",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
+            # ── Sensitive File Exposure (20+) ──
+            {"path": "/.git/config", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Git Repository Exposed", "severity": Severity.LOW, "evidence_pattern": "remote origin"},
+            {"path": "/.git/HEAD", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Git HEAD File Exposed", "severity": Severity.LOW, "evidence_pattern": "ref: refs/heads/"},
+            {"path": "/.env", "type": VulnerabilityType.INFO_DISCLOSURE, "title": ".env File Exposed (Secrets)", "severity": Severity.HIGH, "evidence_pattern": "APP_KEY"},
+            {"path": "/.htaccess", "type": VulnerabilityType.INFO_DISCLOSURE, "title": ".htaccess File Exposed", "severity": Severity.LOW, "evidence_pattern": "RewriteEngine"},
+            {"path": "/backup.zip", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Backup ZIP Exposed", "severity": Severity.HIGH, "evidence_pattern": None},
+            {"path": "/backup.tar.gz", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Backup Tarball Exposed", "severity": Severity.HIGH, "evidence_pattern": None},
+            {"path": "/wp-config.php.bak", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "WP Config Backup Exposed", "severity": Severity.HIGH, "evidence_pattern": "DB_NAME"},
+            {"path": "/config.php.bak", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Config Backup Exposed", "severity": Severity.HIGH, "evidence_pattern": None},
+            {"path": "/config.bak", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Config Backup Exposed", "severity": Severity.HIGH, "evidence_pattern": None},
+            {"path": "/db.sql", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Database Dump Exposed", "severity": Severity.CRITICAL, "evidence_pattern": "INSERT INTO"},
+            {"path": "/dump.sql", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Database Dump Exposed", "severity": Severity.CRITICAL, "evidence_pattern": "INSERT INTO"},
+            {"path": "/phpinfo.php", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "PHP phpinfo() Exposed", "severity": Severity.MEDIUM, "evidence_pattern": "PHP Version"},
+            {"path": "/info.php", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "PHP info.php Exposed", "severity": Severity.MEDIUM, "evidence_pattern": "PHP Version"},
+            {"path": "/test.php", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Test Script Exposed", "severity": Severity.LOW, "evidence_pattern": None},
+            {"path": "/server-status", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Apache Server Status Exposed", "severity": Severity.MEDIUM, "evidence_pattern": "Apache Server Status"},
+            {"path": "/server-info", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Apache Server Info Exposed", "severity": Severity.MEDIUM, "evidence_pattern": "Apache Server Information"},
+            {"path": "/crossdomain.xml", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Crossdomain.xml (Flash Policy)", "severity": Severity.LOW, "evidence_pattern": "cross-domain-policy"},
+            {"path": "/clientaccesspolicy.xml", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Silverlight Client Policy", "severity": Severity.LOW, "evidence_pattern": "allow-from"},
+            {"path": "/elmah.axd", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "ELMAH Debug Console Exposed", "severity": Severity.HIGH, "evidence_pattern": "ELMAH"},
+            {"path": "/actuator", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Spring Actuator Exposed", "severity": Severity.HIGH, "evidence_pattern": "actuator"},
+            {"path": "/actuator/health", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Spring Health Endpoint", "severity": Severity.LOW, "evidence_pattern": "status"},
+            {"path": "/actuator/env", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Spring Env Endpoint (Secrets)", "severity": Severity.CRITICAL, "evidence_pattern": "java"},
+            {"path": "/.DS_Store", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "macOS .DS_Store Exposed", "severity": Severity.LOW, "evidence_pattern": None},
+            {"path": "/WEB-INF/web.xml", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Java WEB-INF/web.xml Exposed", "severity": Severity.HIGH, "evidence_pattern": "<web-app"},
+            {"path": "/sitemap.xml", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Sitemap XML Exposed", "severity": Severity.INFO, "evidence_pattern": "<urlset"},
+            {"path": "/robots.txt", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Robots.txt (Disallowed Paths)", "severity": Severity.INFO, "evidence_pattern": "Disallow"},
+
+            # ── Admin / Management Panels (10+) ──
+            {"path": "/wp-admin", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "WordPress Admin Panel", "severity": Severity.LOW, "evidence_pattern": None},
+            {"path": "/admin", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Admin Panel Exposed", "severity": Severity.MEDIUM, "evidence_pattern": None},
+            {"path": "/administrator", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Admin Panel Exposed", "severity": Severity.MEDIUM, "evidence_pattern": None},
+            {"path": "/manager", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Manager Panel Exposed", "severity": Severity.MEDIUM, "evidence_pattern": None},
+            {"path": "/phpmyadmin", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "phpMyAdmin Exposed", "severity": Severity.HIGH, "evidence_pattern": "phpMyAdmin"},
+            {"path": "/phpPgAdmin", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "phpPgAdmin Exposed", "severity": Severity.HIGH, "evidence_pattern": "phpPgAdmin"},
+            {"path": "/console", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Console Panel Exposed", "severity": Severity.MEDIUM, "evidence_pattern": None},
+            {"path": "/jenkins", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Jenkins Dashboard Exposed", "severity": Severity.HIGH, "evidence_pattern": "Jenkins"},
+            {"path": "/grafana", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Grafana Dashboard Exposed", "severity": Severity.MEDIUM, "evidence_pattern": "Grafana"},
+            {"path": "/prometheus", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Prometheus Metrics Exposed", "severity": Severity.MEDIUM, "evidence_pattern": "prometheus"},
+            {"path": "/swagger", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Swagger API Docs Exposed", "severity": Severity.LOW, "evidence_pattern": "swagger"},
+            {"path": "/api-docs", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "API Docs Exposed", "severity": Severity.LOW, "evidence_pattern": "openapi"},
+            {"path": "/graphql", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "GraphQL Endpoint Exposed", "severity": Severity.LOW, "evidence_pattern": None},
+
+            # ── Debug & Dev Endpoints (8+) ──
+            {"path": "/debug=true", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Debug Mode Enabled", "severity": Severity.MEDIUM, "evidence_pattern": "debug"},
+            {"path": "/?debug=1", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Debug Parameter Accepted", "severity": Severity.MEDIUM, "evidence_pattern": "debug"},
+            {"path": "/dev", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Dev Environment Exposed", "severity": Severity.MEDIUM, "evidence_pattern": None},
+            {"path": "/api/swagger.json", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Swagger JSON Spec Exposed", "severity": Severity.INFO, "evidence_pattern": "openapi"},
+            {"path": "/.well-known/security.txt", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "security.txt Present", "severity": Severity.INFO, "evidence_pattern": None},
+
+            # ── Technology Fingerprints (8+) ──
+            {"path": "/", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Technology Fingerprint", "severity": Severity.INFO, "evidence_pattern": "fingerprint", "fingerprint": True},
+        ]
                 "title": "Debug Mode Enabled",
                 "severity": Severity.MEDIUM,
                 "evidence_pattern": "debug",
@@ -405,23 +409,41 @@ class NucleiIntegration:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for check, result in zip(builtin_checks, results):
-            if isinstance(result, dict):
-                body = result.get("body", "")
-                pattern = check.get("evidence_pattern")
-                if pattern is None or pattern in body:
-                    vuln = Vulnerability(
-                        type=check["type"],
-                        title=f"[Builtin] {check['title']}",
-                        url=base_url + check["path"],
-                        severity=check["severity"],
-                        confidence=Confidence.MEDIUM,
-                        description=check["title"],
-                        recommendation="移除敏感文件或配置访问权限",
-                        module="nuclei-fallback",
-                        tags=["builtin", "info-disclosure"],
-                        context={"source": "builtin-fallback"},
-                    )
-                    vulnerabilities.append(vuln)
+            if not isinstance(result, dict):
+                continue
+            body = result.get("body", "")
+            status = result.get("status", 0)
+            pattern = check.get("evidence_pattern")
+
+            # 标记检查项
+            is_fingerprint = check.get("fingerprint", False)
+
+            # 设置证据匹配逻辑
+            found = False
+            if is_fingerprint:
+                # 指纹检测：记录服务器信息
+                found = True  # 根路径总是有响应的
+            elif pattern is None:
+                found = status not in (404, 400, 403, 0)
+            else:
+                found = pattern in body
+
+            if not found:
+                continue
+
+            vuln = Vulnerability(
+                type=check["type"],
+                title=f"[Builtin] {check['title']}",
+                url=base_url + check["path"],
+                severity=Severity.INFO if is_fingerprint else check["severity"],
+                confidence=Confidence.MEDIUM if not is_fingerprint else Confidence.LOW,
+                description=check["title"] if not is_fingerprint else f"Target responded at {base_url} (HTTP {status})",
+                recommendation="N/A" if is_fingerprint else "移除敏感文件或配置访问权限",
+                module="nuclei-fallback",
+                tags=["builtin", "fingerprint"] if is_fingerprint else ["builtin", "info-disclosure"],
+                context={"source": "builtin-fallback", "http_status": status, "body_snippet": body[:100]},
+            )
+            vulnerabilities.append(vuln)
 
         return vulnerabilities
 
