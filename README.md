@@ -2,20 +2,25 @@
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Version](https://img.shields.io/badge/Version-1.0.2-orange)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
+![Tests](https://img.shields.io/badge/Tests-316%20passing-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2004/RayScan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
+[![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
 
-**一个功能强大的 Web 漏洞扫描器 · 11 个检测模块 · 即开即用**
+**🚀 开箱即用的 Web 漏洞扫描器 | 11 个检测模块 | CLI + Web UI 双模式**
 
-*在 Metasploitable 2 靶场完整验证，发现 83 个漏洞（含 SQL 注入、LFI、敏感信息泄露）*
+**已通过 316 个自动化测试，在 Metasploitable 2 实战验证发现 83 个漏洞。**
 
-*RayScan 是 WVS 系列正式开源后的新名字，致敬过去 19 个版本的迭代积累。*
+<p align="center">
+  <img src="images/cli运行截图1.png" alt="RayScan CLI 实战扫描" width="80%">
+  <br><em>一条命令扫描靶机，实时查看检测过程</em>
+</p>
 
-[快速开始](#-快速开始) · [功能特性](#-功能特性) · [实战验证](#-实战验证) · [检测能力](#-检测能力) · [使用示例](#-详细使用说明) · [更名记](RENAMED_TO_RAYSCAN.md)
+[一分钟开始](#-快速开始) · [Web UI 演示](#-web-ui-模式推荐) · [实战报告](#-实战验证) · [功能列表](#-功能特性) · [Star 支持](https://github.com/xiabai2004/RayScan/stargazers)
 
 </div>
 
