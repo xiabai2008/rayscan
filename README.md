@@ -40,7 +40,7 @@ RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ WVS v19 扫描目标: http://192.168.18.131                    │
+│ RayScan 1.0.2 扫描目标: http://192.168.18.131                    │
 │ 模块: sqli, cmdi, xss, lfi, rce, api, sensitive, xxe, ssrf │
 │ 速率: 15 req/s                                             │
 └────────────────────────────────────────────────────────────┘
@@ -119,9 +119,13 @@ python -m wvs scan http://example.com
 # Full pipeline with crawler + all modules
 python full_scan.py
 
-# GUI
-python wvs_gui.py
+# Web UI（推荐）
+pip install flask
+python web_ui/app.py
+# 浏览器访问 http://localhost:5000
 ```
+
+> 💡 **tkinter GUI 已停止维护**，功能全部迁移到 Web UI。旧版 `wvs_gui.py` 保留供参考。
 
 ### 5. 特定模块扫描
 
@@ -164,9 +168,28 @@ python wvs_gui.py
 
 ---
 
-### 🖥️ GUI 模式 (`wvs_gui.py`)
+### 🖥️ Web UI 模式（推荐）
 
-适合不想敲命令的用户，图形化操作。
+适合不想敲命令的用户，浏览器图形化操作，支持实时日志流。
+
+```bash
+# 安装依赖
+pip install flask
+
+# 启动 Web 服务
+cd web_ui && python app.py
+
+# 浏览器打开 http://localhost:5000
+```
+
+| 特性 | 说明 |
+|------|------|
+| 🎨 深色/浅色主题 | 一键切换 |
+| 📐 响应式布局 | 手机/电脑自动适配 |
+| ⚡ 实时日志流 | 和 CLI 完全一致的输出 |
+| 📋 即时结果 | 发现漏洞立刻显示 |
+
+> ❌ **tkinter GUI (`wvs_gui.py`) 已停止维护**，请使用 Web UI。
 
 ---
 
