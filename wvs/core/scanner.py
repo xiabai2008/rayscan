@@ -146,7 +146,7 @@ class WAVScanner(ScannerIntegrationsMixin):
     def _resolve_enabled_modules(self) -> List[str]:
         """从配置中解析出要启用的模块列表"""
         enabled = []
-        for name in ("sqli", "cmdi", "xss", "lfi", "rce", "api", "sensitive", "xxe", "ssrf"):
+        for name in ("sqli", "cmdi", "xss", "lfi", "rce", "api", "sensitive", "xxe", "ssrf", "waf", "js_analysis"):
             cfg = self.config.get(f"modules.{name}", {})
             if isinstance(cfg, dict) and cfg.get("enabled", True):
                 enabled.append(name)
