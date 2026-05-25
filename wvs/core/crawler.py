@@ -412,7 +412,7 @@ class WebCrawler(CrawlerParsersMixin):
                     js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=30)
                     discovered.extend(js_endpoints)
                 except BaseException:
-                    pass
+                    logger.debug(f"[Crawler] JS rendering failed for {url}", exc_info=True)
 
             for ep in discovered:
                 self._endpoints.add(ep)
@@ -864,7 +864,7 @@ class WebCrawler(CrawlerParsersMixin):
                     )
                 )
         except Exception:
-            pass
+            logger.debug(f"[Crawler] SPA JS extraction failed", exc_info=True)
         return endpoints
 
     # ── Seed common paths (P11) ───────────────────────────────────
@@ -1065,6 +1065,7 @@ class WebCrawler(CrawlerParsersMixin):
                         self._stats["pages_crawled"] += 1
                         submitted_count += 1
             except Exception:
+                logger.debug(f"[Crawler] Form submit failed for {ep.url}", exc_info=True)
                 continue
 
     # ── SPA Detection & JS API Extraction ───────────────────────
@@ -1081,6 +1082,7 @@ class WebCrawler(CrawlerParsersMixin):
                     body = resp.text[:5000]  # compare first 5K chars
                     bodies.append(body)
             except Exception:
+                logger.debug(f"[Crawler] SPA check request failed for {url}", exc_info=True)
                 continue
             if len(bodies) >= 3:
                 break
@@ -1132,9 +1134,10 @@ class WebCrawler(CrawlerParsersMixin):
                             full_url = urllib.parse.urljoin(target_url, path)
                             eps.append(DiscoveredEndpoint(url=full_url, method="GET", is_api=True, source_url=target_url))
                 except Exception:
+                    logger.debug(f"[Crawler] JS endpoint extraction failed", exc_info=True)
                     continue
         except Exception:
-            pass
+            logger.debug(f"[Crawler] JS API extraction failed", exc_info=True)
         # Deduplicate
         seen = set()
         unique_eps = []

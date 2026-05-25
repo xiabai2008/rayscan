@@ -591,7 +591,7 @@ class WAVScanner(ScannerIntegrationsMixin):
             try:
                 self._progress_callback(module_name, done, total, pct)
             except Exception:
-                pass
+                logger.debug(f"[Scanner] Progress callback failed for {module_name}", exc_info=True)
 
     # ── Timeout helpers ────────────────────────────────────────
 
@@ -711,7 +711,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                         _dvwa_base = login_url.rsplit("/login.php", 1)[0]
                         break
                 except Exception:
-                    pass
+                    logger.debug(f"[Scanner] DVWA base guess failed for {login_url}", exc_info=True)
 
         # ── Crawl ──
         logger.info("\n[*] Phase 1/4: Crawling...")
