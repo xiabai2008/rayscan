@@ -21,8 +21,8 @@ from ..constants import (
     TIME_BASED_BASELINE_SAMPLES,
     TIME_BASED_MAX_BASELINE_STD,
     TIME_BASED_MAX_BASELINE_AVG,
-    TIME_BASED_THRESHOLD_FACTOR,
-    TIME_BASED_MIN_DELAY_FACTOR,
+    TIME_BASED_STDEV_COEFF,
+    TIME_BASED_MIN_VALID_DELAYED,
     TIME_BASED_VERIFICATION_ATTEMPTS,
 )
 
@@ -713,25 +713,33 @@ class DetectionModule(ABC):
         actual_delay: float,
         expected_delay: float,
         baseline_avg: float,
+        baseline_std: float = None,
     ) -> bool:
         """
-        Determine whether a delay indicates a vulnerability.
+        SQLi time-based validation (sqlmap statistical model).
 
-        Threshold: actual > baseline_avg * factor + 1.0
-        Also requires: actual >= expected * min_factor
+        Reference: sqlmap wasLastResponseDelayed() — 99.9999% confidence using
+        7-sigma rule on response time distribution.
+
+        Formula: actual_delay >= max(MIN_VALID_DELAYED, baseline_avg + 7 * stdev)
 
         Args:
             actual_delay: Actual response time.
             expected_delay: Expected delay (the N in SLEEP(N)).
             baseline_avg: Baseline average response time.
+            baseline_std: Baseline standard deviation (or None for simple comparison).
 
         Returns:
-            True if this looks like a valid vulnerability indication.
+            True if this looks like a valid time-based injection.
         """
-        threshold = baseline_avg * TIME_BASED_THRESHOLD_FACTOR + 1.0
-        min_valid = expected_delay * TIME_BASED_MIN_DELAY_FACTOR
-
-        return actual_delay > threshold and actual_delay >= min_valid
+        if baseline_std is not None and baseline_std > 0:
+            # sqlmap: avg + 7*stdev threshold
+            lower_limit = baseline_avg + TIME_BASED_STDEV_COEFF * baseline_std
+            threshold = max(TIME_BASED_MIN_VALID_DELAYED, lower_limit)
+            return actual_delay >= threshold
+        else:
+            # No statistical data — fallback to simple comparison
+            return actual_delay >= max(TIME_BASED_MIN_VALID_DELAYED, expected_delay * 0.7)
 
     async def _verify_time_based(
         self,
@@ -742,26 +750,20 @@ class DetectionModule(ABC):
         param_type: str,
         expected_delay: float,
         baseline_avg: float,
-        verify_payloads: List[str],
+        baseline_std: float = None,
+        verify_payloads: List[str] = None,
     ) -> bool:
         """
-        Time-based secondary verification.
+        Time-based secondary verification (sqlmap: multi-payload confirmation).
 
         Uses different payloads to verify the delay is not coincidental.
-
-        Args:
-            url: Target URL.
-            params: Parameter dict.
-            param_name: Parameter name.
-            method: HTTP method.
-            param_type: Parameter type.
-            expected_delay: Expected delay.
-            baseline_avg: Baseline average response time.
-            verify_payloads: List of verification payloads.
 
         Returns:
             True if verification passed.
         """
+        if not verify_payloads:
+            return True
+
         success_count = 0
         attempts = min(TIME_BASED_VERIFICATION_ATTEMPTS, len(verify_payloads))
 
@@ -772,24 +774,32 @@ class DetectionModule(ABC):
             resp = await self._send_request(method, url, test_params, param_type)
             actual = time.perf_counter() - start
 
-            if resp and self._is_valid_time_delay(actual, expected_delay, baseline_avg):
+            if resp and self._is_valid_time_delay(actual, expected_delay, baseline_avg, baseline_std):
                 success_count += 1
 
         return success_count >= TIME_BASED_VERIFICATION_ATTEMPTS
 
-    def _should_skip_time_based(self, baseline_avg: float, baseline_std: float) -> bool:
+    def _should_skip_time_based(
+        self,
+        baseline_avg: float,
+        baseline_std: float,
+        baseline_samples: int = None,
+    ) -> bool:
         """
-        Decide whether to skip time-based detection.
+        Decide whether to skip time-based detection (sqlmap lag detection).
 
-        Args:
-            baseline_avg: Baseline average response time.
-            baseline_std: Baseline standard deviation.
-
-        Returns:
-            True if detection should be skipped.
+        sqlmap: If stdev > WARN_TIME_STDEV, warns about network lag and
+        suggests increasing --time-sec. If insuffient samples, warns.
         """
+        if baseline_samples is not None and baseline_samples < TIME_BASED_BASELINE_SAMPLES:
+            self.logger.debug(f"[Time-based] Insufficient baseline samples ({baseline_samples}), skipping")
+            return True
+
         if baseline_std > TIME_BASED_MAX_BASELINE_STD:
-            self.logger.debug(f"[Time-based] Network variance too high (std={baseline_std:.2f}s), skipping")
+            self.logger.warning(
+                f"[Time-based] Network jitter too high (σ={baseline_std:.2f}s, avg={baseline_avg:.2f}s) — "
+                f"consider increasing time-sec value to avoid false negatives"
+            )
             return True
 
         if baseline_avg > TIME_BASED_MAX_BASELINE_AVG:

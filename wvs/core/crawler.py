@@ -10,6 +10,7 @@ RayScan web crawler — recursive endpoint discovery.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -101,7 +102,40 @@ SKIP_EXTENSIONS = {
     ".pptx",
 }
 
+# Extensions that should NOT get parameter injection (static files)
+STATIC_NO_PARAM_EXTENSIONS = {
+    ".htm",
+    ".html",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".css",
+    ".js",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".txt",
+}
+
 CRAWLABLE_EXTENSIONS = {".html", ".htm", ".jsp", ".asp", ".aspx", ".php", ".do", ".action", ""}
+
+# User-Agent rotation pool — WAF evasion (from smart-crawler concept)
+UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+]
+
+# Natural delay range (seconds between requests) — randomized to avoid rate-limit patterns
+CRAWL_DELAY_RANGE = (0.3, 1.5)
 
 # Query parameter names that indicate page identity (preserved in URL keys)
 PAGE_IDENT_PARAMS = {"page", "p", "action", "view", "id", "cat", "category", "product", "mode", "type", "Submit", "submit"}
@@ -238,9 +272,9 @@ class WebCrawler(CrawlerParsersMixin):
 
     def __init__(
         self,
-        max_depth: int = 3,
-        max_urls_per_run: int = 500,
-        max_urls_per_prefix: int = 40,
+        max_depth: int = 5,
+        max_urls_per_run: int = 1000,
+        max_urls_per_prefix: int = 50,
         respect_robots: bool = False,
         user_agent: str = "WVS/19.0",
         seed_paths: Optional[List[str]] = None,
@@ -260,6 +294,28 @@ class WebCrawler(CrawlerParsersMixin):
         self._prefix_warned: Set[str] = set()
         # Param discovery cache: avoid re-fetching same host
         self._param_discovery_done: Set[str] = set()
+        # SPA detection
+        self._spa_detected: bool = False
+        self._spa_body_hash: Optional[str] = None
+        self._spa_check_pages: List[int] = []  # page sizes of first pages
+        self._spa_checked: bool = False
+        # API mode (activated when SPA is detected)
+        self._api_mode_extracted: bool = False
+        self._skip_param_injection_extensions: Set[str] = STATIC_NO_PARAM_EXTENSIONS
+        # UA rotation (from smart-crawler anti-detection concept)
+        import random
+        self._ua_pool = list(UA_POOL)
+        self._ua_idx = random.randint(0, len(self._ua_pool) - 1)
+        # Try fake_useragent for more realistic UA variety
+        self._fake_ua = None
+        try:
+            from fake_useragent import UserAgent
+            self._fake_ua = UserAgent()
+            logger.debug("[Crawler] fake_useragent loaded for UA rotation")
+        except Exception:
+            pass  # fallback to UA_POOL
+        # Random delay between requests to avoid rate-limit patterns
+        self._delay_range = CRAWL_DELAY_RANGE
 
     # ── Main entry ──────────────────────────────────────────────
 
@@ -291,6 +347,23 @@ class WebCrawler(CrawlerParsersMixin):
 
         # P11: Seed with known Metasploitable2 common paths for multi-service targets
         await self._seed_common_paths(target_url, session)
+
+        # -- SPA detection: crawl 3 pages, compare body hashes --
+        if not self._spa_checked:
+            self._spa_detected, self._spa_body_hash = await self._check_spa(target_url, session)
+            self._spa_checked = True
+            if self._spa_detected:
+                logger.warning(f"[Crawler] SPA detected (body hash: {hashlib.md5((self._spa_body_hash or '').encode()).hexdigest()[:8]}) — switching to JS API extraction + Playwright rendering")
+                # In SPA mode: enable Playwright rendering for deeper content discovery
+                self._js_render = True
+                # Extract API endpoints from JS bundles
+                api_eps = await self._extract_api_from_js(target_url, session)
+                self._api_mode_extracted = True
+                logger.info(f"[Crawler] SPA mode: extracted {len(api_eps)} API endpoints from JS")
+                for ep in api_eps:
+                    self._endpoints.add(ep)
+                # Still return what we have — scanner will test the API endpoints
+                return list(self._endpoints)
 
         # P7: Parse robots.txt first to discover hidden paths
         await self._parse_robots_txt(target_url, session)
@@ -336,7 +409,7 @@ class WebCrawler(CrawlerParsersMixin):
             # v19.2: JS rendering (Playwright) — disabled by default
             if getattr(self, "_js_render", False):
                 try:
-                    js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=10)
+                    js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=30)
                     discovered.extend(js_endpoints)
                 except BaseException:
                     pass
@@ -351,6 +424,10 @@ class WebCrawler(CrawlerParsersMixin):
             # P24: Parameter discovery — probe common params on page URLs
             for ep in list(discovered)[:5]:  # Limit to first 5 per page
                 parsed_ep = urllib.parse.urlparse(ep.url)
+                # Skip static files — adding params to .htm/.html/.jpg etc is pointless
+                ep_ext = os.path.splitext(parsed_ep.path)[1].lower()
+                if ep_ext in self._skip_param_injection_extensions:
+                    continue
                 if parsed_ep.query:
                     # Page already has params; try adding more common ones
                     for extra_param in ["id", "page", "file", "cat", "type", "sort", "order", "debug"]:
@@ -394,17 +471,36 @@ class WebCrawler(CrawlerParsersMixin):
     async def crawl_static(self, url: str, session: HTTPPool, depth: int = 1) -> List[DiscoveredEndpoint]:  # noqa: C901
         endpoints: List[DiscoveredEndpoint] = []
         timeout_val = max(getattr(session, "timeout", 30), 30)  # crawler needs >=30s for slow local servers
-        # P14: retry once on transient failures (timeout, connection reset)
-        for attempt in range(2):
+
+        # Anti-detection: random delay before request (from smart-crawler concept)
+        import random
+        await asyncio.sleep(random.uniform(*self._delay_range))
+
+        # Anti-detection: rotate User-Agent each request (smart-crawler concept)
+        if self._fake_ua:
+            try:
+                current_ua = self._fake_ua.random
+            except Exception:
+                self._ua_idx = (self._ua_idx + 1) % len(self._ua_pool)
+                current_ua = self._ua_pool[self._ua_idx]
+        else:
+            self._ua_idx = (self._ua_idx + 1) % len(self._ua_pool)
+            current_ua = self._ua_pool[self._ua_idx]
+        session.set_header("User-Agent", current_ua)
+
+        # P14: retry with exponential backoff (from smart-crawler concept)
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
                 resp = await session.get(url, timeout=timeout_val, follow_redirects=True)
                 break
             except Exception as e:
-                if attempt == 0:
-                    logger.debug(f"[Crawler] retry {url}: {e}")
-                    await asyncio.sleep(1)
+                if attempt < max_attempts - 1:
+                    backoff = 2 ** attempt  # 0→1s, 1→2s, 2→4s
+                    logger.debug(f"[Crawler] retry {url} (attempt {attempt+1}/{max_attempts}): {e} (backoff={backoff}s)")
+                    await asyncio.sleep(backoff)
                     continue
-                logger.debug(f"[Crawler] failed {url}: {e}")
+                logger.debug(f"[Crawler] failed {url} after {max_attempts} attempts: {e}")
                 self._stats["errors"] += 1
                 return endpoints
 
@@ -649,6 +745,10 @@ class WebCrawler(CrawlerParsersMixin):
 
         base_url = endpoint.url
         parsed = urllib.parse.urlparse(base_url)
+        # Skip static files — no point injecting params into .htm/.html
+        base_ext = os.path.splitext(parsed.path)[1].lower()
+        if base_ext in self._skip_param_injection_extensions:
+            return endpoint
         if parsed.query:
             qs = urllib.parse.parse_qs(parsed.query)
             endpoint.parameters = {k: v[0] if v else "" for k, v in qs.items()}
@@ -657,6 +757,8 @@ class WebCrawler(CrawlerParsersMixin):
 
         found_params: Dict[str, str] = {}
         found_types: Dict[str, str] = {}
+        reflected_params: Dict[str, str] = {}
+        reflected_types: Dict[str, str] = {}
 
         test_value = "1"
         max_params = 20
@@ -678,14 +780,20 @@ class WebCrawler(CrawlerParsersMixin):
                     text = resp.text[:5000].lower()
                     for pname in batch:
                         if pname.lower() in text:
+                            reflected_params[pname] = test_value
+                            reflected_types[pname] = "query"
+                        else:
+                            # V3: Keep non-reflected params too — they may be blind injection points
                             found_params[pname] = test_value
                             found_types[pname] = "query"
             except Exception:
                 pass
 
-        if found_params:
-            endpoint.parameters = found_params
-            endpoint.param_types = found_types
+        # Reflected params take priority; add non-reflected as fallback
+        endpoint.parameters = {**found_params, **reflected_params}
+        endpoint.param_types = {**found_types, **reflected_types}
+        if endpoint.parameters:
+            logger.debug(f"[Crawler] discover_params({endpoint.url}): {len(reflected_params)} reflected, {len(found_params)} non-reflected kept")
 
         return endpoint
 
@@ -958,6 +1066,179 @@ class WebCrawler(CrawlerParsersMixin):
                         submitted_count += 1
             except Exception:
                 continue
+
+    # ── SPA Detection & JS API Extraction ───────────────────────
+
+    async def _check_spa(self, target_url: str, session: HTTPPool) -> Tuple[bool, Optional[str]]:
+        """Check if the target is a Single Page Application by comparing body content of 3 pages."""
+        test_paths = ["/", "/admin", "/api", "/login", "/about"]
+        bodies: List[str] = []
+        for path in test_paths:
+            try:
+                url = urllib.parse.urljoin(target_url, path)
+                resp = await session.get(url, timeout=8, follow_redirects=True)
+                if resp.status_code < 400 and "text/html" in (resp.headers.get("content-type", "") or ""):
+                    body = resp.text[:5000]  # compare first 5K chars
+                    bodies.append(body)
+            except Exception:
+                continue
+            if len(bodies) >= 3:
+                break
+        if len(bodies) < 2:
+            return False, None
+        # If all bodies are the same (or very close), it's an SPA
+        sizes = [len(b) for b in bodies]
+        body0 = bodies[0]
+        if all(abs(len(b) - len(body0)) < max(50, len(body0) * 0.05) for b in bodies):
+            return True, body0
+        return False, None
+
+    async def _extract_api_from_js(self, target_url: str, session: HTTPPool) -> List[DiscoveredEndpoint]:
+        """Extract API endpoints from JS bundles when SPA is detected.
+        Fetches the main page, finds all <script src> tags, downloads JS files,
+        and extracts API paths using regex."""
+        eps: List[DiscoveredEndpoint] = []
+        try:
+            resp = await session.get(target_url, timeout=10, follow_redirects=True)
+            if resp.status_code >= 400:
+                return eps
+            text = resp.text
+            soup = BeautifulSoup(text, "lxml")
+            js_urls = set()
+            # Collect all JS file URLs
+            for script in soup.find_all("script", src=True):
+                src = script["src"]
+                full_url = urllib.parse.urljoin(target_url, src)
+                if full_url not in js_urls:
+                    js_urls.add(full_url)
+            # Download each JS and extract API paths
+            api_pattern = re.compile(r"""['"`](/[a-zA-Z][a-zA-Z0-9_/\-\.{}?=&%@+#]*)['"`]""")
+            api_prefix_pattern = re.compile(r"""['"`]((?:https?://[^/]+)?/(?:api|v[12]/|graphql|rest)/[^'"`\s]*)['"`]""")
+            for js_url in js_urls:
+                try:
+                    js_resp = await session.get(js_url, timeout=8, follow_redirects=True)
+                    if js_resp.status_code >= 400:
+                        continue
+                    js_text = js_resp.text
+                    # Find potential API routes
+                    for match in api_prefix_pattern.finditer(js_text):
+                        path = match.group(1)
+                        full_url = urllib.parse.urljoin(target_url, path)
+                        eps.append(DiscoveredEndpoint(url=full_url, method="GET", is_api=True, source_url=target_url))
+                    # Also find any URL with common API patterns
+                    for match in api_pattern.finditer(js_text):
+                        path = match.group(1)
+                        if any(kw in path.lower() for kw in ["/api/", "/v1/", "/v2/", "/graphql", "/rest/", "/swagger"]):
+                            full_url = urllib.parse.urljoin(target_url, path)
+                            eps.append(DiscoveredEndpoint(url=full_url, method="GET", is_api=True, source_url=target_url))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        # Deduplicate
+        seen = set()
+        unique_eps = []
+        for ep in eps:
+            if ep.url not in seen:
+                seen.add(ep.url)
+                unique_eps.append(ep)
+        return unique_eps
+
+    # ── JS / SPA rendering (Playwright) ─────────────────────────
+
+    async def crawl_js(self, url: str, session: HTTPPool, depth: int = 1) -> List[DiscoveredEndpoint]:
+        """
+        Render page with Playwright — scroll, wait for lazy content, extract endpoints.
+        From smart-crawler's dynamic rendering concept.
+        """
+        endpoints: List[DiscoveredEndpoint] = []
+
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            logger.warning("[Crawler] playwright not installed, skipping JS render")
+            return endpoints
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                    ],
+                )
+                context = await browser.new_context(
+                    viewport={"width": 1920, "height": 1080},
+                    user_agent=(
+                        self._fake_ua.random
+                        if self._fake_ua
+                        else self._ua_pool[self._ua_idx]
+                    ),
+                )
+                page = await context.new_page()
+
+                # Navigate and wait for JS to settle
+                await page.goto(url, wait_until="networkidle", timeout=30000)
+
+                # Deep scroll — 3 full page scrolls to trigger lazy loading
+                for _ in range(3):
+                    await page.evaluate("window.scrollBy(0, window.innerHeight)")
+                    await page.wait_for_timeout(1000)
+
+                # Extract all links after rendering
+                rendered_html = await page.content()
+                soup = BeautifulSoup(rendered_html, "lxml")
+
+                # Extract links (same logic as crawl_static)
+                for a_tag in soup.find_all("a", href=True):
+                    href = a_tag["href"].strip()
+                    if not href or href.startswith("#") or href.startswith("javascript:"):
+                        continue
+                    full_url = self._join_url(url, href)
+                    if full_url and self._is_crawlable(full_url) and not self._is_visited(full_url):
+                        endpoints.append(
+                            DiscoveredEndpoint(
+                                url=full_url,
+                                method="GET",
+                                source_url=url,
+                                source_depth=depth,
+                                is_api=self._is_api_url(full_url),
+                            )
+                        )
+
+                # Extract API calls embedded in scripts
+                api_calls = await page.evaluate("""() => {
+                    const apis = new Set();
+                    document.querySelectorAll('script').forEach(s => {
+                        const text = s.textContent || '';
+                        const matches = text.match(/'([^']*(?:\\/api\\/|\\/v\\d+\\/|\\/graphql)[^']*)'/g);
+                        if (matches) matches.forEach(m => apis.add(m.replace(/'/g, '')));
+                    });
+                    return Array.from(apis);
+                }""")
+                for api_path in api_calls:
+                    full_url = self._join_url(url, api_path)
+                    if full_url and self._is_crawlable(full_url) and not self._is_visited(full_url):
+                        endpoints.append(
+                            DiscoveredEndpoint(
+                                url=full_url,
+                                method="GET",
+                                source_url=url,
+                                source_depth=depth,
+                                is_api=True,
+                            )
+                        )
+
+                await browser.close()
+                logger.info(f"[Crawler] JS rendered {url}: {len(endpoints)} endpoints found")
+
+        except Exception as e:
+            logger.warning(f"[Crawler] JS render failed for {url}: {e}")
+
+        return endpoints
 
     # ── Internal helpers ────────────────────────────────────────
 

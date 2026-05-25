@@ -17,6 +17,16 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+# ── Windows GBK console fix ────────────────────────────────────
+# rich library crashes on Windows GBK terminals when outputting Unicode
+# characters (e.g. ⚠ U+26A0). Force UTF-8 on all text streams.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass  # not available on older Windows or already reconfigured
+
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel

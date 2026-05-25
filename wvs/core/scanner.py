@@ -49,7 +49,7 @@ _MODULE_PRIORITY = [
     "xxe",         # XML external entity
     "rce",         # time-based (slowest)
     "api",         # API security
-    "jspathfinder",# JS analysis
+    "js_analysis", # JS sensitive info / endpoints (from LinkFinder)
 ]
 
 
@@ -71,9 +71,9 @@ class WAVScanner(ScannerIntegrationsMixin):
         self.config = config or ConfigManager()
         self.session = session or HTTPPool(self.config)
 
-        crawl_depth = self.config.get("crawl_depth", 2)
-        crawl_max = self.config.get("crawl_max_urls", 100)
-        prefix_max = self.config.get("crawl_max_urls_per_prefix", 25)
+        crawl_depth = self.config.get("crawl_depth", 5)
+        crawl_max = self.config.get("crawl_max_urls", 1000)
+        prefix_max = self.config.get("crawl_max_urls_per_prefix", 50)
         self.crawler = WebCrawler(
             max_depth=crawl_depth,
             max_urls_per_run=crawl_max,

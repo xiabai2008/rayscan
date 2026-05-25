@@ -16,9 +16,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Regex to extract URLs from JavaScript files
-# Re-exported from parsers module for crawler.py compatibility
+# Enhanced with LinkFinder patterns (https://github.com/GerbenJavado/LinkFinder)
 _JS_URL_RE = re.compile(
     r"""(?:
+        # LinkFinder: full URLs with scheme
+        ["'`]((?:https?://)[^"'`\s]{5,})["'`]|
+        # LinkFinder: relative paths starting with / ../ ./
+        ["'`]((?:/|\.\./|\./)[^"'`><,;|*()\s\[\]]{1,})["'`]|
+        # LinkFinder: file paths with extensions
+        ["'`]([a-zA-Z0-9_\-/.]{1,}\.(?:php|asp|aspx|jsp|json|action|html|js|txt|xml|do)[^"'`\s]{0,})["'`]|
+        # RayScan: explicit HTTP call patterns
         fetch\s*\(\s*["'`]([^"'`\s]+)["'`]|
         axios\.[a-z]+\s*\(\s*["'`]([^"'`\s]+)["'`]|
         \.get\s*\(\s*["'`]([^"'`\s]+)["'`]|

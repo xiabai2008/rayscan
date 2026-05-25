@@ -31,19 +31,19 @@ DEFAULT_MIN_RPS = 1  # Minimum RPS (adaptive lower bound)
 DEFAULT_DELAY = 0.1  # Default request interval (seconds)
 
 # ============================================================
-# Time-based Detection Settings
+# Time-based Detection Settings (upgraded with sqlmap statistical model)
 # ============================================================
 
-TIME_BASED_BASELINE_SAMPLES = 3  # Baseline sample count (P8: restored from 2 to 3 for more accurate baseline)
-TIME_BASED_MAX_BASELINE_STD = 0.3  # Baseline standard deviation threshold (P8: reduced from 0.5 to 0.3 to reduce network jitter false positives)
-TIME_BASED_MAX_BASELINE_AVG = 2.0  # Baseline average response time threshold (seconds), skip detection if exceeded
-TIME_BASED_THRESHOLD_FACTOR = 2.0  # Delay threshold factor: actual > baseline_avg * factor + 1
-TIME_BASED_MIN_DELAY_FACTOR = 0.7  # Minimum delay factor (P8: raised from 0.6 to 0.7, stricter)
+TIME_BASED_BASELINE_SAMPLES = 5  # Baseline sample count (sqlmap: minimum 30 for reliable model; we use 5 for speed)
+TIME_BASED_MAX_BASELINE_STD = 0.5  # Baseline standard deviation threshold — if higher, network too jittery
+TIME_BASED_MAX_BASELINE_AVG = 3.0  # Baseline average response time threshold (seconds), skip detection if exceeded
+TIME_BASED_STDEV_COEFF = 7.0  # sqlmap: 99.9999% confidence — actual_delay >= avg + 7*stdev
+TIME_BASED_MIN_VALID_DELAYED = 1.0  # sqlmap: minimum delay to be considered a valid delayed response
 TIME_BASED_TEST_DELAYS = [3, 5]  # Test delay list (seconds)
-TIME_BASED_DELAYS_LOCAL = [1, 2]  # Local network delay (seconds) — near-zero latency, short sleep is enough
+TIME_BASED_DELAYS_LOCAL = [1, 2]  # Local network delay (seconds)
 TIME_BASED_DELAYS_REMOTE = [3, 5]  # Remote network delay (seconds)
 TIME_BASED_BATCH_TIMEOUT = 3.0  # Concurrent batch wait timeout (seconds)
-TIME_BASED_VERIFICATION_ATTEMPTS = 3  # Verification attempts count (P8: raised from 2 to 3)
+TIME_BASED_VERIFICATION_ATTEMPTS = 3  # Verification attempts count
 
 # ============================================================
 # Response Analysis Settings

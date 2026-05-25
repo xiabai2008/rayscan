@@ -21,6 +21,7 @@ from .payloads import (
     TIME_BASED_PAYLOADS,
 )
 from ...models import Confidence
+from ...constants import TIME_BASED_BASELINE_SAMPLES
 
 if TYPE_CHECKING:
     from .detector import SQLiDetector
@@ -482,7 +483,7 @@ class SQLiTechniquesMixin:
 
         baseline_avg, baseline_std = await self._measure_baseline(method, url, params, param_type)
 
-        if self._should_skip_time_based(baseline_avg, baseline_std):
+        if self._should_skip_time_based(baseline_avg, baseline_std, TIME_BASED_BASELINE_SAMPLES):
             return
 
         db_payloads = TIME_BASED_PAYLOADS.get(db_type, []) if db_type != "unknown" else []
@@ -503,14 +504,14 @@ class SQLiTechniquesMixin:
             if resp is None:
                 continue
 
-            if self._is_valid_time_delay(actual_delay, expected_delay, baseline_avg):
+            if self._is_valid_time_delay(actual_delay, expected_delay, baseline_avg, baseline_std):
                 verify_payloads = [
                     f"' AND SLEEP({int(expected_delay)})--",
                     f"') AND SLEEP({int(expected_delay)})--",
                     f'" AND SLEEP({int(expected_delay)})--',
                 ]
 
-                if await self._verify_time_based(url, params, param_name, method, param_type, expected_delay, baseline_avg, verify_payloads):
+                if await self._verify_time_based(url, params, param_name, method, param_type, expected_delay, baseline_avg, baseline_std, verify_payloads):
                     vuln = self._create_vuln(
                         url=url,
                         param=param_name,

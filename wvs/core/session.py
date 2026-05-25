@@ -227,6 +227,12 @@ class HTTPPool:
         # Retry backoff parameters (using constants)
         self._backoff_delays = DEFAULT_RETRY_DELAYS
 
+        # Proxy pool (from smart-crawler concept)
+        self._proxy_pool = list(self.config.get("proxy_pool", []))
+        self._proxy_index = 0
+        self._bad_proxies: Set[str] = set()
+        self._fallback_direct = False  # all proxies failed, use direct
+
         # Runtime statistics
         self._stats = {
             "total_requests": 0,
@@ -237,6 +243,14 @@ class HTTPPool:
         # Load saved Cookies
         self._load_cookies()
 
+    def mark_bad_proxy(self, proxy_url: str) -> None:
+        """Mark a proxy as failed (from smart-crawler concept).
+        Forces client recreation on next request."""
+        self._bad_proxies.add(proxy_url)
+        if self._sc is not None:
+            self._sc = None  # Force recreate
+            logger.info(f"[HTTPPool] Proxy marked bad: {proxy_url}, will recreate client")
+
     # ─────────────────────────────────────────────────────────────
     # Internal Utilities
     # ─────────────────────────────────────────────────────────────
@@ -244,7 +258,20 @@ class HTTPPool:
     def _ensure_client(self) -> httpx.AsyncClient:
         """Ensure httpx.AsyncClient is initialized (lazy-loading singleton)"""
         if self._sc is None:
-            self._sc = httpx.AsyncClient(
+            # Proxy support — round-robin rotation (from smart-crawler concept)
+            proxy_url = None
+            if not self._fallback_direct and self._proxy_pool:
+                # Find a working proxy (skip bad ones)
+                working_proxies = [p for p in self._proxy_pool if p not in self._bad_proxies]
+                if working_proxies:
+                    proxy_url = working_proxies[self._proxy_index % len(working_proxies)]
+                    self._proxy_index += 1
+                else:
+                    # All proxies failed — fall back to direct connection
+                    self._fallback_direct = True
+                    logger.warning(f"[HTTPPool] All proxies failed, falling back to direct connection")
+            
+            client_kwargs = dict(
                 timeout=httpx.Timeout(self.timeout, connect=DEFAULT_CONNECT_TIMEOUT),
                 follow_redirects=self.follow_redirects,
                 verify=self.verify_ssl,
@@ -252,6 +279,10 @@ class HTTPPool:
                 http2=False,  # HTTP/1.1 (avoid HTTP/2 cookie handling differences)
                 limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
             )
+            if proxy_url:
+                client_kwargs["proxies"] = proxy_url
+                logger.info(f"[HTTPPool] Using proxy: {proxy_url}")
+            self._sc = httpx.AsyncClient(**client_kwargs)
         return self._sc
 
     def _get_httpx_client(self) -> httpx.AsyncClient:
@@ -489,6 +520,14 @@ class HTTPPool:
                 return resp
 
             except httpx.TimeoutException:
+                # Proxy failure detection — if using a proxy, mark it and retry direct
+                if not self._fallback_direct and self._proxy_pool:
+                    proxy_in_use = getattr(self._sc, '_transport', None)
+                    logger.warning(f"[HTTPPool] Proxy timeout on {url}, marking bad and retrying...")
+                    for p in self._proxy_pool:
+                        if p not in self._bad_proxies:
+                            self.mark_bad_proxy(p)
+                            break
                 last_exc = TimeoutError(f"Timeout after {self.timeout}s for {url}", timeout=float(self.timeout), url=url)
                 if attempt < self.retry_count:
                     logger.debug(f"Timeout for {url}, retrying ({attempt + 1}/{self.retry_count})...")
@@ -496,6 +535,15 @@ class HTTPPool:
                 raise last_exc
 
             except httpx.ConnectError as e:
+                # Proxy failure detection — mark bad proxy, recreate client without it
+                if not self._fallback_direct and self._proxy_pool:
+                    proxy_in_use = None
+                    working = [p for p in self._proxy_pool if p not in self._bad_proxies]
+                    if working:
+                        proxy_in_use = working[0]
+                    if proxy_in_use:
+                        logger.warning(f"[HTTPPool] Proxy connection failed ({proxy_in_use}), marking bad")
+                        self.mark_bad_proxy(proxy_in_use)
                 last_exc = RequestError(f"Connection failed for {url}: {e}", url=url)
                 if attempt < self.retry_count:
                     logger.debug(f"Connect error for {url}, retrying...")

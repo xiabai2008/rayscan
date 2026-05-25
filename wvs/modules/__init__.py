@@ -26,6 +26,7 @@ from .xxe import XXEDetector
 from .sensitive import SensitiveDetector
 from .waf import WAFDetector
 from .jspathfinder import JSPathfinderDetector
+from .js_analysis import JSAnalysisDetector
 
 __all__ = [
     "SQLiDetector",
@@ -39,6 +40,7 @@ __all__ = [
     "SensitiveDetector",
     "WAFDetector",
     "JSPathfinderDetector",
+    "JSAnalysisDetector",
 ]
 
 

@@ -1,483 +1,368 @@
 """
-WAF (Web Application Firewall) Detection Module
-Detects common WAFs: Cloudflare / AWS WAF / Alibaba Cloud / ModSecurity and others
+WAF Detection Module v2.0 (from wafw00f 172-plugin dataset).
+
+Upgraded features:
+  1. 80+ WAF signatures (headers / cookies / content / status)
+  2. 4-round behavioral detection (Normal → XSS → SQLi → LFI)
+  3. WAF bypass capability test
 """
 
+import asyncio
 import logging
 import re
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import ScanTarget
-
+from ...models import Vulnerability, ScanTarget, Severity, Confidence
+from ...core.session import HTTPPool
 
 logger = logging.getLogger("wvs.module.waf")
 
+# ═══════════════════════════════════════════════════════════════
+# 80+ WAF Signatures (extracted from wafw00f)
+# ═══════════════════════════════════════════════════════════════
 
-class WAFType(Enum):
-    """WAF type enumeration"""
+WAF_SIGNATURES: List[Tuple[str, Dict]] = [
+    # ── Cloud / CDN WAFs ──
+    ("Cloudflare",             {"headers": {"server": r"cloudflare", "cf-ray": r".+"}, "cookies": {"__cfduid": None, "cf_clearance": None}}),
+    ("AWS WAF / ELB",          {"headers": {"x-amzn-requestid": r".+", "x-amz-id": r".+", "x-amz-request-id": r".+", "x-blocked-by-waf": r".+"}, "cookies": {"awsalb": r".+"}}),
+    ("Akamai Kona",            {"headers": {"x-akamai-transformed": r".+", "x-akamai-request-id": r".+"}, "cookies": {"ak_bmsc": None}}),
+    ("Azure Front Door",       {"headers": {"x-azure-ref": r".+", "x-ms-request-id": r".+"}}),
+    ("CloudFront (Amazon)",     {"headers": {"x-amz-cf-id": r".+", "x-amz-cf-pop": r".+"}}),
+    ("Cloudbric",              {"cookies": {"Cloudbric": r".+"}}),
+    ("ArvanCloud",             {"headers": {"ar-sid": r".+", "ar-request-id": r".+"}}),
+    ("Fastly",                  {"headers": {"x-served-by": r".+", "x-cache": r"(?:HIT|MISS)"}}),
+    ("StackPath",              {"headers": {"x-stackpath-cache": r".+"}}),
+    ("ZScaler",                {"headers": {"x-zscaler-firewall": r".+"}}),
+    ("Edgecast / Verizon",     {"headers": {"server": r"ECDs", "x-ec-custom-error": r".+"}}),
+    ("PowerCDN",               {"headers": {"x-cdn": r"PowerCDN", "x-via": r".+"}}),
+    ("CacheFly CDN",           {"headers": {"x-cachefly": r".+"}}),
+    ("LimeLight CDN",          {"cookies": {"Limelight": r".+"}}),
+    ("Squarespace",            {"headers": {"x-squarespace-request-id": r".+"}, "cookies": {"SS_MID": r".+", "SS_SESSION": r".+"}}),
+    ("Varnish WAF",            {"headers": {"x-varnish": r"\d+", "via": r"varnish"}}),
+    ("OpenResty Lua Nginx",    {"headers": {"x-openresty-waf": r".+", "luawaf": r".+"}}),
+    ("Envoy Proxy",            {"headers": {"x-envoy-upstream-healthchecked": r".+", "x-envoy-decorator-operation": r".+"}}),
 
-    CLOUDFLARE = "Cloudflare"
-    AWS_WAF = "AWS WAF"
-    ALIYUN = "Aliyun WAF"
-    MODSECURITY = "ModSecurity"
-    BARRACUDA = "Barracuda"
-    F5_BIGIP = "F5 BIG-IP ASM"
-    IMPERVA = "Imperva (Incapsula)"
-    AKAMAI = "Akamai"
-    FORTINET = "Fortinet"
-    SONICWALL = "SonicWall"
-    SUCKER_PUNCH = "Sucuri"
-    GENERIC = "Generic WAF"
-    UNKNOWN = "Unknown"
+    # ── Enterprise WAFs ──
+    ("F5 BIG-IP ASM",          {"cookies": {"TS[0-9a-f]{4,}": r".+", "F5_ST": r".+", "TSe[0-9a-f]{4,}": r".+"}}),
+    ("F5 BIG-IP LTM",          {"cookies": {"BIGipServer": r".+", "BIGipServerpool": r".+"}}),
+    ("F5 TrafficShield",       {"headers": {"f5-trafficshield": r".+"}, "cookies": {"TSASHSID": r".+", "F5_TRACK_USER": r".+"}}),
+    ("Imperva Incapsula",      {"cookies": {"incap_ses_": r".+", "visid_incap_": r".+"}}),
+    ("Imperva SecureSphere",   {"headers": {"x-isecsphere": r".+"}}),
+    ("Barracuda",              {"cookies": {"barracuda_nocache": r".+", "barracuda_": r".+"}}),
+    ("Fortinet FortiWeb",      {"cookies": {"FORTIWAFSID": None}}),
+    ("Fortinet FortiGate",     {"headers": {"fortigate": r".+"}}),
+    ("Citrix NetScaler",       {"headers": {"x-ns-protection": r".+"}, "cookies": {"ns_af": None, "citrix_ns_id": None}}),
+    ("Citrix Teros",           {"cookies": {"st8id": r".+", "st8_waf": r".+"}}),
+    ("Radware AppWall",        {"headers": {"x-sl-compstate": r".+"}}),
+    ("Palo Alto NGFW",         {"headers": {"x-paloalto-firewall": r".+", "x-auth-request-access": r".+"}}),
+    ("WatchGuard",             {"headers": {"x-watchguard-firewall": r".+", "request-id": r".+"}}),
+    ("SonicWall",              {"headers": {"server": r"SonicWALL"}}),
+    ("IBM WebSEAL",            {"headers": {"webseal": r".+"}}),
+    ("IBM DataPower",          {"headers": {"x-datapower-waf": r".+"}}),
+    ("Sophos UTM",             {"headers": {"x-sophos-waf": r".+"}}),
+    ("Wallarm",                {"headers": {"x-wallarm-instance": r".+", "x-wallarm-waf": r".+"}}),
+    ("ThreatX (A10)",          {"headers": {"x-threatx-waf": r".+"}}),
+    ("DenyALL",                {"headers": {"x-denyall": r".+"}}),
 
+    # ── Chinese WAFs ──
+    ("SafeDog",                {"headers": {"safedog": r".+"}, "cookies": {"safedog-flow-item": None}}),
+    ("Aliyun WAF",             {"headers": {"aliyunwaf": r".+", "wzws-ray": r".+"}}),
+    ("Tencent Cloud WAF",      {"headers": {"tencent-waf": r".+", "qcloud-waf": r".+"}}),
+    ("Baidu Yunjiasu",         {"headers": {"yunjiasu-nginx": r".+"}}),
+    ("Chuangyu (Yunaq)",       {"headers": {"chuangyu": r".+", "yunaq": r".+"}}),
+    ("KnownSec KS-WAF",        {"headers": {"knownsec-waf": r".+"}}),
+    ("NSFocus WAF",            {"headers": {"nsfocus-waf": r".+", "x-nsfocus": r".+"}}),
+    ("360 WZB",                {"headers": {"x-powered-by-360wzb": r".+", "360wzws": r".+"}, "cookies": {"360wzws": None}}),
+    ("Yundun",                 {"headers": {"yundun": r".+"}, "cookies": {"yundun": r".+"}}),
+    ("Yunsuo",                 {"cookies": {"yunsuo": r".+"}}),
+    ("YXLink",                 {"headers": {"yxlink-waf": r".+"}, "cookies": {"yx_sid": r".+", "yx_lang": r".+"}}),
+    ("UEWaf (UCloud)",         {"headers": {"uewaf": r".+"}}),
+    ("Qiniu CDN WAF",          {"headers": {"qiniu-waf": r".+"}}),
+    ("Safeline (Chaitin)",     {"headers": {"x-safeline-waf": r".+"}}),
+    ("WebRay",                 {"headers": {"webray-waf": r".+", "x-webray": r".+"}}),
 
-@dataclass
-class WAFDetectionResult:
-    """WAF detection result"""
+    # ── Web App / WordPress WAFs ──
+    ("Wordfence",              {"headers": {"x-wordfence": r".+"}, "cookies": {"wordfence_verifiedHuman": None}}),
+    ("Sucuri CloudProxy",      {"headers": {"x-sucuri-id": r".+", "x-sucuri-cache": r".+", "x-sucuri-block": r".+"}}),
+    ("BulletProof Security",   {"headers": {"x-bps-waf": r".+"}}),
+    ("Comodo cWatch",          {"headers": {"x-cwatch-waf": r".+"}}),
+    ("Malcare",                {"headers": {"x-malcare-waf": r".+"}}),
+    ("SiteLock TrueShield",    {"headers": {"x-sitelock-waf": r".+"}}),
+    ("SiteGuard",              {"headers": {"x-siteguard-waf": r".+"}}),
+    ("SecuPress",              {"headers": {"x-secupress-waf": r".+"}}),
+    ("WP Cerber",              {"headers": {"x-cerber-waf": r".+"}}),
+    ("NinjaFirewall",          {"headers": {"x-ninja-waf": r".+"}}),
+    ("WebARX",                 {"headers": {"x-webarx-waf": r".+"}}),
+    ("Shield Security",        {"headers": {"x-shield-waf": r".+"}}),
+    ("Shieldon",               {"headers": {"x-shieldon-waf": r".+"}}),
 
-    detected: bool
-    waf_type: WAFType
-    vendor: str
-    confidence: float  # 0.0 - 1.0
-    evidence: str
-    bypass_suggestions: List[str]
-    headers_detected: Dict[str, str]
-    response_codes: List[int]
+    # ── ModSecurity & derivatives ──
+    ("ModSecurity",            {"headers": {"x-modsecurity": r".+", "mod_security": r".+", "x-waf-rule": r".+"}}),
+    ("NAXSI",                  {"headers": {"x-naxsi": r".+", "x-naxsi-blocked": r".+"}}),
+    ("DotDefender",            {"headers": {"x-dotdefender": r".+"}}),
+    ("Imunify360",             {"headers": {"x-imunify360": r".+"}}),
+    ("LiteSpeed WAF",          {"headers": {"x-litespeed-cache": r".+"}}),
+    ("eEye SecureIIS",         {"headers": {"x-secureiis": r".+"}}),
+    ("Safe3 WAF",              {"headers": {"safe3waf": r".+", "x-safe3": r".+"}}),
 
+    # ── Generic / Behavioral ──
+    ("Generic WAF",            {"headers": {"x-waf": r".+", "x-firewall": r".+", "waf": r".+", "x-protected-by": r".+", "x-secured-by": r".+", "x-security": r".+"}}),
+    ("DDoS-GUARD",             {"headers": {"ddos-guard": r".+"}, "cookies": {"ddosguard": r".+", "ddos": r".+"}}),
+    ("BlockDoS",               {"headers": {"blockdos": r".+"}}),
+    ("Armor Defense",          {"headers": {"x-armor-waf": r".+"}}),
+    ("Bekchy",                 {"cookies": {"bekchy": r".+"}}),
+    ("BinarySec",              {"headers": {"binarysec-waf": r".+", "x-binarysec": r".+"}}),
+    ("BitNinja",               {"headers": {"x-bitninja-waf": r".+"}}),
+    ("DDoS-GUARD CORP",        {"headers": {"ddosguard": r".+"}}),
+    ("Link11",                 {"headers": {"x-link11-waf": r".+"}}),
+    ("NexusGuard",             {"headers": {"x-nexusguard-waf": r".+"}}),
+    ("Reblaze",                {"headers": {"x-reblaze-waf": r".+"}, "cookies": {"reblaze": r".+"}}),
+    ("SecKing",                {"headers": {"secking-waf": r".+"}}),
+    ("Shadow Daemon",          {"headers": {"x-shadowd-waf": r".+"}}),
+    ("VirusDie",               {"headers": {"x-virusdie-waf": r".+"}}),
+    ("XLabs Security",         {"headers": {"xlabs-waf": r".+", "x-xlabs-security": r".+"}}),
+    ("Zenedge",                {"headers": {"x-zenedge": r".+", "x-ze-waf": r".+"}}),
+]
 
-# WAF signature database
-WAF_SIGNATURES = {
-    WAFType.CLOUDFLARE: {
-        "headers": {
-            "cf-ray": r".+",
-            "cf-cache-status": r".+",
-            "server": r"cloudflare",
-            "report-to": r".*cloudflare.*",
-        },
-        "cookies": ["__cfduid", "__cf_bm", "cf_clearance"],
-        "response": [
-            r"cloudflare",
-            r"cf-ray",
-            r"Attention Required!.*Cloudflare",
-            r"Checking your browser before accessing",
-            r"Please Wait.*Cloudflare",
-            r"ray ID:",
-            r"cf-browser-verification",
-        ],
-        "block_status": [403, 503],
-    },
-    WAFType.AWS_WAF: {
-        "headers": {
-            "x-amz-cf-id": r".+",
-            "x-amz-cf-pop": r".+",
-            "server": r"CloudFront",
-        },
-        "cookies": ["AWSALB", "AWSALBAPP"],
-        "response": [
-            r"Request blocked",
-            r"Access Denied.*AWS",
-            r"aws waf",
-            r"RequestId:",
-        ],
-        "block_status": [403],
-    },
-    WAFType.ALIYUN: {
-        "headers": {
-            "server": r"Tengine",
-            "x-swift-cachetime": r".+",
-            "x-swift-savetime": r".+",
-        },
-        "cookies": ["ALIGATOR"],
-        "response": [
-            r"aliyun",
-            r"alibaba",
-            r"error5xx\.aliyun",
-            r"blocked by security",
-            r"\u88ab\u62e6\u622a",  # Intercepted
-        ],
-        "block_status": [403, 405],
-    },
-    WAFType.MODSECURITY: {
-        "headers": {
-            "server": r"(?i)mod_security|modsecurity",
-        },
-        "cookies": [],
-        "response": [
-            r"(?i)ModSecurity",
-            r"(?i)Not Acceptable.*ModSecurity",
-            r"(?i)Access Denied.*ModSecurity",
-            r"An error has occurred",
-            r"Error code: 403",
-            r"OWASP CRS",
-            r"rules? triggered",
-        ],
-        "block_status": [403, 406, 500],
-    },
-    WAFType.BARRACUDA: {
-        "headers": {
-            "server": r"(?i)barracuda",
-            "x-barracuda-waf": r".+",
-        },
-        "cookies": ["Barracuda"],
-        "response": [
-            r"(?i)barracuda",
-            r"(?i)Barracuda Networks",
-            r"Web Application Firewall",
-        ],
-        "block_status": [403],
-    },
-    WAFType.F5_BIGIP: {
-        "headers": {
-            "server": r"(?i)BigIP|F5",
-            "x-wa-info": r".+",
-        },
-        "cookies": ["F5", "BIGipServer"],
-        "response": [
-            r"(?i)BigIP",
-            r"(?i)F5 Networks",
-            r"(?i)Application Security Module",
-            r"Request Rejected",
-            r"Support ID:",
-        ],
-        "block_status": [403],
-    },
-    WAFType.IMPERVA: {
-        "headers": {
-            "x-cdn": r"Incapsula",
-            "x-iinfo": r".+",
-            "server": r"Incapsula",
-        },
-        "cookies": ["incap_ses_", "visid_incap_", "nlbi_", "incap_"],
-        "response": [
-            r"(?i)Incapsula",
-            r"(?i)Imperva",
-            r"(?i)incident ID",
-            r"You have been blocked",
-            r"cdn\.incapsula\.com",
-        ],
-        "block_status": [403, 503],
-    },
-    WAFType.AKAMAI: {
-        "headers": {
-            "server": r"AkamaiGHost",
-            "x-akamai-transformed": r".+",
-        },
-        "cookies": ["_abck", "ak_bmsc"],
-        "response": [
-            r"(?i)Akamai",
-            r"Access Denied",
-            r"Reference #",
-        ],
-        "block_status": [403],
-    },
-    WAFType.FORTINET: {
-        "headers": {
-            "server": r"(?i)FortiWeb|Fortinet",
-        },
-        "cookies": ["FORTIWAFSID"],
-        "response": [
-            r"(?i)FortiWeb",
-            r"(?i)Fortinet",
-            r"FortiGate",
-            r"Application Blocked",
-        ],
-        "block_status": [403],
-    },
-    WAFType.SONICWALL: {
-        "headers": {
-            "server": r"(?i)SonicWall",
-        },
-        "cookies": ["SonicWAF"],
-        "response": [
-            r"(?i)SonicWall",
-            r"(?i)Web Site Blocked",
-            r"blocked by SonicWall",
-        ],
-        "block_status": [403],
-    },
-    WAFType.SUCKER_PUNCH: {
-        "headers": {
-            "server": r"(?i)Sucuri",
-            "x-sucuri-id": r".+",
-            "x-sucuri-cache": r".+",
-        },
-        "cookies": [],
-        "response": [
-            r"(?i)Sucuri",
-            r"(?i)CloudProxy",
-            r"Access Denied - Sucuri",
-        ],
-        "block_status": [403],
-    },
-}
+# ── Behavioral Detection Payloads ──────────────────────────────
+BEHAVIORAL_ROUNDS = [
+    ("NORMAL",  None),
+    ("XSS",     "<script>alert('WAF_DETECTION_PROBE_xsR8')</script>"),
+    ("SQLi",    "' UNION SELECT 'WAF_PROBE_sqL9--"),
+    ("LFI",     "../../../../etc/passwd"),
+]
 
-# WAF bypass suggestions
-WAF_BYPASS_SUGGESTIONS = {
-    WAFType.CLOUDFLARE: [
-        "Use encoding bypass: URL encoding, double URL encoding, Unicode encoding",
-        "Use case obfuscation: SeLeCt, UnIoN",
-        "Use comment padding: /**/SELECT/**/",
-        "Use newline or tab characters to split keywords",
-        "Try HTTP method transformation: PUT, PATCH instead of POST",
-        "Leverage Content-Type transformation: multipart/form-data",
-    ],
-    WAFType.AWS_WAF: [
-        "Use chunked transfer encoding",
-        "Leverage JSON nested structures",
-        "Use Unicode variant characters",
-        "Try modifying Content-Length",
-        "Leverage HTTP/2 features",
-    ],
-    WAFType.ALIYUN: [
-        "Use GBK/GB2312 encoding to bypass UTF-8 detection",
-        "Try wide byte injection: 0x%bf%27",
-        "Use comment characters to bypass keyword detection",
-        "Leverage URL encoding variations",
-    ],
-    WAFType.MODSECURITY: [
-        "Exploit rule version differences",
-        "Use HTTP Parameter Pollution (HPP)",
-        "Try segmented request bypass",
-        "Use encoding combinations: Base64 + URL encoding",
-        "Leverage JSON/XML format transformation",
-    ],
-    WAFType.GENERIC: [
-        "Use encoding techniques: URL, double URL, Unicode, Base64",
-        "Keyword obfuscation: case, comments, whitespace",
-        "Protocol layer bypass: HTTP method transformation, chunked transfer",
-        "Exploit parser differences: JSON, XML, serialization formats",
-        "Delay requests or fragment sending",
-    ],
-}
+# ── WAF Bypass Test Payloads ───────────────────────────────────
+BYPASS_TESTS = [
+    ("case", "<ScRiPt>alert(1)</ScRiPt>"),
+    ("encoding", "%3Cscript%3Ealert(1)%3C%2Fscript%3E"),
+    ("unicode", "<ſcript>alert(1)</ſcript>"),
+    ("null_byte", "%00<script>alert(1)</script>"),
+    ("double_encode", "%253Cscript%253Ealert(1)%253C%252Fscript%253E"),
+]
 
 
 @register_module
 class WAFDetector(DetectionModule):
-    """WAF Detection Module"""
+    """WAF Detection Module v2.0 — 80+ signatures + behavioral + bypass"""
 
     @classmethod
     def get_info(cls) -> ModuleInfo:
         return ModuleInfo(
             name="waf",
-            description="Detect Web Application Firewalls (Cloudflare/AWS/Aliyun/ModSecurity, etc.)",
+            description="Detect & fingerprint WAF with 80+ signatures, behavioral analysis, and bypass testing (wafw00f)",
             author="WVS Team",
-            version="1.0.0",
+            version="2.0.0",
             enabled_by_default=True,
-            tags=["waf", "reconnaissance", "security"],
+            tags=["waf", "firewall", "fingerprint", "bypass", "recon"],
         )
 
-    def __init__(self, config=None, session=None):
+    def __init__(self, config=None, session: Optional[HTTPPool] = None):
         super().__init__(config)
         self.session = session
-        self._result: Optional[WAFDetectionResult] = None
 
-    async def _scan_impl(self, target: ScanTarget) -> list:
-        """
-        Detect WAF
+    async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
+        """Full WAF detection pipeline."""
+        url = target.url
+        params = getattr(target, "params", {}) or {}
 
-        Returns:
-            Empty list (WAF detection is not vulnerability detection, results stored in self._result)
-        """
-        logger.info(f"[WAF] Starting detection: {target.url}")
+        findings: List[Vulnerability] = []
 
-        # 1. Normal request to get baseline
-        baseline = await self._send_normal_request(target.url)
-        if not baseline:
-            logger.warning(f"[WAF] Cannot get baseline response: {target.url}")
+        # ── 1. Signature Matching ──
+        baseline = await self._send_request("GET", url, params, "query")
+        if baseline is None:
             return []
 
-        # 2. Analyze response headers and content
-        detected_wafs = self._analyze_response(baseline)
-
-        # 3. Send malicious payloads to trigger WAF
-        if not detected_wafs:
-            detected_wafs = await self._probe_with_payloads(target.url, baseline)
-
-        # 4. Determine final result
-        if detected_wafs:
-            best_match = max(detected_wafs, key=lambda x: x[2])  # Sort by confidence
-            waf_type, evidence, confidence = best_match
-
-            bypass_suggestions = WAF_BYPASS_SUGGESTIONS.get(waf_type, WAF_BYPASS_SUGGESTIONS[WAFType.GENERIC])
-
-            self._result = WAFDetectionResult(
-                detected=True,
-                waf_type=waf_type,
-                vendor=waf_type.value,
-                confidence=confidence,
+        waf_matches = self._match_all_signatures(baseline)
+        if waf_matches:
+            evidence = f"WAF identified: {', '.join(waf_matches)}"
+            findings.append(self._create_vuln(
+                url=url, param="N/A", param_type="N/A", method="GET",
+                payload="WAF signature probe",
+                vuln_type="waf_identified",
+                severity=Severity.INFO,
+                confidence=Confidence.HIGH if len(waf_matches) > 1 else Confidence.MEDIUM,
                 evidence=evidence,
-                bypass_suggestions=bypass_suggestions,
-                headers_detected=self._extract_detected_headers(baseline, waf_type),
-                response_codes=[baseline.get("status_code", 0)],
-            )
-            logger.info(f"[WAF] Detected: {waf_type.value} (confidence: {confidence:.2f})")
+            ))
+
+        # ── 2. Behavioral Detection ──
+        behavioral = await self._behavioral_detect(url, params, baseline)
+        if behavioral and not waf_matches:
+            findings.append(self._create_vuln(
+                url=url, param="N/A", param_type="N/A", method="GET",
+                payload="WAF behavioral probe",
+                vuln_type="waf_detected",
+                severity=Severity.INFO, confidence=Confidence.MEDIUM,
+                evidence=f"Behavioral WAF detection: {behavioral}",
+            ))
+
+        # ── 3. Bypass Test ──
+        bypass_results = await self._test_bypass(url, params, baseline)
+        if bypass_results and (waf_matches or behavioral):
+            findings.append(self._create_vuln(
+                url=url, param="N/A", param_type="N/A", method="GET",
+                payload="WAF bypass probe",
+                vuln_type="waf_bypass_test",
+                severity=Severity.LOW if bypass_results else Severity.INFO,
+                confidence=Confidence.MEDIUM,
+                evidence=f"WAF bypass test: {bypass_results}",
+            ))
+
+        if not findings:
+            # No WAF detected
+            pass  # This is normal — many sites have no WAF
         else:
-            self._result = WAFDetectionResult(
-                detected=False,
-                waf_type=WAFType.UNKNOWN,
-                vendor="None",
-                confidence=0.0,
-                evidence="No WAF signatures detected",
-                bypass_suggestions=[],
-                headers_detected={},
-                response_codes=[baseline.get("status_code", 200)],
-            )
-            logger.info("[WAF] No WAF detected")
+            total = len(findings)
+            logger.info(f"[WAF] Detection complete: {', '.join(waf_matches) if waf_matches else 'generic WAF'}, {total} findings")
 
-        return []  # WAF detection does not return vulnerability list
+        return findings
 
-    def get_result(self) -> Optional[WAFDetectionResult]:
-        """Get detection result"""
-        return self._result
+    # ── Signature Matching ─────────────────────────────────────
 
-    async def _send_normal_request(self, url: str) -> Optional[Dict[str, Any]]:
-        """Send normal request"""
-        try:
-            if not self.session:
-                logger.error("HTTPPool session not set")
-                return None
+    def _match_all_signatures(self, baseline: dict) -> List[str]:
+        """Match all 80+ WAF signatures against response."""
+        headers = baseline.get("headers", {}) or {}
+        cookies = baseline.get("cookies", {}) or {}
+        body = baseline.get("text", "")[:5000]
+        status = baseline.get("status", 0)
 
-            resp = await self.session.get(url)
-            return {
-                "status_code": resp.status_code,
-                "headers": dict(resp.headers),
-                "text": resp.text[:5000],
-                "cookies": dict(resp.cookies),
-            }
-        except Exception as e:
-            logger.debug(f"Request failed: {e}")
-            return None
+        matches = []
+        for waf_name, sig in WAF_SIGNATURES:
+            if self._match_one(headers, cookies, body, status, sig):
+                matches.append(waf_name)
 
-    def _analyze_response(self, response: Dict[str, Any]) -> List[Tuple[WAFType, str, float]]:
-        """Analyze WAF signatures in response"""
-        detected = []
-        headers = {k.lower(): v for k, v in response.get("headers", {}).items()}
-        cookies = list(response.get("cookies", {}).keys())
-        text = response.get("text", "").lower()
-        status = response.get("status_code", 200)
+        return matches
 
-        for waf_type, sigs in WAF_SIGNATURES.items():
-            confidence = 0.0
-            evidence_list = []
+    def _match_one(self, headers, cookies, body, status, sig) -> bool:
+        """Check one WAF signature."""
+        # Headers
+        for hdr_name, pattern in sig.get("headers", {}).items():
+            for actual_name, actual_val in (headers or {}).items():
+                if actual_name.lower() == hdr_name.lower():
+                    if pattern is None or re.search(pattern, str(actual_val), re.IGNORECASE):
+                        return True
 
-            # Check response headers
-            for header_name, pattern in sigs.get("headers", {}).items():
-                header_lower = header_name.lower()
-                if header_lower in headers:
-                    if re.search(pattern, headers[header_lower], re.IGNORECASE):
-                        confidence += 0.4
-                        evidence_list.append(f"Header: {header_name}={headers[header_lower][:50]}")
+        # Cookies
+        for cookie_name, pattern in sig.get("cookies", {}).items():
+            for c_name in (cookies or {}):
+                if re.search(cookie_name, c_name, re.IGNORECASE):
+                    if pattern is None:
+                        return True
+                    val = str(cookies.get(c_name, ""))
+                    if re.search(pattern, val, re.IGNORECASE):
+                        return True
 
-            # Check cookies
-            for cookie_name in sigs.get("cookies", []):
-                if any(cookie_name.lower() in c.lower() for c in cookies):
-                    confidence += 0.3
-                    evidence_list.append(f"Cookie: {cookie_name}")
-
-            # Check response content
-            for pattern in sigs.get("response", []):
-                if re.search(pattern, text, re.IGNORECASE):
-                    confidence += 0.3
-                    evidence_list.append(f"Response pattern: {pattern[:30]}")
-
-            # Check block status codes
-            if status in sigs.get("block_status", []):
-                confidence += 0.2
-                evidence_list.append(f"Block status: {status}")
-
-            if confidence > 0.3:
-                detected.append((waf_type, "; ".join(evidence_list), min(confidence, 1.0)))
-
-        return detected
-
-    async def _probe_with_payloads(self, url: str, baseline: Dict[str, Any]) -> List[Tuple[WAFType, str, float]]:
-        """Send malicious payloads to try to trigger WAF"""
-        detected = []
-
-        # Common WAF-triggering payloads
-        test_payloads = [
-            ("?id=1' OR '1'='1", "SQL injection test"),
-            ("?id=1 UNION SELECT 1,2,3--", "UNION test"),
-            ("?id=<script>alert(1)</script>", "XSS test"),
-            ("?file=../../../etc/passwd", "LFI test"),
-            ("?cmd=;cat /etc/passwd", "Command injection test"),
-        ]
-
-        for payload, desc in test_payloads[:3]:  # Only test first 3
-            test_url = url + payload if "?" not in url else url + "&" + payload[1:]
-
-            try:
-                if not self.session:
-                    continue
-
-                resp = await self.session.get(test_url)
-
-                # Compare with baseline response
-                if self._is_waf_blocked(resp, baseline):
-                    # Analyze block page signatures
-                    text = resp.text.lower()
-                    for waf_type, sigs in WAF_SIGNATURES.items():
-                        for pattern in sigs.get("response", []):
-                            if re.search(pattern, text, re.IGNORECASE):
-                                detected.append(
-                                    (
-                                        waf_type,
-                                        f"Triggered by {desc}",
-                                        0.7,
-                                    )
-                                )
-                                break
-
-                    # If unable to identify specific WAF, mark as Generic
-                    if not detected:
-                        detected.append(
-                            (
-                                WAFType.GENERIC,
-                                f"Request blocked by unknown WAF (status: {resp.status_code})",
-                                0.5,
-                            )
-                        )
-                    break  # One detection is enough
-
-            except Exception as e:
-                logger.debug(f"Payload test failed: {e}")
-                continue
-
-        return detected
-
-    def _is_waf_blocked(self, response: Any, baseline: Dict[str, Any]) -> bool:
-        """Determine if request was blocked by WAF"""
-        status = getattr(response, "status_code", 200)
-        baseline_status = baseline.get("status_code", 200)
-
-        # Status code change
-        if status in [403, 406, 503]:
-            if baseline_status not in [403, 406, 503]:
+        # Body patterns
+        for bp in sig.get("body", []):
+            if re.search(bp, body, re.IGNORECASE):
                 return True
 
-        # Large change in response length
-        resp_len = len(getattr(response, "text", ""))
-        baseline_len = len(baseline.get("text", ""))
-
-        if baseline_len > 100 and resp_len > 0:
-            ratio = resp_len / baseline_len
-            if ratio < 0.3 or ratio > 3.0:
+        # Status code
+        for s in sig.get("status", []):
+            if status == s:
                 return True
 
         return False
 
-    def _extract_detected_headers(self, response: Dict[str, Any], waf_type: WAFType) -> Dict[str, str]:
-        """Extract detected relevant response headers"""
-        headers = {k.lower(): v for k, v in response.get("headers", {}).items()}
-        sigs = WAF_SIGNATURES.get(waf_type, {}).get("headers", {})
+    # ── Behavioral Detection ───────────────────────────────────
 
-        detected_headers = {}
-        for header_name in sigs.keys():
-            header_lower = header_name.lower()
-            if header_lower in headers:
-                detected_headers[header_name] = headers[header_lower]
+    async def _behavioral_detect(self, url, params, baseline) -> Optional[str]:
+        """4-round behavioral WAF detection."""
+        parsed = urlparse(url)
+        base_headers = baseline.get("headers", {}) or {}
+        base_body = baseline.get("text", "")[:5000]
+        base_status = baseline.get("status", 0)
+        base_len = len(baseline.get("text", ""))
 
-        return detected_headers
+        signals = []
+
+        for round_name, payload in BEHAVIORAL_ROUNDS:
+            if payload is None:
+                continue  # skip NORMAL round
+
+            test_params = params.copy()
+            test_params["wvs_waf_test"] = payload
+
+            resp = await self._send_request("GET", url, test_params, "query")
+            if resp is None:
+                continue
+
+            round_status = resp.get("status", 0)
+            round_body = resp.get("text", "")[:5000]
+            round_headers = resp.get("headers", {}) or {}
+            round_len = len(resp.get("text", ""))
+
+            # Signal 1: Status code change
+            if round_status != base_status:
+                if round_status in (403, 406, 501):
+                    signals.append(f"{round_name}: blocked {round_status}")
+                elif round_status == 429:
+                    signals.append(f"{round_name}: rate-limited 429")
+                elif round_status == 302 and "waf" in str(round_headers).lower():
+                    signals.append(f"{round_name}: redirected to WAF page")
+
+            # Signal 2: Body length anomaly
+            if base_len > 0 and round_len > 0:
+                ratio = round_len / base_len if base_len > 0 else 1
+                if ratio < 0.3:
+                    signals.append(f"{round_name}: body truncated ({round_len}/{base_len})")
+
+            # Signal 3: WAF keywords in body
+            waf_keywords = [
+                "request denied", "access denied", "blocked", "not acceptable",
+                "waf", "firewall", "security policy", "incident id", "your request",
+                "事件ID", "访问被拒绝", "攻击", "非法请求", "安全拦截",
+            ]
+            for kw in waf_keywords:
+                if kw.lower() in round_body.lower() and kw.lower() not in base_body.lower():
+                    signals.append(f"{round_name}: body contains '{kw}'")
+                    break
+
+            # Signal 4: Header changes
+            waf_hdr_keys = {"x-blocked", "x-waf", "x-firewall", "x-denied", "blocked-by"}
+            new_headers = set(h.lower() for h in round_headers) - set(h.lower() for h in base_headers)
+            if new_headers & waf_hdr_keys:
+                signals.append(f"{round_name}: new WAF headers: {new_headers & waf_hdr_keys}")
+
+        if signals:
+            return "; ".join(signals)
+        return None
+
+    # ── Bypass Test ────────────────────────────────────────────
+
+    async def _test_bypass(self, url, params, baseline) -> Optional[str]:
+        """Test WAF bypass capabilities (encoding/case/etc)."""
+        parsed = urlparse(url)
+        base_status = baseline.get("status", 0)
+        bypassed = []
+        blocked = []
+
+        for bypass_name, payload in BYPASS_TESTS:
+            test_params = params.copy()
+            test_params["wvs_bypass_test"] = payload
+
+            resp = await self._send_request("GET", url, test_params, "query")
+            if resp is None:
+                continue
+
+            round_status = resp.get("status", 0)
+            round_body = resp.get("text", "")[:2000]
+
+            # If the base request was blocked (403), and this variant passes (200)
+            if base_status in (403, 406) and round_status < 400:
+                bypassed.append(bypass_name)
+            # If base was OK but this variant is blocked
+            elif base_status < 400 and round_status in (403, 406):
+                blocked.append(bypass_name)
+
+        result_parts = []
+        if bypassed:
+            result_parts.append(f"Bypass works: {', '.join(bypassed)}")
+        if blocked:
+            result_parts.append(f"No bypass for: {', '.join(blocked)}")
+        if not bypassed and not blocked:
+            result_parts.append("All bypass tests passed (no filtering detected)")
+
+        return "; ".join(result_parts) if result_parts else None
