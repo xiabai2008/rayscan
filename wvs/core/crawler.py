@@ -340,7 +340,11 @@ class WebCrawler(CrawlerParsersMixin):
         await self._seed_common_paths(target_url, session, is_lab=is_lab)
 
         # -- SPA detection: crawl 3 pages, compare body hashes --
-        if not self._spa_checked:
+        # 非靶机目标直接跳过 SPA 检测（真实网站不同路径返回相似内容是正常的）
+        if not is_lab:
+            self._spa_detected = False
+            self._spa_checked = True
+        elif not self._spa_checked:
             self._spa_detected, self._spa_body_hash = await self._check_spa(target_url, session)
             self._spa_checked = True
             if self._spa_detected:
