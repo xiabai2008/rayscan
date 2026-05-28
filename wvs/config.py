@@ -88,9 +88,9 @@ class ConfigManager:
                 "threads": 2,
                 "depth": 3,
             },
-            # v19.2: JS pathfinder — endpoint discovery & secret scanning
+            # v19.2: JS pathfinder — disabled by default in v1.1.0 (sqli+xss focus)
             "jspathfinder": {
-                "enabled": True,
+                "enabled": False,
                 "timeout": 15,
                 "threads": 10,
                 "depth": 1,
