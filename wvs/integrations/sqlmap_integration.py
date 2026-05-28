@@ -204,10 +204,10 @@ class SqlmapIntegration:
             return self._parse_sqlmap_output(output, url)
 
         except FileNotFoundError:
-            logger.error(f"[Sqlmap] Not found: {self.sqlmap_path}")
+            logger.exception(f"[Sqlmap] Not found: {self.sqlmap_path}")
             return []
         except Exception as e:
-            logger.error(f"[Sqlmap] Execution failed: {e}")
+            logger.exception("[Sqlmap] Execution failed")
             return []
 
     def _get_runner(self) -> str:

@@ -300,7 +300,7 @@ class WAVScanner(ScannerIntegrationsMixin):
             logger.warning(f"[Scanner] 模块 {module_name} 不可用: {e}")
             return False
         except Exception as e:
-            logger.error(f"[Scanner] 加载模块 {module_name} 失败: {e}")
+            logger.exception(f"[Scanner] 加载模块 {module_name} 失败")
             return False
 
     def load_all_modules(self) -> None:
@@ -606,8 +606,9 @@ class WAVScanner(ScannerIntegrationsMixin):
     # ── Checkpoint save/load ─────────────────────────────────────
 
     def _checkpoint_file(self, target_url: str) -> Path:
+        import tempfile
         url_hash = hashlib.md5(target_url.encode()).hexdigest()[:12]
-        return Path(f".wvs_checkpoint_{url_hash}.json")
+        return Path(tempfile.gettempdir()) / f"rayscan_checkpoint_{url_hash}.json"
 
     def _save_checkpoint(self, target_url: str, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]) -> None:
         """Save incremental scan results to disk for crash/timeout resilience."""
@@ -719,7 +720,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         try:
             endpoints = await self.crawler.crawl(target.url, self.session)
         except Exception as e:
-            logger.error(f"[Scanner] 爬取失败: {e}")
+            logger.exception("[Scanner] 爬取失败")
             endpoints = []
             self._stats["errors"] += 1
         self._call_progress("crawl", 100, 100, 10)
@@ -794,7 +795,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                 self._jspathfinder_vulns = await self._run_jspathfinder(target)
                 logger.info(f"[+] JSPathFinder: {len(self._jspathfinder_vulns)} finds")
             except Exception as e:
-                logger.error(f"[Scanner] jspathfinder phase failed: {e}")
+                logger.exception("[Scanner] jspathfinder phase failed")
                 self._jspathfinder_vulns = []
             self._call_progress("jspathfinder", 1, 1, 15)
         else:

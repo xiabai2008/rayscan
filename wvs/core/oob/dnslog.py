@@ -99,9 +99,9 @@ class DNSLogClient:
                         return True
 
         except asyncio.TimeoutError:
-            logger.error("[DNSLog] Registration timeout")
+            logger.exception("[DNSLog] Registration timeout")
         except Exception as e:
-            logger.error(f"[DNSLog] Registration failed: {e}")
+            logger.exception("[DNSLog] Registration failed")
 
         return False
 
@@ -140,7 +140,7 @@ class DNSLogClient:
         except asyncio.TimeoutError:
             logger.warning("[DNSLog] Poll timeout")
         except Exception as e:
-            logger.error(f"[DNSLog] Poll failed: {e}")
+            logger.exception("[DNSLog] Poll failed")
 
         return records
 

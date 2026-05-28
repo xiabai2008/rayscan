@@ -600,13 +600,41 @@ class SQLiTechniquesMixin:
         param_type: str,
         vuln_type: str,
     ) -> bool:
-        """Verify with a different payload type to prevent false positives."""
+        """Verify with a different payload type to prevent false positives.
+
+        P24 fix: For error-based detection, the original verification payloads
+        ("' AND 1=1--") close the quote and produce valid SQL when the injection
+        is in a numeric-context parameter (WHERE id=5'). This causes the
+        verification to fail even though the original injection is valid.
+
+        Fix: Add numeric-context verification payloads (bare quote, 1') that
+        preserve the SQL syntax break for numeric parameters. Detect whether
+        the param value looks numeric and use appropriate payloads.
+        """
         verify_payloads = {
             "error": ["' AND 1=1--", "') AND 1=1--", '") AND 1=1--'],
             "union": ["' UNION SELECT 1,2,3--", "'; SELECT 1--"],
             "boolean": ["' OR '1'='1", '\" OR "1"="1'],
             "time": ["'; SELECT SLEEP(2)--"],
         }
+
+        # P24: Detect numeric-context parameters — if the original param value
+        # is purely numeric, the injection likely breaks SQL with a bare quote.
+        # Standard verification payloads like "' AND 1=1--" close the quote and
+        # produce valid SQL, so the verification fails on false negatives.
+        # Add bare-quote payloads that preserve the syntax error.
+        orig_val = params.get(param_name, "")
+        is_numeric_param = orig_val.isdigit() or (
+            orig_val.lstrip("-+").isdigit() if orig_val else False
+        )
+        if vuln_type == "error" and is_numeric_param:
+            # Numeric context: use payloads that also break SQL syntax
+            verify_payloads["error"] = [
+                "'",           # bare quote — same error as original detection
+                "%27",          # URL-encoded quote — same effect
+                "1'",           # prefix + quote — different error location
+                "' AND 1=1--",  # fallback for string-context
+            ]
 
         verify_list = verify_payloads.get(vuln_type, [])
         baseline = await self._send_request(method, url, params, param_type)

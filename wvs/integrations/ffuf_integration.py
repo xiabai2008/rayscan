@@ -190,10 +190,10 @@ class FfufIntegration:
             return self._parse_ffuf_output(output, url)
 
         except FileNotFoundError:
-            logger.error(f"[ffuf] Not found: {self.ffuf_path}")
+            logger.exception(f"[ffuf] Not found: {self.ffuf_path}")
             return []
         except Exception as e:
-            logger.error(f"[ffuf] Execution failed: {e}")
+            logger.exception("[ffuf] Execution failed")
             return []
 
     def _parse_ffuf_output(

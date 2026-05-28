@@ -432,7 +432,7 @@ class CacheManager:
                 logger.info(f"Cache saved to: {save_path}")
 
             except Exception as e:
-                logger.error(f"Failed to save cache: {e}")
+                logger.exception("Failed to save cache")
 
     def _load_from_disk(self):
         """Load cache from disk"""
@@ -477,7 +477,7 @@ class CacheManager:
         except json.JSONDecodeError:
             logger.warning(f"Persist file format error: {self.persist_path}")
         except Exception as e:
-            logger.error(f"Failed to load cache: {e}")
+            logger.exception("Failed to load cache")
 
     def __enter__(self):
         return self

@@ -392,39 +392,6 @@ class ConfigManager:
         return "\n".join(config_str)
 
 
-# Global configuration instance (singleton pattern)
-_global_config: Optional[ConfigManager] = None
-
-
-def get_global_config(config_file: Optional[str] = None) -> ConfigManager:
-    """
-    Get the global configuration manager
-
-    Args:
-        config_file: Path to configuration file (only effective on first call)
-
-    Returns:
-        ConfigManager instance
-    """
-    global _global_config
-
-    if _global_config is None:
-        _global_config = ConfigManager(config_file)
-
-    return _global_config
-
-
-def reset_global_config(config_file: Optional[str] = None) -> None:
-    """
-    Reset the global configuration
-
-    Args:
-        config_file: New configuration file path
-    """
-    global _global_config
-    _global_config = ConfigManager(config_file)
-
-
 # Example configuration
 EXAMPLE_CONFIG = {
     "timeout": 45,

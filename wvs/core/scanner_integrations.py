@@ -39,7 +39,7 @@ class ScannerIntegrationsMixin:
             logger.warning("[Scanner] JSPathfinder module not available")
             return []
         except Exception as e:
-            logger.error(f"[Scanner] JSPathfinder error: {e}")
+            logger.exception("[Scanner] JSPathfinder error")
             return []
 
     async def _run_integrations(

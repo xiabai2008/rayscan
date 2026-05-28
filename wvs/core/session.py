@@ -13,10 +13,11 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from typing import Any, Dict, Optional, Set
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -35,6 +36,19 @@ from ..exceptions import RequestError, TimeoutError, RateLimitError
 from .rate_limiter import IntelligentRateLimiter
 
 logger = logging.getLogger(__name__)
+
+
+# User-Agent rotation pool — WAF evasion
+UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:126.0) Gecko/20100101 Firefox/126.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+]
 
 
 # ============================================================
@@ -194,7 +208,18 @@ class HTTPPool:
         self.max_rps = self.config.get("max_requests_per_second", DEFAULT_MAX_RPS)
 
         # User-Agent
-        self.user_agent = self.config.get("user_agent", "WVS/19.0")
+        self.user_agent = self.config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+
+        # UA rotation — auto-rotate on every request (WAF evasion)
+        self._ua_pool = list(UA_POOL)
+        self._ua_idx = random.randint(0, len(self._ua_pool) - 1)
+        self._fake_ua = None
+        try:
+            from fake_useragent import UserAgent
+            self._fake_ua = UserAgent()
+            logger.debug("[HTTPPool] fake_useragent loaded for UA rotation")
+        except Exception:  # noqa: S110
+            pass  # fallback to UA_POOL
 
         # Follow redirects
         self.follow_redirects = self.config.get("follow_redirects", True)
@@ -296,9 +321,7 @@ class HTTPPool:
         """
         sc = self._ensure_client()
         if domain is None:
-            from urllib.parse import urlparse as _urlparse
-
-            domain = _urlparse(url).netloc
+            domain = urlparse(url).netloc
         sc.cookies.set(name, value, domain=domain)
 
     def set_header(self, name: str, value: str):
@@ -313,9 +336,19 @@ class HTTPPool:
         parsed = urlparse(url)
         return parsed.netloc or url
 
+    def _rotate_ua(self) -> str:
+        """Rotate User-Agent on each call — WAF evasion."""
+        if self._fake_ua:
+            try:
+                return self._fake_ua.random
+            except Exception:  # noqa: S110
+                pass
+        self._ua_idx = (self._ua_idx + 1) % len(self._ua_pool)
+        return self._ua_pool[self._ua_idx]
+
     def _merge_headers(self, url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """Merge default headers and append jar cookies to the Cookie header (fixes httpx jar not auto-sending issue)"""
-        headers = {"User-Agent": self.user_agent}
+        headers = {"User-Agent": self._rotate_ua()}
         if "headers" in kwargs and kwargs["headers"]:
             headers.update(kwargs["headers"])
 
@@ -475,8 +508,6 @@ class HTTPPool:
                 if should_follow and resp.status_code in (301, 302, 303, 307, 308):
                     loc = resp.headers.get("location") or resp.headers.get("Location")
                     if loc:
-                        from urllib.parse import urljoin
-
                         final_url = urljoin(str(resp.url), loc)
                         final_parsed = urlparse(final_url)
                         # Only follow same-host redirects

@@ -525,7 +525,7 @@ class XSSDetector(DetectionModule):
             from urllib.parse import unquote
 
             result = unquote(result)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         return result
 

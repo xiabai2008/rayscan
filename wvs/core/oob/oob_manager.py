@@ -141,7 +141,7 @@ class OOBManager:
                 return True
 
         except Exception as e:
-            logger.error(f"[OOB] Initialization failed: {e}")
+            logger.exception("[OOB] Initialization failed")
             return False
 
         return False

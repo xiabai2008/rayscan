@@ -201,12 +201,12 @@ class NucleiIntegration:
             return self._parse_nuclei_output(stdout.decode("utf-8", errors="ignore"))
 
         except FileNotFoundError:
-            logger.error(f"[Nuclei] nuclei.exe not found: {self.nuclei_exe}")
+            logger.exception(f"[Nuclei] nuclei.exe not found: {self.nuclei_exe}")
             self._stats["fallback_used"] = True
             return await self._fallback_scan(url, severities)
 
         except Exception as e:
-            logger.error(f"[Nuclei] Execution failed: {e}")
+            logger.exception("[Nuclei] Execution failed")
             self._stats["fallback_used"] = True
             return await self._fallback_scan(url, severities)
 
@@ -382,11 +382,6 @@ class NucleiIntegration:
             # ── Technology Fingerprints (8+) ──
             {"path": "/", "type": VulnerabilityType.INFO_DISCLOSURE, "title": "Technology Fingerprint", "severity": Severity.INFO, "evidence_pattern": "fingerprint", "fingerprint": True},
         ]
-                "title": "Debug Mode Enabled",
-                "severity": Severity.MEDIUM,
-                "evidence_pattern": "debug",
-            },
-        ]
 
         # Simple HTTP request (uses httpx)
         async def check_path(path: str) -> Optional[Dict]:
@@ -402,7 +397,7 @@ class NucleiIntegration:
                     if resp.status_code not in (404, 400, 403):
                         return {"status": resp.status_code, "body": resp.text[:200]}
             except Exception:
-                pass
+                logger.debug(f"[Nuclei] Builtin path check failed for {path}", exc_info=True)
             return None
 
         tasks = [check_path(c["path"]) for c in builtin_checks]

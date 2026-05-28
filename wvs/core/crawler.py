@@ -122,18 +122,6 @@ STATIC_NO_PARAM_EXTENSIONS = {
 
 CRAWLABLE_EXTENSIONS = {".html", ".htm", ".jsp", ".asp", ".aspx", ".php", ".do", ".action", ""}
 
-# User-Agent rotation pool — WAF evasion (from smart-crawler concept)
-UA_POOL = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:126.0) Gecko/20100101 Firefox/126.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
-]
-
 # Natural delay range (seconds between requests) — randomized to avoid rate-limit patterns
 CRAWL_DELAY_RANGE = (0.3, 1.5)
 
@@ -302,18 +290,20 @@ class WebCrawler(CrawlerParsersMixin):
         # API mode (activated when SPA is detected)
         self._api_mode_extracted: bool = False
         self._skip_param_injection_extensions: Set[str] = STATIC_NO_PARAM_EXTENSIONS
-        # UA rotation (from smart-crawler anti-detection concept)
-        import random
-        self._ua_pool = list(UA_POOL)
-        self._ua_idx = random.randint(0, len(self._ua_pool) - 1)
-        # Try fake_useragent for more realistic UA variety
+        # UA rotation (Playwright JS rendering only — HTTP UA rotation handled by HTTPPool)
+        self._ua_pool = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+        ]
+        self._ua_idx = 0
         self._fake_ua = None
         try:
             from fake_useragent import UserAgent
             self._fake_ua = UserAgent()
-            logger.debug("[Crawler] fake_useragent loaded for UA rotation")
-        except Exception:
-            pass  # fallback to UA_POOL
+        except Exception:  # noqa: S110
+            pass
         # Random delay between requests to avoid rate-limit patterns
         self._delay_range = CRAWL_DELAY_RANGE
 
@@ -475,18 +465,6 @@ class WebCrawler(CrawlerParsersMixin):
         # Anti-detection: random delay before request (from smart-crawler concept)
         import random
         await asyncio.sleep(random.uniform(*self._delay_range))
-
-        # Anti-detection: rotate User-Agent each request (smart-crawler concept)
-        if self._fake_ua:
-            try:
-                current_ua = self._fake_ua.random
-            except Exception:
-                self._ua_idx = (self._ua_idx + 1) % len(self._ua_pool)
-                current_ua = self._ua_pool[self._ua_idx]
-        else:
-            self._ua_idx = (self._ua_idx + 1) % len(self._ua_pool)
-            current_ua = self._ua_pool[self._ua_idx]
-        session.set_header("User-Agent", current_ua)
 
         # P14: retry with exponential backoff (from smart-crawler concept)
         max_attempts = 3
@@ -787,7 +765,7 @@ class WebCrawler(CrawlerParsersMixin):
                             found_params[pname] = test_value
                             found_types[pname] = "query"
             except Exception:
-                pass
+                logger.debug(f"[Crawler] Parameter discovery failed for {endpoint.url}", exc_info=True)
 
         # Reflected params take priority; add non-reflected as fallback
         endpoint.parameters = {**found_params, **reflected_params}
@@ -852,7 +830,7 @@ class WebCrawler(CrawlerParsersMixin):
                         eps_from_spec = self._parse_openapi_spec(spec, url, source_url)
                         endpoints.extend(eps_from_spec)
                     except (json.JSONDecodeError, ValueError):
-                        pass
+                        logger.debug(f"[Crawler] OpenAPI spec parse failed for {url}", exc_info=True)
                 # Mark the path itself as an endpoint
                 endpoints.append(
                     DiscoveredEndpoint(
@@ -962,8 +940,8 @@ class WebCrawler(CrawlerParsersMixin):
                         final_url = str(resp.url) if hasattr(resp, "url") else full_url
                         self._urls_to_visit.append((self._normalize_url(final_url), 1))
                         logger.debug(f"[Crawler] seed path found: {path} -> {final_url}")
-                except (OSError, asyncio.TimeoutError):
-                    pass
+                except (OSError, asyncio.TimeoutError) as e:
+                    logger.debug(f"[Crawler] seed probe failed {path}: {e}")
                 except Exception as e:
                     logger.debug(f"[Crawler] seed probe failed {path}: {e}")
 

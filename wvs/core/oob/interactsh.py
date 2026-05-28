@@ -250,7 +250,7 @@ class InteractshClient:
                 try:
                     raw_request = base64.b64decode(raw_request).decode("utf-8", errors="ignore")
                 except Exception:
-                    pass
+                    logger.debug(f"[OOB] Failed to decode base64 interaction data", exc_info=True)
 
             return InteractshInteraction(
                 token=full_id.split(".")[0] if full_id else "",

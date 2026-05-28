@@ -24,7 +24,7 @@ if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
+    except Exception:  # noqa: S110
         pass  # not available on older Windows or already reconfigured
 
 from rich.console import Console
@@ -49,6 +49,65 @@ def setup_logging(verbose: bool = False):
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# 全局异常保护辅助函数
+# ─────────────────────────────────────────────────────────────────
+
+
+def _collect_partial_vulns(scanner) -> list:
+    """从所有已加载模块收集部分发现的漏洞"""
+    partial_vulns = []
+    for mod_name, mod_instance in scanner._modules.items():
+        if hasattr(mod_instance, "_found_vulns"):
+            partial_vulns.extend(mod_instance._found_vulns)
+        elif hasattr(mod_instance, "vulnerabilities"):
+            partial_vulns.extend(mod_instance.vulnerabilities)
+    return partial_vulns
+
+
+def _save_partial_results(
+    partial_vulns: list, target_url: str, max_time: int,
+    session, scanner, args,
+):
+    """去重并保存部分扫描结果"""
+    if not partial_vulns:
+        return
+    from .models import ScanResult, ScanTarget
+    from pathlib import Path
+    from datetime import datetime
+    import json, re
+
+    seen = set()
+    unique = []
+    for v in partial_vulns:
+        sig = f"{v.type.value}|{v.url or ''}|{v.parameter or ''}|{v.payload or ''}".lower()
+        if sig not in seen:
+            seen.add(sig)
+            unique.append(v)
+
+    partial_result = ScanResult(target=ScanTarget(url=target_url))
+    partial_result.vulnerabilities = unique
+    partial_result.duration = max_time or 0
+    partial_result.requests_made = session.get_stats().get("total_requests", 0)
+    partial_result.endpoints_found = 0
+    partial_result.modules_run = len(scanner._modules)
+
+    # 兜底保存 JSON
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
+    reports_dir = Path("scan_reports")
+    reports_dir.mkdir(exist_ok=True)
+    output_file = reports_dir / f"report_{safe_name}_{timestamp}.json"
+    output_file.write_text(
+        json.dumps(partial_result.to_dict(), indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    from rich.console import Console
+    console = Console()
+    console.print(f"[green]📄 部分结果报告已保存: {output_file.resolve()}[/green]")
+    console.print(f"[yellow]共 {len(unique)} 个漏洞 (去重后)[/yellow]")
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -254,46 +313,47 @@ def cmd_scan(args):  # noqa: C901
         return 130
     except asyncio.TimeoutError:
         console.print(f"\n[yellow]扫描超时（>{max_time}秒），正在保存部分结果...[/yellow]")
-        partial_vulns = []
-        for mod_name, mod_instance in scanner._modules.items():
-            if hasattr(mod_instance, "_found_vulns"):
-                partial_vulns.extend(mod_instance._found_vulns)
-            elif hasattr(mod_instance, "vulnerabilities"):
-                partial_vulns.extend(mod_instance.vulnerabilities)
-
+        partial_vulns = _collect_partial_vulns(scanner)
+        _save_partial_results(partial_vulns, target_url, max_time, session, scanner, args)
+        return 124
+    except Exception as e:
+        console.print(f"\n[red]扫描异常: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()[:500]}[/dim]")
+        partial_vulns = _collect_partial_vulns(scanner)
         if partial_vulns:
-            from .models import ScanResult
-
-            seen = set()
-            unique = []
-            for v in partial_vulns:
-                sig = f"{v.type.value}|{v.url or ''}|{v.parameter or ''}|{v.payload or ''}".lower()
-                if sig not in seen:
-                    seen.add(sig)
-                    unique.append(v)
-
-            partial_result = ScanResult(target=ScanTarget(url=target_url))
-            partial_result.vulnerabilities = unique
-            partial_result.duration = max_time
-            partial_result.requests_made = session.get_stats().get("total_requests", 0)
-            partial_result.endpoints_found = 0
-            partial_result.modules_run = len(scanner._modules)
-            elapsed = max_time
-            display_result(partial_result, elapsed, args)
-            console.print(f"[yellow]超时前已发现 {len(unique)} 个漏洞![/yellow]")
+            console.print(f"[yellow]异常前已发现 {len(partial_vulns)} 个漏洞，尝试保存...[/yellow]")
+            _save_partial_results(partial_vulns, target_url, None, session, scanner, args)
         else:
-            # 兜底：部分模块可能有 scan_completed 标记但未触发
             completed = getattr(scanner, '_modules_completed', [])
             if completed:
-                console.print(f"[yellow]超时，{len(completed)} 个模块已完成扫描但未发现漏洞[/yellow]")
+                console.print(f"[yellow]异常，{len(completed)} 个模块已完成扫描但未发现漏洞[/yellow]")
             else:
-                console.print("[yellow]超时前未完成任何模块的扫描[/yellow]")
-        return 124
+                console.print("[yellow]异常，扫描未完成任何模块[/yellow]")
+        return 1
 
     elapsed = time.perf_counter() - start
 
     # 输出结果
-    display_result(result, elapsed, args)
+    try:
+        display_result(result, elapsed, args)
+    except Exception as e:
+        console.print(f"\n[red]报告生成失败: {e}[/red]")
+        # 兜底：手动保存 JSON
+        try:
+            from pathlib import Path
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
+            fallback_path = Path("scan_reports") / f"report_{safe_name}_{timestamp}.json"
+            fallback_path.parent.mkdir(exist_ok=True)
+            fallback_path.write_text(
+                json.dumps(result.to_dict(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            console.print(f"[green]📄 报告已兜底保存: {fallback_path.resolve()}[/green]")
+        except Exception as e2:
+            console.print(f"[red]报告兜底保存也失败: {e2}[/red]")
     return 0
 
 

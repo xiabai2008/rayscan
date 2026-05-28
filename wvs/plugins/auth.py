@@ -345,7 +345,7 @@ class FormLoginAuth(AuthProvider):
             }
 
         except Exception as e:
-            logger.error(f"[Auth:FormLogin] Exception: {e}")
+            logger.exception("[Auth:FormLogin] Exception")
             return {"cookies": {}, "headers": {}, "authenticated": False, "error": str(e)}
 
 

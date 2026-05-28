@@ -190,7 +190,7 @@ class JSPathfinderDetector(DetectionModule):
                 except Exception:
                     continue
             p.stop()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         return False
 
@@ -376,7 +376,7 @@ class JSPathfinderDetector(DetectionModule):
                     path_prefixes.add("/" + "/".join(parts[:i]))
                 if parts and parts[0]:
                     path_prefixes.add("/" + parts[0])
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         targets_to_fuzz = set()
@@ -394,7 +394,7 @@ class JSPathfinderDetector(DetectionModule):
                     if tm:
                         title = tm.group(1).strip()[:80]
                     return {"url": url, "status": resp.status_code, "size": len(resp.text or ""), "title": title, "path": path}
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
             return None
 

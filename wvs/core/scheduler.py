@@ -183,7 +183,7 @@ class TaskScheduler:
                             self._stats["completed"] += 1
                             return result
                         except Exception as e:
-                            logger.error(f"[Scheduler] Task execution failed: {t.task_id}, {e}")
+                            logger.exception(f"[Scheduler] Task execution failed: {t.task_id}")
                             t.status = "failed"
                             self._stats["failed"] += 1
                             return None
@@ -263,7 +263,7 @@ class TaskScheduler:
                         if result is not None:
                             results.append(result)
                         completed += 1
-                    except Exception:
+                    except Exception:  # noqa: S110
                         pass
 
         return results

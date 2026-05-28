@@ -100,3 +100,11 @@ scan_reports/
 
 # Checkpoint files
 .wvs_checkpoint_*.json
+
+# Operational / batch scan artifacts
+batch_scanner.py
+check_scan_status.py
+run_batch.cmd
+run_fast.py
+targets_*.txt
+clean/

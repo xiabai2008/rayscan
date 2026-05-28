@@ -172,7 +172,7 @@ class SessionManager:
             else:
                 logger.warning(f"[Session] re-auth failed for {host}")
         except Exception as e:
-            logger.error(f"[Session] re-auth error {host}: {e}")
+            logger.exception(f"[Session] re-auth error {host}")
 
         return self.get_cookies(host)
 

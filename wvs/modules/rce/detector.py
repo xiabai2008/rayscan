@@ -154,7 +154,7 @@ class RCEDetector(DetectionModule):
                 fp["python"] = has_python
                 fp["java"] = has_java
         except Exception:
-            pass
+            logger.debug(f"[RCE] Server fingerprint failed for {target.url}", exc_info=True)
         return fp
 
     async def _detect_php_injection(self, target: ScanTarget, test_token: str) -> List[Vulnerability]:
@@ -312,7 +312,7 @@ class RCEDetector(DetectionModule):
                 )
                 baseline_text = baseline_resp.text[:10000] if baseline_resp else ""
             except Exception:
-                pass
+                logger.debug(f"[RCE] Baseline request failed for {target.url}", exc_info=True)
 
             phpinfo_indicators = [
                 "PHP Version",
@@ -428,7 +428,7 @@ class RCEDetector(DetectionModule):
             )
             baseline_text = baseline_resp.text[:10000] if baseline_resp else ""
         except Exception:
-            pass
+            logger.debug(f"[RCE] Python injection baseline failed for {target.url}", exc_info=True)
 
         for param_name, param_value in params.items():
             for payload, expected, evidence_base in ssti_payloads[:12]:
@@ -532,7 +532,7 @@ class RCEDetector(DetectionModule):
             )
             baseline_text = baseline_resp.text[:10000] if baseline_resp else ""
         except Exception:
-            pass
+            logger.debug(f"[RCE] Java expression baseline failed for {target.url}", exc_info=True)
 
         for param_name, param_value in params.items():
             for payload, expected, evidence_base in java_payloads[:10]:

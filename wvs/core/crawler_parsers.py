@@ -59,8 +59,8 @@ class CrawlerParsersMixin:
                         if self._is_crawlable(full_url) and not self._is_visited(full_url):
                             self._urls_to_visit.append((full_url, 1))
             logger.debug(f"[Crawler] robots.txt parsed: {len(self._urls_to_visit)} URLs queued")
-        except (OSError, asyncio.TimeoutError):
-            pass
+        except (OSError, asyncio.TimeoutError) as e:
+            logger.debug(f"[Crawler] robots.txt parse failed: {e}")
         except Exception as e:
             logger.debug(f"[Crawler] robots.txt parse failed: {e}")
 
@@ -83,8 +83,8 @@ class CrawlerParsersMixin:
                                 url=loc_url, method="GET", source_url=url, source_depth=depth,
                             )
                         )
-        except (OSError, asyncio.TimeoutError):
-            pass
+        except (OSError, asyncio.TimeoutError) as e:
+            logger.debug(f"[Crawler] sitemap parse failed {url}: {e}")
         except Exception as e:
             logger.debug(f"[Crawler] sitemap parse failed {url}: {e}")
         return endpoints

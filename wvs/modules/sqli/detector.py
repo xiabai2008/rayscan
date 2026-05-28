@@ -62,6 +62,22 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
         self._checked_urls = set()
         logger.debug(f"[SQLi] _scan_impl ENTRY: url={target.url}")
 
+        # P24: Global exception guard — ensure scan exits cleanly even on
+        # unhandled errors, preventing exit code 1 without report generation.
+        try:
+            return await self._scan_impl_safe(target)
+        except asyncio.CancelledError:
+            logger.warning("[SQLi] Scan cancelled")
+            return self._found_vulns
+        except Exception as e:
+            logger.error(f"[SQLi] Scan fatally failed: {e}", exc_info=True)
+            return self._found_vulns
+
+    async def _scan_impl_safe(self, target: ScanTarget) -> List[Vulnerability]:
+        """Core scan logic (wrapped by _scan_impl for exception safety)."""
+        self._found_vulns = []
+        self._checked_urls = set()
+
         time_candidates: list = []
         targets = []
 
@@ -188,17 +204,36 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
         param_type: str,
         baseline: Dict,
     ) -> str:
-        """Quick probe to detect DB type using error-based payloads."""
+        """Quick probe to detect DB type using error-based payloads.
+
+        P24 fix: Previously used list(params.keys())[0] which picks the
+        alphabetically first parameter. For params like {a: "text", c: "text",
+        id: "5"}, the first key is "a" — a string value that doesn't error
+        on quote injection, causing DB fingerprint to always return "unknown".
+
+        Fix: Prioritize numeric-looking parameters first, then try all params
+        until one triggers a SQL error.
+        """
+        # Prioritize common ID/numeric parameters
+        PRIORITY_PARAMS = {"id", "uid", "pid", "fid", "cat", "page", "user", "aid", "bid", "cid", "sid", "nid"}
+        param_names = list(params.keys())
+        prioritized = [p for p in param_names if p.lower() in PRIORITY_PARAMS]
+        remaining = [p for p in param_names if p.lower() not in PRIORITY_PARAMS]
+        ordered = prioritized + remaining
+
         for db in ERROR_BASED_PAYLOADS:
             for payload in ERROR_BASED_PAYLOADS[db][:2]:
-                test_params = self._inject_param(params, list(params.keys())[0], payload)
-                resp = await self._send_request(method, url, test_params, param_type)
-                if resp is None:
-                    continue
-                analyzer = ResponseAnalyzer(baseline)
-                is_error, detected_db = analyzer.is_sql_error(resp)
-                if is_error:
-                    return detected_db or db
+                for param_name in ordered:
+                    test_params = self._inject_param(params, param_name, payload)
+                    resp = await self._send_request(method, url, test_params, param_type)
+                    if resp is None:
+                        continue
+                    analyzer = ResponseAnalyzer(baseline)
+                    is_error, detected_db = analyzer.is_sql_error(resp)
+                    if is_error:
+                        return detected_db or db
+                    # Don't flood — first param that doesn't error, try next payload
+                    break
         return "unknown"
 
     # ----------------------------------------------------------
