@@ -111,6 +111,11 @@ METASPLOITABLE2_PROFILE = LabProfile(
     ip_ranges=["172.", "192.168.", "10."],
     url_patterns=["/mutillidae/", "/dav/", "/phpMyAdmin/", "/dvwa/", "/twiki/", "/tikiwiki/"],
     fingerprint_paths=["/mutillidae/", "/dvwa/", "/phpMyAdmin/", "/dav/", "/twiki/", "/tikiwiki/"],
+    login_path="/dvwa/login.php",
+    login_method="POST",
+    login_params={"username": "admin", "password": "password", "Login": "Login"},
+    login_success_marker="Welcome",
+    default_security_level="low",
     endpoints=[
         # ── Mutillidae ──
         LabEndpoint("/mutillidae/index.php?page=text-file-viewer.php", params={"text": "test"}, param_types={"text": "query"}),
@@ -268,7 +273,8 @@ def detect_lab_profile(base_url: str) -> Optional[LabProfile]:
     for name, profile in ALL_PROFILES.items():
         host_match = any(p.lower() in host for p in profile.host_patterns)
         url_match = any(p.lower() in path for p in profile.url_patterns)
-        if host_match or url_match:
+        ip_match = any(host.startswith(r) for r in profile.ip_ranges) if profile.ip_ranges else False
+        if host_match or url_match or ip_match:
             return profile
     return None
 
