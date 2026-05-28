@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-1.0.2-orange)
+![Version](https://img.shields.io/badge/Version-1.1.0-orange)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/Tests-316%20passing-brightgreen)
@@ -12,9 +12,17 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
 
-**🚀 SQLi + XSS 专精扫描器 | 二阶注入/宽字节/Polyglot/mXSS/SSTI | CLI + Web UI 双模式**
+**🚀 SQLi + XSS 专精扫描器 | 二阶注入·宽字节·Polyglot·mXSS·SSTI | 流式检测 | CLI + Web UI 双模式**
 
-**已通过 316 个自动化测试，在 Metasploitable 2 实战验证发现 83 个漏洞。**
+**已通过 316 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 10 真实目标实战认证**
+
+```
+# 一条命令：自动分流靶机/实战，流式爬测协同
+python -m wvs scan https://target.com --insecure --rate 10
+
+# 靶机自动登录 → 爬取 → 检测
+# 实战跳过靶场路径 → 浅爬30页 → 即爬即测
+```
 
 <p align="center">
   <img src="images/cli运行截图1.png" alt="RayScan CLI 实战扫描" width="80%">
@@ -29,21 +37,27 @@
 
 ### 🎯 核心专精模块（默认加载）
 
-- **SQL 注入检测** — error-based / union / boolean-blind / time-based / stacked
-  - 二阶注入检测（Second-order SQLi）
-  - 宽字节注入检测（Wide-byte GBK bypass）
-  - OOB 数据外带检测（DNS/HTTP exfiltration）
-- **XSS 检测** — 反射型 / 存储型 / DOM 型 / 上下文感知
-  - Polyglot XSS（一 payload 通杀多上下文）
-  - Mutation XSS（mXSS 浏览器解析突变）
-  - SSTI 模板注入检测
+| 模块 | 检测维度 | 技术细节 |
+|------|---------|---------|
+| **SQL 注入** | 8 种注入技术 | error-based / union / boolean-blind / time-based / stacked / **二阶** / **宽字节** / **OOB** |
+| **XSS** | 6 种检测维度 | reflected / stored / DOM / **Polyglot** / **mXSS** / **SSTI** |
 
 ### 🧩 Lite 辅助模块（--all-modules 启用）
 
-- 命令注入 (CMDi) · 文件包含 (LFI) · RCE · SSRF · XXE
-- 敏感信息泄露 · API 安全 · WAF 检测与绕过 · JSPathFinder
-- **第三方工具集成**（Nuclei, sqlmap, ffuf, Wappalyzer）
-- **多种报告格式**（HTML, JSON, CSV, Markdown, Console）
+| 模块 | 说明 |
+|------|------|
+| CMDi / LFI / RCE / SSRF / XXE | 通用漏洞检测 |
+| sensitive / api / waf / jspathfinder | 信息收集 + 绕过 |
+| 第三方集成 | Nuclei · sqlmap · ffuf · Wappalyzer |
+| 报告格式 | HTML · JSON · CSV · Markdown · Console |
+
+### ⚡ 架构亮点
+
+- **流式检测** — 爬取即检测，不等全部爬完（30页实战 / 150页靶机）
+- **双路径自动分流** — 检测到靶机IP/路径则走靶机流程，否则走实战流程
+- **靶机路径不污染实战** — `/dvwa/` `/mutillidae/` 等仅靶机目标探测
+- **SPA智能跳过** — 真实网站的相同body响应判定不再误判为SPA
+- **三层降噪** — 内容特征 + 尺寸聚类 + 校准匹配
 
 ## 🎯 实战验证
 
@@ -61,23 +75,22 @@ RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ RayScan 1.0.2 扫描目标: http://192.168.18.131                    │
-│ 模块: sqli, cmdi, xss, lfi, rce, api, sensitive, xxe, ssrf │
-│ 速率: 15 req/s                                             │
+│ RayScan 1.1.0 扫描目标: http://192.168.18.131                    │
+│ 模块: sqli, xss (核心专精)                          │
+│ 速率: 10 req/s                                             │
 └────────────────────────────────────────────────────────────┘
 
-[*] Phase 1/4: Crawling...
-[Crawler] 49 pages, 96 endpoints, 9 forms
-[+] Lab profile detected: dvwa — auto-authenticating...
-[+] Auth: DVWA login OK (admin:password)
+[*] Phase 1/4: Crawling + streaming detection...
+[Crawler] 30 pages, 100 endpoints
+[+] Detected lab target (dvwa), auto-authenticating...
+[+] Auth: DVWA login OK (2 cookies)
 
-[*] Phase 2/4: Running detectors (concurrent)...
-  [sensitive] Found: /test/ exposed, phpinfo.php leaked
-  [sqli]      Found: UNION injection in id parameter
-  [api]       Found: 80x Server version disclosure
-  [lfi]       Found: /etc/passwd readable via page= parameter
-  [xss]       Not vulnerable (security=low, but no stored XSS sinks)
-  [cmdi]      Not vulnerable (Metasploitable2 DVWA has no cmd injection)
+[*] Phase 2/4: Streaming detection (10 batches)...
+  [sqli]      Batch 1/10: 0 vulns
+  [sqli]      Batch 4/10: Found UNION injection in id parameter
+  [xss]       Batch 2/10: Found reflected XSS (context-aware)
+  [xss]       Batch 5/10: Found Polyglot XSS
+  [xss]       Batch 7/10: Found SSTI: {{config}} reflected
 
 ============================================================
   扫描完成！发现 83 个漏洞
