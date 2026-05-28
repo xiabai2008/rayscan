@@ -710,23 +710,16 @@ class WAVScanner(ScannerIntegrationsMixin):
             print(f"[+] 注入 {len(target.cookies)} 个 session cookie")
 
         # ══════════════════════════════════════════════════════════════
-        # Step 1.8: 探测 DVWA 并认证（统一入口，只执行一次）
+        # Step 1.8: 探测靶机并认证（统一入口，只执行一次）
         # ══════════════════════════════════════════════════════════════
-        _dvwa_base: Optional[str] = None
-        if not target.cookies:
-            base_url = target.url.rstrip("/")
-            # 快速探测常见 DVWA 路径
-            for login_url in [
-                f"{base_url}/dvwa/login.php",
-                f"{base_url}/login.php",
-            ]:
-                try:
-                    r = await self.session.get(login_url, timeout=5)
-                    if "dvwa" in r.text.lower():
-                        _dvwa_base = login_url.rsplit("/login.php", 1)[0]
-                        break
-                except Exception:
-                    logger.debug(f"[Scanner] DVWA base guess failed for {login_url}", exc_info=True)
+        if not target.cookies and not self._lab_profile:
+            # 先尝试基于 URL 检测 lab profile（IP 目标也能匹配 ip_ranges）
+            self._lab_profile = detect_lab_profile(target.url)
+            if self._lab_profile:
+                self._lab_base_url = target.url
+                logger.info(f"[*] Detected lab profile from URL: {self._lab_profile.name}")
+                if self._lab_profile.login_path:
+                    await self._do_lab_auth()
 
         # ── Crawl ──
         logger.info("\n[*] Phase 1/4: Crawling...")
