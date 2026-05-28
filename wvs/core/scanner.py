@@ -748,7 +748,7 @@ class WAVScanner(ScannerIntegrationsMixin):
 
                 # 分批检测已爬到的端点
                 if eps:
-                    enriched = await self.crawler.discover_params_batch(eps)
+                    enriched = await self.crawler.discover_params_batch(eps, self.session)
                     for i, ep in enumerate(enriched):
                         if i < len(eps):
                             eps[i].parameters = ep.parameters or eps[i].parameters
