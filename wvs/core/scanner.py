@@ -783,7 +783,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         crawler_stats = self.crawler.get_stats()
         logger.info(
             f"\r[*] Crawled {crawler_stats.get('pages_crawled', 0)} pages, "
-            f"discovered {len(all_endpoints)} endpoints in {total_batches} batches, "
+            f"discovered {len(all_endpoints)} endpoints, "
             f"found {crawler_stats.get('forms_found', 0)} forms"
         )
 
