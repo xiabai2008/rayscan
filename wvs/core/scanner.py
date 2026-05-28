@@ -111,10 +111,11 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._modules_completed: List[str] = []
         self._scan_max_time: int = 0  # CLI 设置，用于超时判断
 
+        # 是否加载全部模块（包括 lite 模块——必须在 _resolve_enabled_modules 之前初始化）
+        self._load_all_modules = False
+
         # 启用的模块列表（按优先级顺序）
         self._enabled_modules = self._resolve_enabled_modules()
-        # 是否加载全部模块（包括 lite 模块）
-        self._load_all_modules = False
 
         # 靶机自动识别（lab profiles）
         self._lab_profile = None
