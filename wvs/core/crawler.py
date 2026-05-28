@@ -336,7 +336,8 @@ class WebCrawler(CrawlerParsersMixin):
             return list(self._endpoints)
 
         # P11: Seed with known Metasploitable2 common paths for multi-service targets
-        await self._seed_common_paths(target_url, session)
+        is_lab = getattr(session, '_lab_mode', False)
+        await self._seed_common_paths(target_url, session, is_lab=is_lab)
 
         # -- SPA detection: crawl 3 pages, compare body hashes --
         if not self._spa_checked:
@@ -852,13 +853,8 @@ class WebCrawler(CrawlerParsersMixin):
     # via the normal crawl link extraction.  Avoid deep wiki/forum
     # paths that would trigger unbounded recursive crawling.
     _DEFAULT_SEED_PATHS = [
-        # ── 靶场 / CTF ──
-        "/dvwa/",
-        "/mutillidae/",
-        "/bodgeit/",
-        "/webgoat/",
-        "/juice-shop/",
-        "/hackme/",
+        # ── 靶场 / CTF (仅当 is_lab=True 时探测) ──
+        # ── 管理后台 ──
         # ── 管理后台 ──
         "/admin/",
         "/wp-admin/",
@@ -919,14 +915,23 @@ class WebCrawler(CrawlerParsersMixin):
         "/backup.zip",
     ]
 
-    async def _seed_common_paths(self, target_url: str, session: HTTPPool) -> None:
-        """P11: Probe common web app paths on the target to discover hidden services."""
+    def _lab_seed_paths(self) -> list:
+        """靶场专用探测路径（仅实验室目标）"""
+        return ["/dvwa/", "/mutillidae/", "/bodgeit/", "/webgoat/", "/juice-shop/", "/hackme/"]
+
+    async def _seed_common_paths(self, target_url: str, session: HTTPPool, is_lab: bool = False) -> None:
+        """P11: Probe common web app paths on the target to discover hidden services.
+
+        Args:
+            is_lab: True = 靶机目标（探测靶场路径）, False = 真实网站（跳过靶场路径）
+        """
         parsed = urllib.parse.urlparse(target_url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
-        # Only probe if we haven't yet crawled many pages (avoid redundant probing)
-        # Probe up to 10 seed paths, 5 concurrently
-        probes = self._seed_paths[:12]
+        probes = list(self._seed_paths)
+        if is_lab:
+            probes = self._lab_seed_paths() + probes
+        probes = probes[:15]
         sem = asyncio.Semaphore(5)
 
         async def _probe_one(path: str):

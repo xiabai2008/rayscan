@@ -712,14 +712,15 @@ class WAVScanner(ScannerIntegrationsMixin):
         # ══════════════════════════════════════════════════════════════
         # Step 1.8: 探测靶机并认证（统一入口，只执行一次）
         # ══════════════════════════════════════════════════════════════
+        # 设置 lab 模式标记（爬虫据此决定是否探测靶场路径/SPA检测）
         if not target.cookies and not self._lab_profile:
-            # 先尝试基于 URL 检测 lab profile（IP 目标也能匹配 ip_ranges）
             self._lab_profile = detect_lab_profile(target.url)
             if self._lab_profile:
                 self._lab_base_url = target.url
                 logger.info(f"[*] Detected lab profile from URL: {self._lab_profile.name}")
                 if self._lab_profile.login_path:
                     await self._do_lab_auth()
+        self.session._lab_mode = self._lab_profile is not None
 
         # ── Crawl ──
         logger.info("\n[*] Phase 1/4: Crawling...")
