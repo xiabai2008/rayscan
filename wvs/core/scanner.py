@@ -727,53 +727,55 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._call_progress("crawl", 0, 100, 3)
 
         # 分批爬取：先爬一批立刻检测，不等全部爬完
-        BATCH_SIZE = 25  # 每批端点数
+        BATCH_SIZE = 10  # 每批检测端点数
+
+        # 限制爬取深度：实战目标不需要爬 1000 页
+        max_crawl = self.config.get("crawl_max_urls", 300)
+        time_budget = max(self._timeout_remaining() * 0.4, 30)  # 最多花 40% 时间爬取
+        self.crawler.max_urls_per_run = min(max_crawl, 150)
+
         all_endpoints: List[DiscoveredEndpoint] = []
         all_vulns_before_dedup: List[Vulnerability] = []
 
-        async def _crawl_all():
-            """全量爬取（分批产出）"""
+        async def _crawl_and_detect():
+            """爬取+检测循环：爬一批，测一批"""
+            module_names = list(self._modules.keys())
             try:
-                return await self.crawler.crawl(target.url, self.session)
+                # 第一次爬取
+                eps = await self.crawler.crawl(target.url, self.session)
+                all_endpoints.extend(eps)
+
+                # 分批检测已爬到的端点
+                if eps:
+                    enriched = await self.crawler.discover_params_batch(eps)
+                    for i, ep in enumerate(enriched):
+                        if i < len(eps):
+                            eps[i].parameters = ep.parameters or eps[i].parameters
+                            eps[i].param_types = ep.param_types or eps[i].param_types
+
+                    for batch_idx in range(0, len(eps), BATCH_SIZE):
+                        if self._timeout_remaining() < 30:
+                            break
+                        batch = eps[batch_idx:batch_idx + BATCH_SIZE]
+                        for mod_name in module_names:
+                            if mod_name not in self._modules:
+                                continue
+                            try:
+                                vulns = await self._run_module_concurrent(
+                                    mod_name, target, batch,
+                                    concurrency=2,
+                                    global_sem=asyncio.Semaphore(2),
+                                )
+                                all_vulns_before_dedup.extend(vulns)
+                                if vulns:
+                                    logger.info(f"[+] {mod_name}: found {len(vulns)} in batch")
+                            except Exception as e:
+                                logger.debug(f"[Scanner] {mod_name} batch error: {e}")
+
             except Exception as e:
                 logger.exception("[Scanner] 爬取失败")
-                return []
 
-        async def _detect_batch(endpoints_batch: List[DiscoveredEndpoint], module_names: List[str]):
-            """对一批端点执行检测"""
-            for mod_name in module_names:
-                if mod_name not in self._modules:
-                    continue
-                try:
-                    vulns = await self._run_module_concurrent(
-                        mod_name, target, endpoints_batch,
-                        concurrency=3,
-                        global_sem=asyncio.Semaphore(2),
-                    )
-                    all_vulns_before_dedup.extend(vulns)
-                    if vulns:
-                        logger.info(f"[+] {mod_name}: found {len(vulns)} in batch ({len(endpoints_batch)} endpoints)")
-                except Exception as e:
-                    logger.debug(f"[Scanner] {mod_name} batch scan error: {e}")
-
-        # 第1步：先爬一批初始端点
-        all_endpoints = await _crawl_all()
-        module_names = list(self._modules.keys())
-
-        # 第2步：分批检测（处理完全部端点后报告）
-        total_batches = (len(all_endpoints) + BATCH_SIZE - 1) // BATCH_SIZE
-        for batch_idx in range(total_batches):
-            batch = all_endpoints[batch_idx * BATCH_SIZE:(batch_idx + 1) * BATCH_SIZE]
-            if not batch:
-                continue
-            # 先补充发现参数
-            enriched = await self.crawler.discover_params_batch(batch)
-            for i, ep in enumerate(enriched):
-                if i < len(batch):
-                    batch[i].parameters = ep.parameters or batch[i].parameters
-                    batch[i].param_types = ep.param_types or batch[i].param_types
-            # 立即检测
-            await _detect_batch(batch, module_names)
+        await _crawl_and_detect()
 
         self._call_progress("crawl", 100, 100, 10)
         self._stats["endpoints_discovered"] = len(all_endpoints)
