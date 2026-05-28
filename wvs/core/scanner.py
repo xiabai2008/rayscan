@@ -722,32 +722,75 @@ class WAVScanner(ScannerIntegrationsMixin):
                     await self._do_lab_auth()
         self.session._lab_mode = self._lab_profile is not None
 
-        # ── Crawl ──
-        logger.info("\n[*] Phase 1/4: Crawling...")
+        # ── Crawl + 流式检测 ──
+        logger.info("\n[*] Phase 1/4: Crawling + streaming detection...")
         self._call_progress("crawl", 0, 100, 3)
-        try:
-            endpoints = await self.crawler.crawl(target.url, self.session)
-        except Exception as e:
-            logger.exception("[Scanner] 爬取失败")
-            endpoints = []
-            self._stats["errors"] += 1
-        self._call_progress("crawl", 100, 100, 10)
 
-        self._stats["endpoints_discovered"] = len(endpoints)
+        # 分批爬取：先爬一批立刻检测，不等全部爬完
+        BATCH_SIZE = 25  # 每批端点数
+        all_endpoints: List[DiscoveredEndpoint] = []
+        all_vulns_before_dedup: List[Vulnerability] = []
+
+        async def _crawl_all():
+            """全量爬取（分批产出）"""
+            try:
+                return await self.crawler.crawl(target.url, self.session)
+            except Exception as e:
+                logger.exception("[Scanner] 爬取失败")
+                return []
+
+        async def _detect_batch(endpoints_batch: List[DiscoveredEndpoint], module_names: List[str]):
+            """对一批端点执行检测"""
+            for mod_name in module_names:
+                if mod_name not in self._modules:
+                    continue
+                try:
+                    vulns = await self._run_module_concurrent(
+                        mod_name, target, endpoints_batch,
+                        concurrency=3,
+                        global_sem=asyncio.Semaphore(2),
+                    )
+                    all_vulns_before_dedup.extend(vulns)
+                    if vulns:
+                        logger.info(f"[+] {mod_name}: found {len(vulns)} in batch ({len(endpoints_batch)} endpoints)")
+                except Exception as e:
+                    logger.debug(f"[Scanner] {mod_name} batch scan error: {e}")
+
+        # 第1步：先爬一批初始端点
+        all_endpoints = await _crawl_all()
+        module_names = list(self._modules.keys())
+
+        # 第2步：分批检测（处理完全部端点后报告）
+        total_batches = (len(all_endpoints) + BATCH_SIZE - 1) // BATCH_SIZE
+        for batch_idx in range(total_batches):
+            batch = all_endpoints[batch_idx * BATCH_SIZE:(batch_idx + 1) * BATCH_SIZE]
+            if not batch:
+                continue
+            # 先补充发现参数
+            enriched = await self.crawler.discover_params_batch(batch)
+            for i, ep in enumerate(enriched):
+                if i < len(batch):
+                    batch[i].parameters = ep.parameters or batch[i].parameters
+                    batch[i].param_types = ep.param_types or batch[i].param_types
+            # 立即检测
+            await _detect_batch(batch, module_names)
+
+        self._call_progress("crawl", 100, 100, 10)
+        self._stats["endpoints_discovered"] = len(all_endpoints)
         crawler_stats = self.crawler.get_stats()
         logger.info(
             f"\r[*] Crawled {crawler_stats.get('pages_crawled', 0)} pages, "
-            f"discovered {len(endpoints)} endpoints, "
+            f"discovered {len(all_endpoints)} endpoints in {total_batches} batches, "
             f"found {crawler_stats.get('forms_found', 0)} forms"
         )
 
-        # P8: Prioritize endpoints — scan dynamic/promising endpoints first
-        endpoints = self._prioritize_endpoints(endpoints)
+        # P8: Prioritize endpoints
+        endpoints = self._prioritize_endpoints(all_endpoints)
 
         if not endpoints:
             endpoints = [DiscoveredEndpoint(url=target.url, method="GET", source_url=target.url, source_depth=1)]
 
-        # ── Re-detect lab profile from discovered paths (for IP targets) ──
+        # ── Re-detect lab profile from discovered paths ──
         if not self._lab_profile:
             discovered_paths = [ep.url for ep in endpoints]
             self._lab_profile = detect_lab_profile_from_paths(target.url, discovered_paths)
@@ -757,7 +800,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                 if not target.cookies:
                     await self._do_lab_auth()
 
-        # ── Append lab endpoints (from profile, not hardcoded) ──
+        # ── Append lab endpoints ──
         if self._lab_profile:
             lab_eps = get_lab_endpoints(self._lab_profile, target.url)
             added = 0
@@ -773,7 +816,6 @@ class WAVScanner(ScannerIntegrationsMixin):
                     endpoints.append(lep)
                     added += 1
                 else:
-                    # Merge: lab profile has authoritative params/method for known targets
                     if not existing.parameters and lep.parameters:
                         existing.parameters = lep.parameters.copy()
                         merged += 1
@@ -783,7 +825,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                     if not existing.param_types and lep.param_types:
                         existing.param_types = lep.param_types.copy()
                         merged += 1
-            logger.info(f"[*] Lab profile ({self._lab_profile.name}): +{added} endpoints, merged params into {merged}")
+            logger.info(f"[*] Lab profile ({self._lab_profile.name}): +{added} endpoints, merged {merged}")
 
         # ── Parameter discovery for endpoints without params ──
         endpoints_without_params = [e for e in endpoints if not e.parameters]
@@ -810,185 +852,12 @@ class WAVScanner(ScannerIntegrationsMixin):
         else:
             self._jspathfinder_vulns = []
 
-        # ── Concurrent detection (P5: global concurrency limiter) ──
-        logger.info("[*] Phase 2/4: Running detectors (concurrent)...")
+        # ── 流式检测完成 ──
+        logger.info(f"[*] Phase 2/4: Streaming detection done ({len(all_vulns_before_dedup)} raw findings)")
 
-        # Inject cross-module baseline cache
-        self._global_baseline_cache.clear()
-        for mod in self._modules.values():
-            if hasattr(mod, "set_global_baseline_cache"):
-                mod.set_global_baseline_cache(self._global_baseline_cache)
+        all_vulns = all_vulns_before_dedup
 
-        # P5: Modules that require parameters to be useful — skip on parameterless endpoints
-        PARAM_REQUIRED_MODULES = {"sqli", "xss", "cmdi", "rce", "lfi", "ssrf", "xxe"}
-
-        remaining = self._timeout_remaining()
-        if remaining < 60:
-            logger.warning(f"[!] Only {remaining:.0f}s remaining before timeout — detection may be incomplete")
-        total_tasks = len(endpoints) * len(self._modules)
-        completed_tasks = 0
-        all_vulns: List[Vulnerability] = []
-        lock = asyncio.Lock()
-
-        # P19: Configurable rate limiting — safe defaults for fragile targets
-        raw_concurrent = self.config.get("concurrent_endpoints", 8) * min(len(self._modules), 3)
-        max_concurrent_requests = min(
-            raw_concurrent,
-            self.config.get("max_concurrent_requests", 10),
-        )
-        global_sem = asyncio.Semaphore(max_concurrent_requests)
-
-        # P5: Filter endpoints for param-required modules
-        endpoints_with_params = [e for e in endpoints if e.parameters]
-        endpoints_without_params = [e for e in endpoints if not e.parameters]
-
-        # P23: Limit POST endpoints to avoid form-storm on dense pages.
-        # Mutillidae's add-to-your-blog.php + register.php have 8+ fields
-        # each, and crawling finds them repeatedly with different ?page= values.
-        POST_ENDPOINT_LIMIT = self.config.get("max_post_endpoints", 12)
-        post_eps = [e for e in endpoints if e.method == "POST"]
-        if len(post_eps) > POST_ENDPOINT_LIMIT:
-            # Keep GET endpoints, sample the most interesting POST endpoints
-            get_eps = [e for e in endpoints if e.method != "POST"]
-            # Sort POST endpoints by parameter count (fewer params = faster to test)
-            post_eps.sort(key=lambda ep: len(ep.parameters))
-            sampled_post = post_eps[:POST_ENDPOINT_LIMIT]
-            logger.warning(
-                f"[!] POST endpoint limit ({len(post_eps)} > {POST_ENDPOINT_LIMIT}) — "
-                f"sampling {len(sampled_post)} most compact"
-            )
-            endpoints = get_eps + sampled_post
-            # Re-filter after sampling
-            endpoints_with_params = [e for e in endpoints if e.parameters]
-            endpoints_without_params = [e for e in endpoints if not e.parameters]
-
-        # P10: Track requests per module for budget enforcement
-        _requests_before: Dict[str, int] = {}
-        MODULE_MAX_REQUESTS = 1000  # P14: tighter budget (was 3000) — SQLi payloads already slimmed
-
-        # P5: Process modules sequentially, endpoints concurrently within each module.
-        async def run_and_track(module_name: str) -> List[Vulnerability]:
-            nonlocal completed_tasks
-            # P10: Check request budget — if this module has already made too many
-            # requests without findings, skip it
-            reqs_made = self.session.get_stats().get("total_requests", 0)
-            _requests_before.setdefault(module_name, reqs_made)
-            module_reqs = reqs_made - _requests_before.get(module_name, reqs_made)
-            if module_reqs > MODULE_MAX_REQUESTS:
-                logger.warning(f"[!] Skipping module '{module_name}' — request budget exceeded ({module_reqs})")
-                async with lock:
-                    completed_tasks += len(endpoints)
-                    self._print_progress(completed_tasks, total_tasks, module_name)
-                return []
-
-            if self._timeout_remaining() < 30:
-                logger.warning(f"[!] Skipping module '{module_name}' — timeout approaching")
-                async with lock:
-                    completed_tasks += len(endpoints)
-                    self._print_progress(completed_tasks, total_tasks, module_name)
-                return []
-
-            # P5: Skip param-injection modules on parameterless endpoints
-            if module_name in PARAM_REQUIRED_MODULES:
-                module_endpoints = endpoints_with_params
-            else:
-                module_endpoints = endpoints
-
-            if not module_endpoints:
-                async with lock:
-                    completed_tasks += len(endpoints)
-                    self._print_progress(completed_tasks, total_tasks, module_name)
-                return []
-
-            # P23: Trim POST form parameters — keep only security-relevant ones
-            # to avoid form-storm on blog/message/register forms with many fields.
-            POST_PRIORITY_PARAMS = {"username", "password", "pass", "email", "id", "uid", "pid",
-                                    "page", "file", "path", "url", "cmd", "exec", "query", "search",
-                                    "q", "cat", "category", "name", "title", "comment", "content"}
-            for ep in module_endpoints:
-                if ep.method.upper() == "POST" and len(ep.parameters) > 3:
-                    trimmed = {k: v for k, v in ep.parameters.items() if k.lower() in POST_PRIORITY_PARAMS}
-                    if trimmed:
-                        ep.parameters = trimmed
-
-            # P11: Stricter per-module endpoint cap + early exit for better performance
-            MAX_EP_PER_MODULE = 50  # increased from 25 — more endpoints = more findings
-            if module_name in PARAM_REQUIRED_MODULES and len(module_endpoints) > MAX_EP_PER_MODULE:
-                # Prioritize and keep the most promising endpoints
-                module_endpoints = self._prioritize_endpoints(module_endpoints)[:MAX_EP_PER_MODULE]
-
-            # P11: More aggressive early exit — test first 5 endpoints; 3 consecutive no-finds → skip module
-            EARLY_EXIT_SAMPLE = 6  # increased from 3 — more samples before early exit
-            if len(module_endpoints) > EARLY_EXIT_SAMPLE and module_name in PARAM_REQUIRED_MODULES:
-                sample_eps = module_endpoints[:EARLY_EXIT_SAMPLE]
-                concurrency = self.config.get("concurrent_endpoints", 12)
-                sample_vulns = await self._run_module_concurrent(
-                    module_name,
-                    target,
-                    sample_eps,
-                    concurrency,
-                    global_sem,
-                )
-                if not sample_vulns:
-                    async with lock:
-                        completed_tasks += len(endpoints)
-                        self._print_progress(completed_tasks, total_tasks, module_name)
-                    return []
-                # Found something — scan ALL remaining endpoints too
-                remaining_eps = module_endpoints[EARLY_EXIT_SAMPLE:]
-                rest_vulns = await self._run_module_concurrent(
-                    module_name,
-                    target,
-                    remaining_eps,
-                    concurrency,
-                    global_sem,
-                )
-                vulns = sample_vulns + rest_vulns
-            else:
-                concurrency = self.config.get("concurrent_endpoints", 12)
-                vulns = await self._run_module_concurrent(
-                    module_name,
-                    target,
-                    module_endpoints,
-                    concurrency,
-                    global_sem,
-                )
-
-            async with lock:
-                completed_tasks += len(endpoints)
-                self._print_progress(completed_tasks, total_tasks, module_name)
-            return vulns
-
-        # P5: Run modules in batches of 3 to bound memory usage.
-        # P8: Sort modules by priority — faster/critical modules first.
-        module_names = sorted(
-            self._modules.keys(),
-            key=lambda m: _MODULE_PRIORITY.index(m) if m in _MODULE_PRIORITY else 99,
-        )
-        self._modules_done = []
-        for batch_start in range(0, len(module_names), 3):
-            batch = module_names[batch_start: batch_start + 3]
-            if self._timeout_remaining() < 30:
-                logger.warning("[!] Timeout approaching — skipping remaining modules")
-                break
-            for mod_name in batch:
-                self._call_progress(mod_name, 0, 100, 15 + (batch_start / max(len(module_names), 1)) * 75)
-            batch_tasks = [run_and_track(name) for name in batch]
-            results = await asyncio.gather(*batch_tasks, return_exceptions=True)
-            for name, res in zip(batch, results):
-                if isinstance(res, Exception):
-                    logger.error(f"[Scanner] module error: {res}")
-                    self._stats["errors"] += 1
-                elif isinstance(res, list):
-                    all_vulns.extend(res)
-                if name not in self._modules_done:
-                    self._modules_done.append(name)
-            # P5: Release memory between batches to prevent OOM/SIGKILL
-            gc.collect()
-            # P8: Auto-save checkpoint after each batch for crash/timeout resilience
-            self._save_checkpoint(target.url, all_vulns, endpoints)
-
-        # ── Merge JSPathfinder findings ──
+        # ── Merge JSPathfinder findings (disabled by default) ──
         if getattr(self, "_jspathfinder_vulns", None):
             all_vulns.extend(self._jspathfinder_vulns)
 
