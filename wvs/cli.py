@@ -282,7 +282,7 @@ def cmd_scan(args):  # noqa: C901
     # 执行扫描
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan 1.0.2[/bold cyan] 扫描目标: [bold]{target_url}[/bold]\n"
+            f"[bold cyan]RayScan 1.1.0[/bold cyan] 扫描目标: [bold]{target_url}[/bold]\n"
             f"模块: {', '.join(scanner._loaded_module_names) or '全部'}\n"
             f"速率: {config.get('rate', 10)} req/s",
             border_style="cyan",
@@ -376,7 +376,7 @@ def cmd_batch(args):
 
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan 1.0.2 批量扫描[/bold cyan]\n目标数量: [bold]{len(targets)}[/bold]",
+            f"[bold cyan]RayScan 1.1.0 批量扫描[/bold cyan]\n目标数量: [bold]{len(targets)}[/bold]",
             border_style="cyan",
         )
     )
@@ -490,7 +490,7 @@ def cmd_version(args):
     """显示版本信息"""
     console.print(
         Panel.fit(
-            "[bold cyan]RayScan 1.0.2[/bold cyan]\nWeb 漏洞扫描器\nby xiabai2004",
+            "[bold cyan]RayScan 1.1.0[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2004",
             border_style="cyan",
         )
     )
@@ -551,7 +551,7 @@ def display_result(result: ScanResult, elapsed: float, args):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rayscan",
-        description="RayScan 1.0.2 — Web 漏洞扫描器",
+        description="RayScan 1.1.0 — SQLi + XSS 专精扫描器 | 二阶注入/宽字节/OOB/Polyglot/mXSS/SSTI",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
