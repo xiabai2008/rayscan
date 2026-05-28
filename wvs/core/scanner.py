@@ -729,10 +729,11 @@ class WAVScanner(ScannerIntegrationsMixin):
         # 分批爬取：先爬一批立刻检测，不等全部爬完
         BATCH_SIZE = 10  # 每批检测端点数
 
-        # 限制爬取深度：实战目标不需要爬 1000 页
+        # 限制爬取深度：实战目标快速收敛，留时间给检测
         max_crawl = self.config.get("crawl_max_urls", 300)
-        time_budget = max(self._timeout_remaining() * 0.4, 30)  # 最多花 40% 时间爬取
-        self.crawler.max_urls_per_run = min(max_crawl, 150)
+        max_pages = 30 if not self._lab_profile else 150  # 实战30页，靶机150页
+        self.crawler.max_urls_per_run = min(max_crawl, max_pages)
+        self.crawler.max_depth = 2 if not self._lab_profile else 4  # 实战浅爬
 
         all_endpoints: List[DiscoveredEndpoint] = []
         all_vulns_before_dedup: List[Vulnerability] = []
