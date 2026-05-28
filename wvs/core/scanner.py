@@ -795,7 +795,8 @@ class WAVScanner(ScannerIntegrationsMixin):
                     ep.param_types = enriched[i].param_types
 
         # ── Phase 1.5 — JS endpoint & secret analysis (JSPathfinder) ──
-        if self.config.get("modules.jspathfinder.enabled", True):
+        # Disabled by default in v1.1.0 (sqli+xss focus). Enable with modules.jspathfinder.enabled=true
+        if self.config.get("modules.jspathfinder.enabled", False):
             logger.info("\n[*] Phase 1.5/4: JS analysis (JSPathFinder)...")
             self._call_progress("jspathfinder", 0, 1, 12)
             try:

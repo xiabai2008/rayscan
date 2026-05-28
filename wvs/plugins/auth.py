@@ -304,15 +304,29 @@ class FormLoginAuth(AuthProvider):
                         "error": "Still on login page after login, possibly incorrect username/password or invalid CSRF token",
                     }
 
+            # Helper: safely extract cookies from httpx session (handles CookieConflict)
+            def _safe_cookies(s):
+                try:
+                    return dict(s.cookies)
+                except Exception:
+                    # httpx.CookieConflict when multiple cookies share a name
+                    result = {}
+                    try:
+                        for cookie in s.cookies.jar:
+                            result[cookie.name] = cookie.value
+                    except Exception:
+                        pass
+                    return result
+
             # 4c. Check success indicator
             if self.success_check:
                 if self.success_check in resp.text:
-                    cookies = dict(session.cookies)
+                    cookies = _safe_cookies(session)
                     logger.info(f"[Auth:FormLogin] Login successful, got {len(cookies)} cookies")
                     return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
                 else:
                     # No success marker, but no failure marker either -- try checking cookies
-                    cookies = dict(session.cookies)
+                    cookies = _safe_cookies(session)
                     if cookies:
                         logger.info(f"[Auth:FormLogin] No success marker but {len(cookies)} cookies present, treating as login success")
                         return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
@@ -325,7 +339,7 @@ class FormLoginAuth(AuthProvider):
 
             # 4d. Default: cookies = success
             if resp.status_code in (200, 302, 303):
-                cookies = dict(session.cookies)
+                cookies = _safe_cookies(session)
                 if cookies:
                     logger.info(f"[Auth:FormLogin] Login successful ({len(cookies)} cookies)")
                     return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
