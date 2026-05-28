@@ -1,4 +1,4 @@
-# 🔬 RayScan 1.0.2
+# 🔬 RayScan 1.1.0
 
 <div align="center">
 
@@ -12,7 +12,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
 
-**🚀 开箱即用的 Web 漏洞扫描器 | 11 个检测模块 | CLI + Web UI 双模式**
+**🚀 SQLi + XSS 专精扫描器 | 二阶注入/宽字节/Polyglot/mXSS/SSTI | CLI + Web UI 双模式**
 
 **已通过 316 个自动化测试，在 Metasploitable 2 实战验证发现 83 个漏洞。**
 
@@ -27,16 +27,21 @@
 
 ## 📋 功能特性
 
+### 🎯 核心专精模块（默认加载）
+
 - **SQL 注入检测** — error-based / union / boolean-blind / time-based / stacked
-- **XSS 检测** — 反射型 / 存储型 / DOM 型
-- **命令注入 (CMDi) 检测**
-- **文件包含 (LFI) 检测**
-- **SSRF / XXE 检测**
-- **RCE 检测**
-- **敏感信息泄露检测**
-- **WAF 检测与绕过**
-- **API 安全扫描**
-- **JSPathFinder** — JavaScript 端点发现
+  - 二阶注入检测（Second-order SQLi）
+  - 宽字节注入检测（Wide-byte GBK bypass）
+  - OOB 数据外带检测（DNS/HTTP exfiltration）
+- **XSS 检测** — 反射型 / 存储型 / DOM 型 / 上下文感知
+  - Polyglot XSS（一 payload 通杀多上下文）
+  - Mutation XSS（mXSS 浏览器解析突变）
+  - SSTI 模板注入检测
+
+### 🧩 Lite 辅助模块（--all-modules 启用）
+
+- 命令注入 (CMDi) · 文件包含 (LFI) · RCE · SSRF · XXE
+- 敏感信息泄露 · API 安全 · WAF 检测与绕过 · JSPathFinder
 - **第三方工具集成**（Nuclei, sqlmap, ffuf, Wappalyzer）
 - **多种报告格式**（HTML, JSON, CSV, Markdown, Console）
 

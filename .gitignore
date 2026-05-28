@@ -91,9 +91,9 @@ probe_*.py
 test_*.py
 tests/
 
-# Temp scan scripts
-_*.py
-_*.md
+# Temp scan scripts (but NOT __init__.py)
+_[a-z]*.py
+_[a-z]*.md
 
 # Scan reports
 scan_reports/

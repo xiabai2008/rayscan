@@ -120,6 +120,15 @@ class XSSDetector(DetectionModule):
             # Reflected XSS test
             await self._test_reflected(url, params, param_name, method, param_type, baseline_text)
 
+            # Polyglot XSS test (multi-context payloads)
+            await self._test_polyglot(url, params, param_name, method, param_type, baseline_text)
+
+            # Mutation XSS (mXSS) test
+            await self._test_mxss(url, params, param_name, method, param_type, baseline_text)
+
+            # SSTI (template injection) test
+            await self._test_ssti(url, params, param_name, method, param_type, baseline_text)
+
             # DOM-based XSS test
             await self._test_dom(url, params, param_name, param_type, baseline_text)
 
@@ -266,6 +275,133 @@ class XSSDetector(DetectionModule):
 
         except Exception as e:
             logger.debug(f"[XSS] Blind XSS detection failed: {e}")
+
+    async def _test_polyglot(
+        self,
+        url: str,
+        params: Dict[str, str],
+        param_name: str,
+        method: str,
+        param_type: str,
+        baseline_text: str,
+    ) -> None:
+        """
+        Polyglot XSS detection — one payload tests HTML/attribute/JS/URL contexts at once.
+        """
+        from .payloads import POLYGLOT_PAYLOADS
+
+        for payload in POLYGLOT_PAYLOADS[:5]:
+            test_params = params.copy()
+            test_params[param_name] = payload
+            resp = await self._send_request(method, url, test_params, param_type)
+            if resp is None:
+                continue
+            resp_text = resp.get("text", "")[:20000]
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            if reflected:
+                vuln = self._create_vuln(
+                    url=url,
+                    param=param_name,
+                    param_type=param_type,
+                    method=method,
+                    payload=payload[:80],
+                    vuln_type="reflected",
+                    evidence=evidence or f"Polyglot XSS: multi-context payload reflected",
+                )
+                self._found_vulns.append(vuln)
+                logger.info(f"[XSS] Polyglot XSS: {url} [{param_name}]")
+                return
+
+    async def _test_mxss(
+        self,
+        url: str,
+        params: Dict[str, str],
+        param_name: str,
+        method: str,
+        param_type: str,
+        baseline_text: str,
+    ) -> None:
+        """
+        Mutation XSS (mXSS) detection — payloads that exploit browser parser mutations.
+        """
+        from .payloads import MXSS_PAYLOADS
+
+        for payload in MXSS_PAYLOADS[:8]:
+            test_params = params.copy()
+            test_params[param_name] = payload
+            resp = await self._send_request(method, url, test_params, param_type)
+            if resp is None:
+                continue
+            resp_text = resp.get("text", "")[:20000]
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            if reflected:
+                vuln = self._create_vuln(
+                    url=url,
+                    param=param_name,
+                    param_type=param_type,
+                    method=method,
+                    payload=payload[:80],
+                    vuln_type="reflected",
+                    evidence=evidence or f"mXSS payload reflected — verify browser-side mutation",
+                )
+                self._found_vulns.append(vuln)
+                logger.info(f"[XSS] mXSS payload reflected: {url} [{param_name}]")
+                return
+
+    async def _test_ssti(
+        self,
+        url: str,
+        params: Dict[str, str],
+        param_name: str,
+        method: str,
+        param_type: str,
+        baseline_text: str,
+    ) -> None:
+        """
+        SSTI (Server-Side Template Injection) detection.
+        Tests for template engine evaluation in reflected content.
+        """
+        from .payloads import SSTI_PAYLOADS
+
+        for payload in SSTI_PAYLOADS[:10]:
+            test_params = params.copy()
+            test_params[param_name] = payload
+            resp = await self._send_request(method, url, test_params, param_type)
+            if resp is None:
+                continue
+            resp_text = resp.get("text", "")[:20000]
+
+            # SSTI detection: check for math evaluation (7*7=49)
+            if "49" in resp_text and "7*7" not in baseline_text:
+                # Template engine evaluated the expression!
+                vuln = self._create_vuln(
+                    url=url,
+                    param=param_name,
+                    param_type=param_type,
+                    method=method,
+                    payload=payload,
+                    vuln_type="ssti",
+                    evidence=f"SSTI: '7*7' evaluated to '49' in response — template engine active",
+                )
+                self._found_vulns.append(vuln)
+                logger.info(f"[XSS] SSTI detected: {url} [{param_name}] (7*7=49)")
+                return
+
+            # Also check for generic reflection of template syntax
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            if reflected and any(kw in resp_text.lower() for kw in ("config", "self", "__class__")):
+                vuln = self._create_vuln(
+                    url=url,
+                    param=param_name,
+                    param_type=param_type,
+                    method=method,
+                    payload=payload[:80],
+                    vuln_type="ssti",
+                    evidence=evidence or f"Template syntax reflected with context clues",
+                )
+                self._found_vulns.append(vuln)
+                logger.info(f"[XSS] SSTI reflection: {url} [{param_name}]")
+                return
 
     async def _test_reflected(
         self,

@@ -171,7 +171,11 @@ def cmd_scan(args):  # noqa: C901
         console.print(f"[cyan][OOB] 使用 OOB 服务器: {args.oob_server}[/cyan]")
 
     # 加载指定模块
-    if args.modules:
+    if hasattr(args, 'all_modules') and args.all_modules:
+        scanner._load_all_modules = True
+        scanner.load_all_modules()
+        console.print(f"[cyan][*] 加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
+    elif args.modules:
         for mod in args.modules:
             scanner.load_module(mod)
     else:
@@ -380,7 +384,12 @@ def cmd_batch(args):
     config = ConfigManager()
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
-    scanner.load_all_modules()
+    if hasattr(args, 'all_modules') and args.all_modules:
+        scanner._load_all_modules = True
+        scanner.load_all_modules()
+        console.print(f"[cyan][*] 批量加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
+    else:
+        scanner.load_all_modules()
 
     batch_size = args.threads or 3
 
@@ -453,24 +462,27 @@ def cmd_list_modules(args):
     register_all_modules()
 
     modules = ModuleFactory.list_modules()
-    table = Table(title="可用检测模块")
+    table = Table(title="RayScan 检测模块")
     table.add_column("名称", style="cyan")
     table.add_column("描述")
     table.add_column("默认", justify="center")
-    table.add_column("标签")
+    table.add_column("层级")
 
+    core_modules = {"sqli", "xss"}
     for name in modules:
         info = ModuleFactory.get_module_info(name)
         if info:
+            tier = "[bold]核心[/bold]" if name in core_modules else "lite"
             table.add_row(
                 name,
                 info.description,
-                "[OK]" if info.enabled_by_default else "[X]",
-                ", ".join(info.tags) if info.tags else "-",
+                "[OK]" if name in core_modules else "[X]",
+                tier,
             )
 
     console.print(table)
-    console.print(f"\n共 {len(modules)} 个模块")
+    console.print(f"\n共 {len(modules)} 个模块（核心: sqli+xss, lite: {len(modules)-2} 个）")
+    console.print("[dim]提示: 使用 --all-modules 加载全部 lite 模块[/dim]")
     return 0
 
 
@@ -550,7 +562,8 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式（默认 json）")
     scan_parser.add_argument("-t", "--threads", type=int, help="并发线程数")
     scan_parser.add_argument("--timeout", type=int, help="请求超时（秒）")
-    scan_parser.add_argument("--modules", nargs="+", help="指定启用的模块（如 sqli cmdi xss）")
+    scan_parser.add_argument("--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块，默认只加载 sqli+xss）")
+    scan_parser.add_argument("--modules", nargs="+", help="指定启用的模块（如 sqli xss）")
     scan_parser.add_argument("--no-modules", nargs="+", dest="disabled_modules", help="禁用的模块")
     scan_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
 
@@ -588,6 +601,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser = sub.add_parser("batch", help="批量扫描")
     batch_parser.add_argument("file", help="目标列表文件（每行一个 URL）")
     batch_parser.add_argument("-o", "--output", help="汇总报告输出路径")
+    batch_parser.add_argument("--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块）")
     batch_parser.add_argument("-t", "--threads", type=int, default=3, help="并发数（默认 3）")
     batch_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
 

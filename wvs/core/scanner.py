@@ -39,17 +39,21 @@ logger = logging.getLogger(__name__)
 
 # Module execution priority — faster/critical modules run first
 _MODULE_PRIORITY = [
-    "sensitive",   # fast pattern-based checks
-    "waf",         # WAF detection (informational, runs first)
     "sqli",        # critical — test priority
-    "xss",         # relatively fast
+    "xss",         # cross-site scripting
+]
+
+# Lite modules (loaded when --all-modules is set)
+_LITE_MODULE_PRIORITY = [
+    "sensitive",   # fast pattern-based checks
+    "waf",         # WAF detection
     "cmdi",        # command injection
     "lfi",         # file inclusion
     "ssrf",        # server-side request forgery
     "xxe",         # XML external entity
     "rce",         # time-based (slowest)
     "api",         # API security
-    "js_analysis", # JS sensitive info / endpoints (from LinkFinder)
+    "js_analysis", # JS sensitive info / endpoints
 ]
 
 
@@ -109,6 +113,8 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         # 启用的模块列表（按优先级顺序）
         self._enabled_modules = self._resolve_enabled_modules()
+        # 是否加载全部模块（包括 lite 模块）
+        self._load_all_modules = False
 
         # 靶机自动识别（lab profiles）
         self._lab_profile = None
@@ -144,9 +150,16 @@ class WAVScanner(ScannerIntegrationsMixin):
     # ─────────────────────────────────────────────────────────────
 
     def _resolve_enabled_modules(self) -> List[str]:
-        """从配置中解析出要启用的模块列表"""
+        """从配置中解析出要启用的模块列表
+
+        默认只加载核心模块（sqli + xss）。
+        设置 load_all=True 或配置 modules.all=true 加载全部（含 lite 模块）。
+        """
+        if self._load_all_modules or self.config.get("modules.all", False):
+            return list(_MODULE_PRIORITY + [m for m in _LITE_MODULE_PRIORITY if m not in _MODULE_PRIORITY])
+
         enabled = []
-        for name in ("sqli", "cmdi", "xss", "lfi", "rce", "api", "sensitive", "xxe", "ssrf", "waf", "js_analysis"):
+        for name in _MODULE_PRIORITY:
             cfg = self.config.get(f"modules.{name}", {})
             if isinstance(cfg, dict) and cfg.get("enabled", True):
                 enabled.append(name)

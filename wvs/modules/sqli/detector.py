@@ -186,11 +186,20 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
                 await self._test_union_based(url, params, param_name, param_value, method, param_type, baseline)
                 await self._test_boolean_blind(url, params, param_name, param_value, method, param_type, baseline)
 
+            # Wide-byte injection (GBK bypass for addslashes)
+            await self._test_wide_byte(url, params, param_name, param_value, method, param_type, baseline, waf_prefix)
+
+            # Second-order SQLi (POST endpoints only — data may be stored)
+            await self._test_second_order(url, params, param_name, param_value, method, param_type, baseline)
+
             if time_candidates is not None:
                 time_candidates.append((url, params.copy(), param_name, param_value, method, param_type, baseline, db_type))
             else:
                 await self._test_time_based(url, params, param_name, param_value, method, param_type, baseline, db_type)
                 await self._test_stacked_query(url, params, param_name, param_value, method, param_type, baseline)
+
+            # OOB exfiltration (DNS/HTTP callback, requires --oob-server)
+            await self._test_oob_exfil(url, params, param_name, param_value, method, param_type, baseline)
 
     # ----------------------------------------------------------
     # DBMS Fingerprinting
