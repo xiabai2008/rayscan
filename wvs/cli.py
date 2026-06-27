@@ -641,6 +641,125 @@ def cmd_profile(args):
     return 0
 
 
+def cmd_use(args):
+    """使用 Profile 扫描目标"""
+    from .profiles import ProfileManager
+
+    manager = ProfileManager()
+
+    # Load profile
+    profile = manager.load_profile(args.profile)
+    if profile is None:
+        console.print(f"[red]错误：Profile '{args.profile}' 不存在[/red]")
+        console.print("[dim]使用 'rayscan profile list' 查看可用 Profile[/dim]")
+        return 1
+
+    # Initialize config from profile
+    config = ConfigManager()
+    manager.apply_to_config(config, args.profile)
+
+    # Override with CLI args
+    if args.verbose:
+        config.set("verbose", True)
+    if args.insecure:
+        config.set("verify_ssl", False)
+    if args.max_time:
+        config.set("max_time", args.max_time)
+
+    # Set up scanner
+    session = HTTPPool(config)
+    scanner = WAVScanner(config, session)
+
+    # Apply profile modules
+    enabled_modules, disabled_modules = manager.get_profile_modules(args.profile)
+
+    if enabled_modules:
+        # Profile specifies exact modules
+        for mod in enabled_modules:
+            scanner.load_module(mod)
+    else:
+        # Load all default modules
+        scanner.load_all_modules()
+
+    # Apply CLI module overrides
+    if hasattr(args, "disabled_modules") and args.disabled_modules:
+        for mod_name in list(scanner._modules.keys()):
+            if mod_name in args.disabled_modules:
+                del scanner._modules[mod_name]
+
+    # Load auth if specified
+    target = ScanTarget(url=args.url)
+    if args.auth:
+        auth_path = Path(args.auth)
+        if auth_path.exists():
+            try:
+                import json
+                auth_data = json.loads(auth_path.read_text(encoding="utf-8"))
+                auth_manager = AuthManager(config)
+
+                if "cookie" in auth_data:
+                    auth_manager.configure_cookies(cookies=auth_data["cookie"])
+                if "bearer" in auth_data:
+                    auth_manager.configure_bearer(token=auth_data["bearer"])
+                if "basic" in auth_data:
+                    auth_manager.configure_basic(**auth_data["basic"])
+                if "headers" in auth_data:
+                    for k, v in auth_data["headers"].items():
+                        target.headers[k] = v
+
+                # Apply auth
+                import httpx
+                async def _do_auth():
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
+                        return await auth_manager.authenticate(tmp_client)
+                asyncio.run(_do_auth())
+                auth_manager.apply_to_target(target)
+
+                # Sync cookies
+                for name, value in target.cookies.items():
+                    session.set_cookie(args.url, name, value)
+            except Exception as e:
+                console.print(f"[yellow]认证加载失败: {e}，继续扫描[/yellow]")
+
+    # Print banner
+    console.print(
+        Panel.fit(
+            f"[bold cyan]RayScan 1.1.0[/bold cyan] Profile: [bold]{args.profile}[/bold]\n"
+            f"扫描目标: [bold]{args.url}[/bold]\n"
+            f"模块: {', '.join(scanner._loaded_module_names) or '全部'}\n"
+            f"速率: {config.get('rate', 10)} req/s",
+            border_style="cyan",
+        )
+    )
+
+    # Execute scan
+    start = time.perf_counter()
+
+    async def run_scan():
+        try:
+            result = await scanner.scan(target)
+            return result
+        finally:
+            await session.close()
+
+    try:
+        result = asyncio.run(run_scan())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]扫描被中断[/yellow]")
+        return 130
+    except Exception as e:
+        console.print(f"\n[red]扫描异常: {e}[/red]")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()[:500]}[/dim]")
+        return 1
+
+    elapsed = time.perf_counter() - start
+
+    # Display results
+    display_result(result, elapsed, args)
+    return 0
+
+
 # ─────────────────────────────────────────────────────────────────
 # 结果展示
 # ─────────────────────────────────────────────────────────────────
@@ -803,6 +922,19 @@ def build_parser() -> argparse.ArgumentParser:
     profile_import = profile_sub.add_parser("import", help="导入 Profile")
     profile_import.add_argument("path", help="Profile 文件或目录路径")
 
+    # use 命令：加载 Profile 并执行扫描
+    use_parser = sub.add_parser("use", help="使用 Profile 扫描目标")
+    use_parser.add_argument("profile", help="Profile 名称")
+    use_parser.add_argument("-u", "--url", required=True, help="目标 URL")
+    use_parser.add_argument("-o", "--output", help="输出报告文件路径")
+    use_parser.add_argument("-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式")
+    use_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
+    use_parser.add_argument("--auth", help="认证文件路径（JSON）")
+    use_parser.add_argument("--max-time", type=int, default=7200, help="扫描超时（秒）")
+    use_parser.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证")
+    use_parser.add_argument("--modules", nargs="+", help="额外启用的模块")
+    use_parser.add_argument("--no-modules", nargs="+", dest="disabled_modules", help="额外禁用的模块")
+
     return parser
 
 
@@ -822,6 +954,9 @@ def main():
         return cmd_version(args)
     elif args.command == "profile":
         return cmd_profile(args)
+    elif args.command == "use":
+        setup_logging(args.verbose)
+        return cmd_use(args)
     else:
         parser.print_help()
         return 1
