@@ -1,0 +1,13 @@
+name: sqli-only
+description: 只扫SQL注入
+modules:
+  enabled:
+    - sqli
+  disabled: []
+params:
+  rate: 20
+  threads: 10
+  timeout: 30
+  crawl_depth: 2
+  crawl_max_urls: 100
+  verify_ssl: false

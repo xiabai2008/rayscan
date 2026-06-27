@@ -1,0 +1,16 @@
+name: src-quick
+description: SRC快瞄 — 高灵敏度，快速出结果
+modules:
+  enabled:
+    - sqli
+    - xss
+    - cmdi
+    - lfi
+  disabled: []
+params:
+  rate: 20
+  threads: 10
+  timeout: 15
+  crawl_depth: 2
+  crawl_max_urls: 50
+  verify_ssl: false

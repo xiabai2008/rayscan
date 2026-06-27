@@ -1,0 +1,12 @@
+name: default
+description: 均衡模式，全模块
+modules:
+  enabled: []
+  disabled: []
+params:
+  rate: 10
+  threads: 5
+  timeout: 30
+  crawl_depth: 3
+  crawl_max_urls: 100
+  verify_ssl: true
