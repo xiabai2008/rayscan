@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -279,6 +280,39 @@ def cmd_scan(args):  # noqa: C901
             session.set_cookie(target_url, name, value)
         console.print(f"[cyan]  已同步 {len(target.cookies)} 个 cookie 到扫描 session[/cyan]")
 
+    # ── 利用引擎开关校验（默认禁用） ──
+    exploit_enabled = False
+    if hasattr(args, "i_have_permission") and args.i_have_permission:
+        if os.environ.get("RAYSCAN_ENABLE_EXPLOIT") != "1":
+            console.print(
+                "[red][X] --i-have-permission 已设置，但环境变量 "
+                "RAYSCAN_ENABLE_EXPLOIT != 1。利用模块拒绝加载。[/red]"
+            )
+            return 1
+        console.print(
+            Panel.fit(
+                "[bold yellow]⚠  LEGAL WARNING ⚠[/bold yellow]\n"
+                "你已确认对目标拥有书面授权。\n"
+                "本次扫描将加载 wvs.exploit 自动利用模块，\n"
+                "包括 SQLMap 链式利用、反弹 Shell、SSRF 元数据外发等。\n"
+                "未授权扫描属违法行为，使用者自负法律责任。",
+                border_style="yellow",
+            )
+        )
+        try:
+            confirm = console.input(
+                "[bold red]请输入 YES 确认继续（任意其他输入取消）：[/bold red]"
+            )
+        except (EOFError, KeyboardInterrupt):
+            confirm = ""
+        if confirm.strip() != "YES":
+            console.print("[yellow]已取消。[/yellow]")
+            return 0
+        exploit_enabled = True
+        logger.warning(
+            "[EXPLOIT] 用户已确认授权 — 启用自动利用模块，目标: %s", target_url
+        )
+
     # 执行扫描
     console.print(
         Panel.fit(
@@ -497,6 +531,116 @@ def cmd_version(args):
     return 0
 
 
+def cmd_profile(args):
+    """Profile 管理命令"""
+    from .profiles import ProfileManager
+
+    manager = ProfileManager()
+
+    if args.profile_action == "list":
+        profiles = manager.list_profiles()
+        if args.format == "table":
+            table = Table(title="RayScan Profiles")
+            table.add_column("名称", style="cyan")
+            table.add_column("描述")
+            table.add_column("类型", justify="center")
+            for p in profiles:
+                ptype = "[bold]内置[/bold]" if p["builtin"] else "自定义"
+                table.add_row(p["name"], p["description"], ptype)
+            console.print(table)
+        else:
+            import json
+            console.print(json.dumps(profiles, indent=2, ensure_ascii=False))
+        return 0
+
+    elif args.profile_action == "create":
+        data = {
+            "name": args.name,
+            "description": args.description,
+            "modules": {
+                "enabled": args.modules.split(",") if args.modules else [],
+                "disabled": args.disabled_modules.split(",") if args.disabled_modules else [],
+            },
+            "params": {},
+        }
+
+        if args.rate is not None:
+            data["params"]["rate"] = args.rate
+        if args.threads is not None:
+            data["params"]["threads"] = args.threads
+        if args.timeout is not None:
+            data["params"]["timeout"] = args.timeout
+        if args.crawl_depth is not None:
+            data["params"]["crawl_depth"] = args.crawl_depth
+        if args.crawl_max_urls is not None:
+            data["params"]["crawl_max_urls"] = args.crawl_max_urls
+        if args.insecure:
+            data["params"]["verify_ssl"] = False
+
+        path = manager.save_profile(args.name, data)
+        console.print(f"[green]Profile 已创建: {path}[/green]")
+        return 0
+
+    elif args.profile_action == "delete":
+        builtin = ["default", "src-quick", "pentest-full", "sqli-only"]
+        if args.name in builtin:
+            console.print("[red]错误：无法删除内置 Profile[/red]")
+            return 1
+
+        if not args.force:
+            confirm = console.input(f"[bold yellow]确认删除 Profile '{args.name}'？(y/N): [/bold yellow]")
+            if confirm.lower() != "y":
+                console.print("[yellow]已取消[/yellow]")
+                return 0
+
+        if manager.delete_profile(args.name):
+            console.print(f"[green]Profile '{args.name}' 已删除[/green]")
+        else:
+            console.print(f"[red]Profile '{args.name}' 不存在[/red]")
+        return 0
+
+    elif args.profile_action == "export":
+        profile = manager.load_profile(args.name)
+        if profile is None:
+            console.print(f"[red]Profile '{args.name}' 不存在[/red]")
+            return 1
+
+        output_dir = Path(args.output)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / f"{args.name}.yaml"
+        import yaml
+        output_file.write_text(
+            yaml.dump(profile, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        console.print(f"[green]Profile 已导出: {output_file}[/green]")
+        return 0
+
+    elif args.profile_action == "import":
+        src_path = Path(args.path)
+        import yaml
+
+        if src_path.is_dir():
+            count = 0
+            for yaml_file in src_path.glob("*.yaml"):
+                try:
+                    data = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
+                    name = data.get("name", yaml_file.stem)
+                    manager.save_profile(name, data)
+                    count += 1
+                except Exception as e:
+                    console.print(f"[yellow]跳过 {yaml_file}: {e}[/yellow]")
+            console.print(f"[green]已导入 {count} 个 Profile[/green]")
+        else:
+            data = yaml.safe_load(src_path.read_text(encoding="utf-8"))
+            name = data.get("name", src_path.stem)
+            manager.save_profile(name, data)
+            console.print(f"[green]已导入 Profile: {name}[/green]")
+        return 0
+
+    return 0
+
+
 # ─────────────────────────────────────────────────────────────────
 # 结果展示
 # ─────────────────────────────────────────────────────────────────
@@ -577,6 +721,19 @@ def build_parser() -> argparse.ArgumentParser:
     control_group.add_argument("-c", "--config", type=str, help="配置文件路径（YAML/JSON）")
     control_group.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证（不推荐，存在安全风险）")
 
+    # 利用引擎选项（默认关闭）
+    exploit_group = scan_parser.add_argument_group("利用引擎（默认禁用）")
+    exploit_group.add_argument(
+        "--i-have-permission",
+        action="store_true",
+        dest="i_have_permission",
+        help=(
+            "确认你拥有对目标系统的明确书面授权。"
+            "启用 wvs.exploit 自动利用模块（默认禁用）。"
+            "同时需要环境变量 RAYSCAN_ENABLE_EXPLOIT=1。"
+        ),
+    )
+
     # OOB 检测选项
     oob_group = scan_parser.add_argument_group("OOB 检测")
     oob_group.add_argument("--oob-server", type=str, help="OOB 回调服务器地址（如 https://interactsh.com）")
@@ -611,6 +768,41 @@ def build_parser() -> argparse.ArgumentParser:
     # version 命令
     sub.add_parser("version", help="显示版本信息")
 
+    # profile 命令
+    profile_parser = sub.add_parser("profile", help="Profile 管理")
+    profile_sub = profile_parser.add_subparsers(dest="profile_action", required=True)
+
+    # profile list
+    profile_list = profile_sub.add_parser("list", help="列出所有 Profile")
+    profile_list.add_argument("--format", choices=["table", "json"], default="table", help="输出格式")
+
+    # profile create
+    profile_create = profile_sub.add_parser("create", help="创建新 Profile")
+    profile_create.add_argument("name", help="Profile 名称")
+    profile_create.add_argument("--description", default="", help="Profile 描述")
+    profile_create.add_argument("--modules", help="启用的模块（逗号分隔，如 sqli,xss）")
+    profile_create.add_argument("--disabled-modules", dest="disabled_modules", help="禁用的模块（逗号分隔）")
+    profile_create.add_argument("--rate", type=int, help="每秒请求数")
+    profile_create.add_argument("--threads", type=int, help="并发线程数")
+    profile_create.add_argument("--timeout", type=int, help="请求超时（秒）")
+    profile_create.add_argument("--crawl-depth", type=int, dest="crawl_depth", help="爬取深度")
+    profile_create.add_argument("--crawl-max-urls", type=int, dest="crawl_max_urls", help="最大爬取URL数")
+    profile_create.add_argument("--insecure", action="store_true", help="禁用 SSL 验证")
+
+    # profile delete
+    profile_delete = profile_sub.add_parser("delete", help="删除 Profile")
+    profile_delete.add_argument("name", help="Profile 名称")
+    profile_delete.add_argument("--force", action="store_true", help="强制删除，不确认")
+
+    # profile export
+    profile_export = profile_sub.add_parser("export", help="导出 Profile")
+    profile_export.add_argument("name", help="Profile 名称")
+    profile_export.add_argument("-o", "--output", required=True, help="输出目录")
+
+    # profile import
+    profile_import = profile_sub.add_parser("import", help="导入 Profile")
+    profile_import.add_argument("path", help="Profile 文件或目录路径")
+
     return parser
 
 
@@ -628,6 +820,8 @@ def main():
         return cmd_list_modules(args)
     elif args.command == "version":
         return cmd_version(args)
+    elif args.command == "profile":
+        return cmd_profile(args)
     else:
         parser.print_help()
         return 1
