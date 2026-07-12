@@ -4,6 +4,8 @@ on:
   push:
     branches: [master]
     tags: ['v*']
+  pull_request:
+    branches: [master]
 
 jobs:
   docker:
@@ -18,30 +20,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
-        # 仅当配置了 DockerHub 凭据时才登录；未配置则跳过（降级为仅构建验证，不红）
-        if: ${{ github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != '' }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: xiabai2004/rayscan
-          tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
-            type=semver,pattern={{version}}
-
-      - name: Build and push
+      - name: Build image (verify Dockerfile)
+        # 仓库当前未配置 DockerHub 凭据，故仅构建验证、不推送，避免登录失败导致 workflow 红灯。
+        # 需要自动推送镜像时：在仓库 Settings > Secrets 配置 DOCKER_USERNAME / DOCKER_PASSWORD，
+        # 并恢复 docker/login-action 步骤与 push 条件。
         uses: docker/build-push-action@v6
         with:
           context: .
-          # 未配置 DockerHub 凭据时仅构建验证（push=false），配置后自动推送
-          push: ${{ github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != '' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          tags: xiabai2004/rayscan:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
