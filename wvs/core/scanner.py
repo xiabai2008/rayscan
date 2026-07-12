@@ -5,16 +5,15 @@ Coordinates: crawler → detection modules → dedup → reporting.
 No hardcoded lab paths — lab-specific logic lives in core/lab_profiles.py.
 """
 
-import urllib.parse
-from urllib.parse import parse_qs, urlparse
-
 import asyncio
 import hashlib
 import json
 import logging
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+from urllib.parse import parse_qs, urlparse
 
 from ..config import ConfigManager
 from ..models import (
@@ -38,28 +37,11 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Module execution priority — faster/critical modules run first
-_MODULE_PRIORITY = [
-    "sqli",  # critical — test priority
-    "xss",  # cross-site scripting
-]
-
-# Lite modules (loaded when --all-modules is set)
-_LITE_MODULE_PRIORITY = [
-    "sensitive",  # fast pattern-based checks
-    "waf",  # WAF detection
-    "cmdi",  # command injection
-    "lfi",  # file inclusion
-    "ssrf",  # server-side request forgery
-    "xxe",  # XML external entity
-    "rce",  # time-based (slowest)
-    "api",  # API security
-    "js_analysis",  # JS sensitive info / endpoints
-    "oa",  # OA system vulnerability detection
-    "webshell",  # WebShell detection
-    "weakpass",  # Weak password detection
-    "subdomain",  # Subdomain enumeration
-]
+# T2.1: module loading is registry-driven. The set of enabled modules is derived
+# from the ModuleFactory registry (single source of truth) using each module's
+# ``category`` field ("core" loads by default, "lite" only with --all-modules,
+# "optional" never auto-loaded), instead of the previously hardcoded
+# _MODULE_PRIORITY / _LITE_MODULE_PRIORITY lists. See _resolve_enabled_modules().
 
 
 class WAVScanner(ScannerIntegrationsMixin):
@@ -156,20 +138,43 @@ class WAVScanner(ScannerIntegrationsMixin):
     # ─────────────────────────────────────────────────────────────
 
     def _resolve_enabled_modules(self) -> List[str]:
-        """从配置中解析出要启用的模块列表
+        """从 ModuleFactory 注册表（唯一事实源）解析出要启用的模块列表
 
-        默认只加载核心模块（sqli + xss）。
-        设置 load_all=True 或配置 modules.all=true 加载全部（含 lite 模块）。
+        - ``category="core"`` 模块默认加载（sqli + xss）。
+        - ``category="lite"`` 模块仅在 --all-modules / modules.all=true 时加载。
+        - ``category="optional"`` 模块永不自动加载（仅由其自身配置开关启用，如 jspathfinder）。
+
+        默认模式下，每个 core 模块还受 ``modules.<name>.enabled`` 配置项约束（默认 True）。
         """
-        if self._load_all_modules or self.config.get("modules.all", False):
-            return list(_MODULE_PRIORITY + [m for m in _LITE_MODULE_PRIORITY if m not in _MODULE_PRIORITY])
+        from ..modules import register_all_modules
+        from ..modules.base import ModuleFactory
 
-        enabled = []
-        for name in _MODULE_PRIORITY:
-            cfg = self.config.get(f"modules.{name}", {})
-            if isinstance(cfg, dict) and cfg.get("enabled", True):
-                enabled.append(name)
-        return enabled
+        # 确保注册表已填充（幂等；即使调用方未导入 wvs.modules 也安全）。
+        register_all_modules()
+
+        def _meta(name: str) -> "tuple[str, int]":
+            info = ModuleFactory.get_module_info(name)
+            category = info.category if info else "lite"
+            priority = info.priority if info else 100
+            return category, priority
+
+        load_all = self._load_all_modules or self.config.get("modules.all", False)
+
+        if load_all:
+            candidates = [name for name in ModuleFactory.list_modules() if _meta(name)[0] in ("core", "lite")]
+        else:
+            candidates = [name for name in ModuleFactory.list_modules() if _meta(name)[0] == "core"]
+            # 尊重每个模块的启用/禁用配置（默认启用）。
+            enabled: List[str] = []
+            for name in candidates:
+                cfg = self.config.get(f"modules.{name}", {})
+                if isinstance(cfg, dict) and cfg.get("enabled", True):
+                    enabled.append(name)
+            candidates = enabled
+
+        # 稳定排序：优先级数字小者先执行，其次按名称。
+        candidates.sort(key=lambda n: (_meta(n)[1], n))
+        return candidates
 
     # ── Auth ────────────────────────────────────────────────────
 
@@ -267,7 +272,7 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     def load_module(self, module_name: str) -> bool:
         """
-        加载单个检测模块
+        加载单个检测模块（从 ModuleFactory 注册表按名取实例）
 
         Args:
             module_name: 模块名（如 "sqli", "cmdi"）
@@ -278,49 +283,26 @@ class WAVScanner(ScannerIntegrationsMixin):
         if module_name in self._modules:
             return True
 
+        # T2.1: 单一事实源 = ModuleFactory 注册表。删除了原先的 __import__ +
+        # 命名变体兜底逻辑。注册表由 register_all_modules() 在导入时填充（幂等）。
+        from ..modules import register_all_modules
+        from ..modules.base import ModuleFactory
+
+        register_all_modules()
+
         try:
-            # 尝试从 modules.<name>.detector 导入
-            mod = __import__(
-                f"wvs.modules.{module_name}.detector",
-                fromlist=["detector"],
-            )
-            detector_cls = getattr(mod, "Detector", None)
-            if detector_cls is None:
-                # 策略1：尝试常见命名变体
-                upper = module_name.upper()
-                name_variants = [
-                    f"{module_name.title()}Detector",  # CmdiDetector, XssDetector, LfiDetector
-                    f"{upper}Detector",  # CMDI, XSS, LFI → OK
-                    "SQLiDetector",  # sqli 特殊：混合大小写
-                ]
-                for variant in name_variants:
-                    detector_cls = getattr(mod, variant, None)
-                    if detector_cls:
-                        break
-
-                # 策略2：兜底 —— 遍历模块找所有 *Detector 类
-                if detector_cls is None:
-                    for attr_name in dir(mod):
-                        if attr_name.endswith("Detector") and attr_name != "DetectionModule":
-                            detector_cls = getattr(mod, attr_name)
-                            logger.info(f"[Scanner] 自动发现检测类: {attr_name} (for module '{module_name}')")
-                            break
-
-            if detector_cls is None:
-                raise ImportError(f"No Detector class found in wvs.modules.{module_name}.detector")
-
-            instance = detector_cls(self.config, session=self.session)
-            self._modules[module_name] = instance
-            self._loaded_module_names.append(module_name)
-            logger.info(f"[Scanner] 已加载模块: {module_name} (session: {id(self.session)})")
-            return True
-
-        except ImportError as e:
-            logger.warning(f"[Scanner] 模块 {module_name} 不可用: {e}")
+            instance = ModuleFactory.create(module_name, self.config, self.session)
+        except KeyError:
+            logger.warning(f"[Scanner] 模块 {module_name} 未在 ModuleFactory 注册表中找到")
             return False
         except Exception:
             logger.exception(f"[Scanner] 加载模块 {module_name} 失败")
             return False
+
+        self._modules[module_name] = instance
+        self._loaded_module_names.append(module_name)
+        logger.info(f"[Scanner] 已加载模块: {module_name} (session: {id(self.session)})")
+        return True
 
     def load_all_modules(self) -> None:
         """加载所有已启用的模块"""
@@ -695,7 +677,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         # 如果 CLI 已手动加载了指定模块（--modules），跳过自动加载
         if not self._modules:
             # Re-resolve enabled modules in case CLI set _load_all_modules
-            if hasattr(self, '_load_all_modules') and self._load_all_modules:
+            if hasattr(self, "_load_all_modules") and self._load_all_modules:
                 self._enabled_modules = self._resolve_enabled_modules()
             self.load_all_modules()
         self._stats["modules_run"] = len(self._modules)

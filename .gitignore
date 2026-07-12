@@ -45,7 +45,6 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-conftest.py
 
 # Translations
 *.mo
@@ -87,9 +86,8 @@ _checkpoint*
 debug_*.py
 probe_*.py
 
-# Test artifacts (not for distribution)
-test_*.py
-tests/
+# Test artifacts (not for distribution) — tests/ is intentionally tracked in VCS
+/test_*.py
 
 # Temp scan scripts (but NOT __init__.py)
 _[a-z]*.py

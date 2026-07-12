@@ -842,5 +842,4 @@ class SensitiveDetector(DetectionModule):
         return Severity.LOW
 
 
-# Register module
-register_module(SensitiveDetector)
+# SensitiveDetector is registered via the @register_module decorator above.

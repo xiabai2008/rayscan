@@ -37,6 +37,8 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
             author="WVS Team",
             version="1.0.0",
             enabled_by_default=True,
+            category="core",
+            priority=10,
             tags=["sqli", "injection", "sql-injection", "database"],
         )
 

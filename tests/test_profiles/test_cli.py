@@ -1,4 +1,3 @@
-import pytest
 from wvs.cli import build_parser
 
 
@@ -18,12 +17,19 @@ def test_profile_list_json_format():
 
 def test_profile_create_command():
     parser = build_parser()
-    args = parser.parse_args([
-        "profile", "create", "test-profile",
-        "--modules", "sqli,xss",
-        "--rate", "15",
-        "--description", "Test profile",
-    ])
+    args = parser.parse_args(
+        [
+            "profile",
+            "create",
+            "test-profile",
+            "--modules",
+            "sqli,xss",
+            "--rate",
+            "15",
+            "--description",
+            "Test profile",
+        ]
+    )
     assert args.profile_action == "create"
     assert args.name == "test-profile"
     assert args.modules == "sqli,xss"
@@ -56,10 +62,14 @@ def test_profile_import_command():
 
 def test_use_command_basic():
     parser = build_parser()
-    args = parser.parse_args([
-        "use", "src-quick",
-        "-u", "https://example.com",
-    ])
+    args = parser.parse_args(
+        [
+            "use",
+            "src-quick",
+            "-u",
+            "https://example.com",
+        ]
+    )
     assert args.command == "use"
     assert args.profile == "src-quick"
     assert args.url == "https://example.com"
@@ -67,18 +77,29 @@ def test_use_command_basic():
 
 def test_use_command_full():
     parser = build_parser()
-    args = parser.parse_args([
-        "use", "pentest-full",
-        "-u", "https://target.com",
-        "-o", "report.json",
-        "-f", "html",
-        "-v",
-        "--auth", "auth.json",
-        "--max-time", "3600",
-        "--insecure",
-        "--modules", "sqli", "xss",
-        "--no-modules", "cmdi",
-    ])
+    args = parser.parse_args(
+        [
+            "use",
+            "pentest-full",
+            "-u",
+            "https://target.com",
+            "-o",
+            "report.json",
+            "-f",
+            "html",
+            "-v",
+            "--auth",
+            "auth.json",
+            "--max-time",
+            "3600",
+            "--insecure",
+            "--modules",
+            "sqli",
+            "xss",
+            "--no-modules",
+            "cmdi",
+        ]
+    )
     assert args.profile == "pentest-full"
     assert args.url == "https://target.com"
     assert args.output == "report.json"
@@ -93,9 +114,13 @@ def test_use_command_full():
 
 def test_use_command_nonexistent_profile():
     parser = build_parser()
-    args = parser.parse_args([
-        "use", "nonexistent-profile",
-        "-u", "https://example.com",
-    ])
+    args = parser.parse_args(
+        [
+            "use",
+            "nonexistent-profile",
+            "-u",
+            "https://example.com",
+        ]
+    )
     # Profile validation happens at runtime, not at parse time
     assert args.profile == "nonexistent-profile"

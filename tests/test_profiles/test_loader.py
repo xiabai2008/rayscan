@@ -1,5 +1,3 @@
-import pytest
-from pathlib import Path
 from wvs.profiles import ProfileManager
 from wvs.profiles.builtin import BUILTIN_PROFILES
 

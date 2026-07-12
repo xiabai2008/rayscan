@@ -25,6 +25,7 @@ from .payloads import (
 logger = logging.getLogger("wvs.module.rce")
 
 
+@register_module
 class RCEDetector(DetectionModule):
     """
     RCE Detection Module
@@ -930,5 +931,4 @@ class RCEDetector(DetectionModule):
         )
 
 
-# Register module
-register_module(RCEDetector)
+# RCEDetector is registered via the @register_module decorator above.

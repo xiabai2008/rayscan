@@ -37,6 +37,8 @@ class XSSDetector(DetectionModule):
             author="WVS Team",
             version="1.0.0",
             enabled_by_default=True,
+            category="core",
+            priority=20,
             tags=["xss", "cross-site-scripting", "stored-xss", "reflected-xss"],
         )
 

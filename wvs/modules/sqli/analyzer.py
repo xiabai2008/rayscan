@@ -181,13 +181,15 @@ class ResponseAnalyzer:
         Returns (is_positive, column_count)
         """
         text = response.get("text", "")
-        positive_indicators = [
-            " UNION ",
-            "SELECT",
-            re.search(r"\d+\s+NULL", text),
-            re.search(r"^\d+$", text.strip()),
-        ]
-        if any(positive_indicators):
+        # A genuine UNION-based leak exposes the " UNION ... SELECT " signature,
+        # a bare integer column dump, or NULL placeholders. The literal
+        # substrings must be *tested for membership* (not passed verbatim into
+        # `any`), otherwise they are always truthy and this returns True even
+        # for ordinary responses.
+        has_union_select = (" UNION " in text) and ("SELECT" in text)
+        has_null_columns = bool(re.search(r"\d+\s+NULL", text))
+        is_bare_integer = bool(re.search(r"^\d+$", text.strip()))
+        if has_union_select or has_null_columns or is_bare_integer:
             return True, None
         return False, None
 

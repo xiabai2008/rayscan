@@ -43,6 +43,13 @@ class ModuleInfo:
     version: str = "1.0.0"
     enabled_by_default: bool = True
     tags: List[str] = None
+    # T2.1: module tier, used by the scanner to decide auto-loading.
+    #   - "core": loaded by default
+    #   - "lite": loaded only with --all-modules / modules.all
+    #   - "optional": never auto-loaded (enabled solely via its own config flag)
+    category: str = "lite"
+    # T2.1: execution priority (lower runs first); the scanner sorts by this.
+    priority: int = 100
 
     def __post_init__(self):
         if self.tags is None:
@@ -961,13 +968,19 @@ class ModuleFactory:
         logger.info(f"Registered module: {module_info.name}")
 
     @classmethod
-    def create(cls, module_name: str, config: Optional[ConfigManager] = None) -> DetectionModule:
+    def create(
+        cls,
+        module_name: str,
+        config: Optional[ConfigManager] = None,
+        session: Optional[Any] = None,
+    ) -> DetectionModule:
         """
         Create a module instance.
 
         Args:
             module_name: Module name.
             config: ConfigManager instance.
+            session: Optional HTTP session injected into the module.
 
         Returns:
             Module instance.
@@ -979,7 +992,7 @@ class ModuleFactory:
             raise KeyError(f"Module '{module_name}' is not registered")
 
         module_class = cls._modules[module_name]
-        return module_class(config)
+        return module_class(config, session=session)
 
     @classmethod
     def list_modules(cls) -> List[str]:

@@ -444,5 +444,4 @@ class APIDetector(DetectionModule):
         return vulns
 
 
-# Register module
-register_module(APIDetector)
+# APIDetector is registered via the @register_module decorator above.

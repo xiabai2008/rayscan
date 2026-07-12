@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+from .. import __version__
 from ..models import ScanResult, Severity, Vulnerability, VulnerabilityType
 
 
@@ -53,7 +54,7 @@ class JSONReporter:
         return {
             "schema": "wvs-report-v1",
             "generated_at": datetime.now().isoformat(),
-            "scanner": {"name": "WVS", "version": "19.0.0", "vendor": "OpenClaw"},
+            "scanner": {"name": "WVS", "version": __version__, "vendor": "OpenClaw"},
             "target": result.target.to_dict(),
             "scan_info": {
                 "url": result.target.url,
@@ -119,7 +120,7 @@ class JSONReporter:
                     "tool": {
                         "driver": {
                             "name": "WVS",
-                            "version": "19.0.0",
+                            "version": __version__,
                             "informationUri": "https://github.com/openclaw/wvs",
                             "rules": self._build_sarif_rules(result.vulnerabilities),
                         }

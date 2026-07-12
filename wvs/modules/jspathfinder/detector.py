@@ -161,6 +161,8 @@ class JSPathfinderDetector(DetectionModule):
             author="WVS Team",
             version="1.0.0",
             enabled_by_default=True,
+            category="optional",
+            priority=99,
             tags=["discovery", "js", "secrets", "endpoints", "fuzz"],
         )
 

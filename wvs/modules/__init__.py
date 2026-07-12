@@ -5,9 +5,17 @@ RayScan 检测模块
   - sqli : SQL 注入（error-based / union / boolean-blind / time-based / stacked / second-order）
   - xss  : 跨站脚本（reflected / stored / DOM-based / context-aware）
 
-Lite 模块（轻量辅助，需 --all-modules 启用）位于 wvs.modules.lite 子包:
+Lite 模块（轻量辅助，需 --all-modules 启用，category="lite"）为扁平子包:
   - cmdi / lfi / rce / ssrf / xxe / sensitive / api / waf / jspathfinder / js_analysis
+
+模块加载（T2.1）: 每个 detector 文件在导入时通过 @register_module / register_module()
+自动注册到 ModuleFactory；register_all_modules() 遍历导入全部 detector 触发注册，
+使 ModuleFactory 注册表成为模块加载的唯一事实源。
 """
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .api import APIDetector
 from .cmdi import CMDInjectionDetector
@@ -34,9 +42,9 @@ __all__ = [
     "LFIDetector",
     "OADetector",
     "RCEDetector",
-    "SensitiveDetector",
     "SQLiDetector",
     "SSRFDetector",
+    "SensitiveDetector",
     "SubdomainDetector",
     "WAFDetector",
     "WeakPasswordDetector",
@@ -46,10 +54,43 @@ __all__ = [
 ]
 
 
-def register_all_modules():
-    """Ensure all modules are registered with ModuleFactory.
+# T2.1: every detector submodule. Importing this package already registers all
+# of them (each detector file calls @register_module / register_module() at import
+# time); the list below makes registration explicit and idempotent so that entry
+# points can guarantee a fully populated ModuleFactory registry.
+_ALL_DETECTOR_MODULES = [
+    "api",
+    "cmdi",
+    "js_analysis",
+    "jspathfinder",
+    "lfi",
+    "oa",
+    "rce",
+    "sensitive",
+    "sqli",
+    "ssrf",
+    "subdomain",
+    "waf",
+    "weakpass",
+    "webshell",
+    "xss",
+    "xxe",
+]
 
-    Only sqli and xss load by default.
-    Use --all-modules to load cmdi/lfi/rce/ssrf/xxe/sensitive/api/waf/jspathfinder.
+
+def register_all_modules():
+    """Ensure every detection module is registered with ModuleFactory.
+
+    Importing ``wvs.modules`` already triggers registration of all detectors via
+    their top-level ``@register_module`` decorator / ``register_module()`` call.
+    This function re-imports each detector submodule to guarantee registration
+    even if the package-level imports were later trimmed, making the
+    ModuleFactory registry the single source of truth for module loading.
     """
-    pass
+    import importlib
+
+    for name in _ALL_DETECTOR_MODULES:
+        try:
+            importlib.import_module(f"wvs.modules.{name}.detector")
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"[modules] 注册模块失败: {name}: {exc}")

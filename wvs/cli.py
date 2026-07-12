@@ -34,12 +34,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from . import __version__
 from .config import ConfigManager
 from .core import HTTPPool, WAVScanner
 from .models import ScanResult, ScanTarget, Severity
 from .modules.base import ModuleFactory
 from .plugins.auth import AuthManager
-from .reporting import ConsoleReporter, HTMLReporter, MarkdownReporter
+from .reporting import ConsoleReporter, CSVReporter, HTMLReporter, JSONReporter, MarkdownReporter
 
 console = Console()
 
@@ -317,7 +318,7 @@ def cmd_scan(args):
     # 执行扫描
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan 1.1.0[/bold cyan] 扫描目标: [bold]{target_url}[/bold]\n"
+            f"[bold cyan]RayScan {__version__}[/bold cyan] 扫描目标: [bold]{target_url}[/bold]\n"
             f"模块: {', '.join(scanner._loaded_module_names) or '全部'}\n"
             f"速率: {config.get('rate', 10)} req/s",
             border_style="cyan",
@@ -417,7 +418,7 @@ def cmd_batch(args):
 
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan 1.1.0 批量扫描[/bold cyan]\n目标数量: [bold]{len(targets)}[/bold]",
+            f"[bold cyan]RayScan {__version__} 批量扫描[/bold cyan]\n目标数量: [bold]{len(targets)}[/bold]",
             border_style="cyan",
         )
     )
@@ -509,20 +510,25 @@ def cmd_list_modules(args):
     table.add_column("默认", justify="center")
     table.add_column("层级")
 
-    core_modules = {"sqli", "xss"}
     for name in modules:
         info = ModuleFactory.get_module_info(name)
         if info:
-            tier = "[bold]核心[/bold]" if name in core_modules else "lite"
+            is_core = info.category == "core"
+            tier = "[bold]核心[/bold]" if is_core else "lite"
             table.add_row(
                 name,
                 info.description,
-                "[OK]" if name in core_modules else "[X]",
+                "[OK]" if is_core else "[X]",
                 tier,
             )
 
+    core_count = sum(
+        1
+        for n in modules
+        if (ModuleFactory.get_module_info(n) or None) and ModuleFactory.get_module_info(n).category == "core"
+    )
     console.print(table)
-    console.print(f"\n共 {len(modules)} 个模块（核心: sqli+xss, lite: {len(modules) - 2} 个）")
+    console.print(f"\n共 {len(modules)} 个模块（核心: {core_count} 个, lite: {len(modules) - core_count} 个）")
     console.print("[dim]提示: 使用 --all-modules 加载全部 lite 模块[/dim]")
     return 0
 
@@ -531,7 +537,7 @@ def cmd_version(args):
     """显示版本信息"""
     console.print(
         Panel.fit(
-            "[bold cyan]RayScan 1.1.0[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2004",
+            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2004",
             border_style="cyan",
         )
     )
@@ -736,7 +742,7 @@ def cmd_use(args):
     # Print banner
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan 1.1.0[/bold cyan] Profile: [bold]{args.profile}[/bold]\n"
+            f"[bold cyan]RayScan {__version__}[/bold cyan] Profile: [bold]{args.profile}[/bold]\n"
             f"扫描目标: [bold]{args.url}[/bold]\n"
             f"模块: {', '.join(scanner._loaded_module_names) or '全部'}\n"
             f"速率: {config.get('rate', 10)} req/s",
@@ -790,6 +796,8 @@ def display_result(result: ScanResult, elapsed: float, args):
     reporter = ConsoleReporter(verbose=args.verbose)
     html_reporter = HTMLReporter()
     md_reporter = MarkdownReporter()
+    json_reporter = JSONReporter()
+    csv_reporter = CSVReporter()
 
     # 控制台报告
     reporter.report(result)
@@ -817,6 +825,10 @@ def display_result(result: ScanResult, elapsed: float, args):
         html_reporter.generate_json(result, output_file)
     elif fmt == "markdown":
         md_reporter.generate(result, output_file)
+    elif fmt == "sarif":
+        json_reporter.generate_sarif(result, output_file)
+    elif fmt == "csv":
+        csv_reporter.generate(result, output_file)
 
     console.print(f"[green]📄 {fmt.upper()} 报告已保存: {output_file.resolve()}[/green]")
 
@@ -829,7 +841,7 @@ def display_result(result: ScanResult, elapsed: float, args):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rayscan",
-        description="RayScan 1.1.0 — SQLi + XSS 专精扫描器 | 二阶注入/宽字节/OOB/Polyglot/mXSS/SSTI",
+        description=f"RayScan {__version__} — SQLi + XSS 专精扫描器 | 二阶注入/宽字节/OOB/Polyglot/mXSS/SSTI",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

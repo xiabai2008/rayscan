@@ -17,6 +17,10 @@ RayScan Lite 模块 — 轻量辅助检测
 - js_analysis : JS 敏感信息分析
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from ..api import APIDetector
 from ..cmdi import CMDInjectionDetector
 from ..js_analysis import JSAnalysisDetector
@@ -43,5 +47,27 @@ __all__ = [
 
 
 def register_lite_modules():
-    """确保所有 Lite 模块注册到 ModuleFactory（被动注册，仅在主动导入时生效）"""
-    pass
+    """Ensure all Lite detection modules are registered with ModuleFactory.
+
+    T2.1: the lite detectors live as flat subpackages under ``wvs.modules`` and are
+    registered on import via ``@register_module``. Re-importing them here makes
+    registration explicit and idempotent.
+    """
+    import importlib
+
+    for name in (
+        "api",
+        "cmdi",
+        "js_analysis",
+        "jspathfinder",
+        "lfi",
+        "rce",
+        "sensitive",
+        "ssrf",
+        "waf",
+        "xxe",
+    ):
+        try:
+            importlib.import_module(f"wvs.modules.{name}.detector")
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"[modules.lite] 注册模块失败: {name}: {exc}")
