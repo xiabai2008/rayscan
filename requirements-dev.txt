@@ -1,15 +1,19 @@
-# WVS v19 开发依赖
-# 运行测试: pip install -r requirements-dev.txt && pytest
+# RayScan 开发依赖（单一工具链：ruff 取代 black/isort/flake8）
+#
+# 推荐以 pyproject.toml 为唯一来源安装：
+#     pip install -e .[dev]
+# 本文件仅保留用于 Docker builder / 离线 CI 等独立安装场景。
+#
+# 注意：black / isort / flake8 已统一为 ruff（见 pyproject.toml [tool.ruff]），
+# 不要再引入这三者，避免行宽/风格冲突。
 
 # 测试框架
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 
-# 代码质量
-black>=23.0.0
-isort>=5.12.0
-flake8>=6.1.0
+# 代码质量（单一工具链 = ruff，取代 black/isort/flake8）
+ruff>=0.5.0
 mypy>=1.5.0
 
 # 类型检查

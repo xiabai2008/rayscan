@@ -44,6 +44,13 @@ class SensitiveDetector(DetectionModule):
         "/backup.sql",
         "/database.sql",
         "/backup.zip",
+        # Install directories (should not be accessible after installation)
+        "/install/",
+        "/install/index.php",
+        "/setup/",
+        "/setup/index.php",
+        "/upgrade/",
+        "/update/",
     ]
 
     # P11: Default credential targets for Metasploitable2 common services

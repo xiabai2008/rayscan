@@ -41,7 +41,9 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
         )
 
     def __init__(self, config=None, session: Optional[HTTPPool] = None):
-        super().__init__(config)
+        # Forward both config and session to the parent so DetectionModule
+        # initialises self.session AND self._active_session correctly.
+        super().__init__(config, session)
         self.session = session
         self._found_vulns: List[Vulnerability] = []
         self._checked_urls: set = set()

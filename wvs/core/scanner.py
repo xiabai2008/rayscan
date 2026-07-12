@@ -1,12 +1,12 @@
-import urllib.parse
-from urllib.parse import parse_qs, urlparse
-
 """
 RayScan main scanner engine.
 
 Coordinates: crawler → detection modules → dedup → reporting.
 No hardcoded lab paths — lab-specific logic lives in core/lab_profiles.py.
 """
+
+import urllib.parse
+from urllib.parse import parse_qs, urlparse
 
 import asyncio
 import hashlib
@@ -694,6 +694,9 @@ class WAVScanner(ScannerIntegrationsMixin):
         # ── Step 1: 加载模块（必须在 _print_header 之前，以便显示加载的模块）──
         # 如果 CLI 已手动加载了指定模块（--modules），跳过自动加载
         if not self._modules:
+            # Re-resolve enabled modules in case CLI set _load_all_modules
+            if hasattr(self, '_load_all_modules') and self._load_all_modules:
+                self._enabled_modules = self._resolve_enabled_modules()
             self.load_all_modules()
         self._stats["modules_run"] = len(self._modules)
         logger.info(f"[Scanner] 启用模块: {list(self._modules.keys())}")

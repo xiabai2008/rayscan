@@ -314,7 +314,7 @@ class HTTPPool:
                 limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
             )
             if proxy_url:
-                client_kwargs["proxies"] = proxy_url
+                client_kwargs["proxy"] = proxy_url
                 logger.info(f"[HTTPPool] Using proxy: {proxy_url}")
             self._sc = httpx.AsyncClient(**client_kwargs)
         return self._sc
