@@ -46,6 +46,7 @@ jobs:
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
+    continue-on-error: true  # 非阻断：仅作质量提示，不卡合并
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -60,6 +61,7 @@ jobs:
   format:
     name: Format (ruff)
     runs-on: ubuntu-latest
+    continue-on-error: true  # 非阻断：仅作质量提示，不卡合并
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
