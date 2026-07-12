@@ -108,16 +108,16 @@ lint.ignore = [
     "RUF002",  # ambiguous-unicode-character-docstring
     "RUF003",  # ambiguous-unicode-character-comment
 ]
-lint.per-file-ignores = {
-    "wvs/exceptions.py" = ["TRY", "BLE", "S110"],
-    "wvs/modules/base.py" = ["TRY", "BLE"],
-}
 # 历史遗留的载荷数据文件：暂整体排除，列入技术债逐步整改
 lint.exclude = [
     "wvs/modules/sqli/payloads.py",
     "wvs/modules/sqli/techniques_mixins.py",
     "wvs/modules/rce/payloads.py",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"wvs/exceptions.py" = ["TRY", "BLE", "S110"]
+"wvs/modules/base.py" = ["TRY", "BLE"]
 
 [tool.mypy]
 python_version = "3.8"
