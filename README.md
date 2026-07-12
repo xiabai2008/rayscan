@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-1.1.0-orange)
+![Version](https://img.shields.io/badge/Version-2.0.0-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/Tests-79%20passing-brightgreen)
@@ -12,9 +12,9 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
 
-**🚀 SQLi + XSS 专精扫描器 | 二阶注入·宽字节·Polyglot·mXSS·SSTI | 流式检测 | CLI + Web UI 双模式**
+**🚀 全栈 Web 漏洞扫描器 + 多引擎聚合平台 | SQLi·XSS·OA·WebShell·弱口令·12.5w PoC | AWVS·Nessus·Nuclei·Metasploit 集成**
 
-**已通过 79 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 10 真实目标实战认证**
+**已通过 79 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 10 真实目标实战认证 · 12种OA系统专项检测**
 
 > 📈 **测试覆盖路线图**：当前 79 个测试集中在 SQLi/XSS/RCE/SSRF 等核心检测器。
 > v1.1.0 计划：补齐 crawler / scanner / session / cache / reporting 单元测试至 250+；
@@ -24,8 +24,18 @@
 # 一条命令：自动分流靶机/实战，流式爬测协同
 python -m wvs scan https://target.com --insecure --rate 10
 
+# 全量扫描（含所有 lite 模块）
+python -m wvs scan https://target.com --all-modules
+
 # 靶机自动登录 → 爬取 → 检测
 # 实战跳过靶场路径 → 浅爬30页 → 即爬即测
+
+# 批量扫描
+python -m wvs batch targets.txt
+
+# Web UI（推荐）
+python web_ui/app.py
+# 浏览器访问 http://localhost:5000
 ```
 
 <p align="center">
@@ -41,10 +51,16 @@ python -m wvs scan https://target.com --insecure --rate 10
 
 ### 🎯 核心专精模块（默认加载）
 
-| 模块 | 检测维度 | 技术细节 |
-|------|---------|---------|
-| **SQL 注入** | 8 种注入技术 | error-based / union / boolean-blind / time-based / stacked / **二阶** / **宽字节** / **OOB** |
-| **XSS** | 6 种检测维度 | reflected / stored / DOM / **Polyglot** / **mXSS** / **SSTI** |
+| 模块 | 检测维度 | 层级 |
+|------|---------|:----:|
+| **SQL 注入** | 8种: error/union/boolean-blind/time-based/stacked/**二阶**/**宽字节**/**OOB** | 🟢 核心 |
+| **XSS** | 6种: reflected/stored/DOM/**Polyglot**/**mXSS**/**SSTI** | 🟢 核心 |
+| **OA 专项** | 12种: 泛微/通达/金蝶/蓝凌/致远/用友/禅道/万户/Nacos/Spring/Jenkins/Confluence | 🟡 Lite |
+| **WebShell** | 路径扫描 + 内容特征 + 启发式检测 | 🟡 Lite |
+| **弱口令** | 表单登录 + phpMyAdmin + Tomcat Manager | 🟡 Lite |
+| **子域名** | DNS爆破 + crt.sh 证书透明度 | 🟡 Lite |
+| CMDi / LFI / RCE / SSRF / XXE | 通用漏洞检测 | 🟡 Lite |
+| sensitive / api / waf / jspathfinder | 信息收集 + 绕过 | 🟡 Lite |
 
 ### 🧩 Lite 辅助模块（--all-modules 启用）
 
@@ -57,11 +73,50 @@ python -m wvs scan https://target.com --insecure --rate 10
 
 ### ⚡ 架构亮点
 
+- **多引擎聚合** — RayScan + AWVS + Nessus + Nuclei + sqlmap 一键调度，结果自动去重合并
+- **Nuclei 12.5w PoC 引擎** — 智能模板选择 + SQLite 缓存 + 按技术栈分类
+- **OA 自动识别** — 检测到 OA 系统指纹后自动加载专项检测规则
+- **漏洞验证链** — Metasploit RPC 自动匹配 exploit 模块验证漏洞真实性
 - **流式检测** — 爬取即检测，不等全部爬完（30页实战 / 150页靶机）
 - **双路径自动分流** — 检测到靶机IP/路径则走靶机流程，否则走实战流程
-- **靶机路径不污染实战** — `/dvwa/` `/mutillidae/` 等仅靶机目标探测
-- **SPA智能跳过** — 真实网站的相同body响应判定不再误判为SPA
 - **三层降噪** — 内容特征 + 尺寸聚类 + 校准匹配
+
+## 🎯 新功能速览
+
+### 🏢 OA 专项检测
+RayScan 能自动识别并检测以下 OA/中间件系统：
+```
+泛微Ecology · 通达OA · 金蝶Kingdee · 蓝凌Landray
+致远Seeyon · 用友Yonyou · 禅道Zentao · 万户Whir
+Nacos · Spring Boot · Jenkins · Confluence
+```
+检测类型：SQL注入 / RCE / 文件上传 / 认证绕过 / 配置泄露 / 未授权访问
+
+### 🔗 多引擎聚合
+配置 AWVS / Nessus 实例后，一键运行多引擎扫描：
+```python
+from wvs.integrations import AWVSIntegration, NessusIntegration
+from wvs.core.result_merger import ResultMerger
+
+# 多引擎扫描 + 结果合并
+merged = await scanner.run_multi_engine_scan("https://target.com")
+```
+
+### 📦 Nuclei 12.5w PoC 管理
+```bash
+# 一键部署 Nuclei 模板
+./scripts/deploy_nuclei_templates.sh
+
+# 扫描时自动使用模板管理器选择最匹配的 PoC
+python -m wvs scan https://target.com
+```
+
+### 🔐 漏洞验证链
+扫描到漏洞后自动调用 Metasploit 验证：
+```bash
+# 配置 MSF RPC（默认连接 127.0.0.1:55552）
+python -m wvs scan https://target.com --verify
+```
 
 ## 🎯 实战验证
 
@@ -148,29 +203,38 @@ docker run rayscan scan http://example.com
 TARGET_URL=http://example.com docker-compose up
 ```
 
-### CLI
+### Web UI（推荐）
 
 ```bash
-# Quick scan
-python -m wvs scan http://example.com
-
-# Full pipeline with crawler + all modules
-python full_scan.py
-
-# Web UI（推荐）
 pip install flask
 python web_ui/app.py
 # 浏览器访问 http://localhost:5000
 ```
 
-> 💡 **tkinter GUI 已停止维护**，功能全部迁移到 Web UI。旧版 `wvs_gui.py` 保留供参考。
+### CLI
 
-### 5. 特定模块扫描
+```bash
+# Quick scan（自动模式：靶机/实战分流）
+python -m wvs scan http://example.com
+
+# 全量扫描（含所有 lite 模块：OA/WebShell/弱口令/子域名等）
+python -m wvs scan http://example.com --all-modules
+
+# 批量扫描
+python -m wvs batch targets.txt
+
+# 列出所有可用模块
+python -m wvs list-modules
+```
+
+### 特定模块扫描
 
 ```bash
 # 配置文件修改：在 quick_scan.py 或 full_scan.py 中的
 # config.set("crawl_depth", 2) 等参数可按需调整
 ```
+
+> 💡 **tkinter GUI 已停止维护**，功能全部迁移到 Web UI。旧版 `wvs_gui.py` 保留供参考。
 
 ## 📖 详细使用说明
 
