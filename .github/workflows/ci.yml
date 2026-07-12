@@ -37,8 +37,49 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests
-        run: pytest tests/ -q --tb=short --no-header 2>&1 | tail -5
+      - name: Run tests with coverage
+        run: pytest tests/ -q --cov=wvs --cov-report=term-missing --tb=short
 
       - name: Test import
         run: python -c "from wvs.core import WAVScanner, HTTPPool; print('✅ Import OK')"
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ruff
+        run: pip install "ruff==0.15.21"
+      - name: ruff check (enforced subset E/F/W/I)
+        # 注意：CLI --select 会覆盖配置中的 ignore，故此处显式忽略 E402/E501
+        run: ruff check wvs/ tests/ --select E,F,W,I --ignore E402,E501
+
+  format:
+    name: Format (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ruff
+        run: pip install "ruff==0.15.21"
+      - name: ruff format check
+        run: ruff format --check wvs/ tests/
+
+  types:
+    name: Types (mypy, advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: mypy (advisory, non-blocking)
+        run: mypy wvs/ || true
