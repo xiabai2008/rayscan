@@ -88,6 +88,19 @@ wvs/
 5. Import in `wvs/modules/__init__.py`
 6. Add tests in `tests/test_<name>_detector.py`
 
+## Pull Request Workflow（必读）
+
+`master` 分支已受保护，**所有改动必须通过 Pull Request 合入，禁止直接 push 到 master**。合并前必须满足：
+
+1. **分支**：从最新的 `master` 切出功能分支（建议前缀 `feat/`、`fix/`、`docs/`、`chore/`）。
+2. **本地验证**：`pytest tests/ -q` 与 `flake8 wvs/ --max-line-length=150 --max-complexity=20` 均通过。
+3. **提交 PR**：目标分支选 `master`，按模板填写（改动类型、关联 Issue、测试情况）。
+4. **CI 通过**：GitHub Actions 的 `CI` 检查（Python 3.9–3.12 测试矩阵）必须全部通过。
+5. **代码评审**：至少需要 1 名团队成员的 Approving Review；所有评审对话需 Resolve 后方可合并。
+6. **合并**：推荐使用 Squash merge，保持 `master` 主干历史整洁。
+
+> 说明：仓库管理员（admin）默认保留紧急情况下的绕过权限；团队日常改动请严格走 PR 流程，不要直接推送 `master`。
+
 ## PR Guidelines
 
 - Keep changes focused — one PR per feature/fix
