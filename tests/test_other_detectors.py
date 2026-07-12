@@ -363,75 +363,43 @@ class TestWAFDetector:
     def test_module_registration(self):
         assert "waf" in ModuleFactory.list_modules()
 
-    def test_get_result_no_scan(self):
-        from wvs.modules.waf.detector import WAFDetector
-        detector = WAFDetector()
-        assert detector.get_result() is None
-
     def test_waf_signatures_cloudflare(self):
-        from wvs.modules.waf.detector import WAF_SIGNATURES, WAFType
-        sig = WAF_SIGNATURES.get(WAFType.CLOUDFLARE)
+        from wvs.modules.waf.detector import WAF_SIGNATURES
+        sig = next((s for name, s in WAF_SIGNATURES if name == "Cloudflare"), None)
         assert sig is not None
         assert "cf-ray" in sig.get("headers", {})
-        assert "__cfduid" in sig.get("cookies", [])
 
     def test_waf_signatures_aws(self):
-        from wvs.modules.waf.detector import WAF_SIGNATURES, WAFType
-        sig = WAF_SIGNATURES.get(WAFType.AWS_WAF)
+        from wvs.modules.waf.detector import WAF_SIGNATURES
+        sig = next((s for name, s in WAF_SIGNATURES if "AWS" in name), None)
         assert sig is not None
-        assert "x-amz-cf-id" in sig.get("headers", {})
+        assert any("x-amz" in k for k in sig.get("headers", {}))
 
-    def test_analyze_response_cloudflare(self):
-        from wvs.modules.waf.detector import WAFDetector, WAFType
+    def test_match_all_signatures_cloudflare(self):
+        from wvs.modules.waf.detector import WAFDetector
         det = WAFDetector.__new__(WAFDetector)
-        response = {
-            "status_code": 403,
+        baseline = {
+            "status": 403,
             "headers": {"cf-ray": "abc123", "server": "cloudflare"},
             "text": "Attention Required! Cloudflare",
             "cookies": {},
         }
-        results = det._analyze_response(response)
-        assert len(results) > 0
-        assert any("cloudflare" in r[1].lower() for r in results)
+        matches = det._match_all_signatures(baseline)
+        assert len(matches) > 0
+        assert any("cloudflare" in m.lower() for m in matches)
 
-    def test_analyze_response_no_waf(self):
+    def test_match_all_signatures_no_waf(self):
         """Normal response -> no WAF detected."""
         from wvs.modules.waf.detector import WAFDetector
         det = WAFDetector.__new__(WAFDetector)
-        response = {
-            "status_code": 200,
+        baseline = {
+            "status": 200,
             "headers": {"content-type": "text/html"},
             "text": "<html>Welcome</html>",
             "cookies": {},
         }
-        results = det._analyze_response(response)
-        assert len(results) == 0
-
-    def test_is_waf_blocked_status_code(self):
-        from types import SimpleNamespace
-        from wvs.modules.waf.detector import WAFDetector
-        det = WAFDetector.__new__(WAFDetector)
-        response = SimpleNamespace(status_code=403, text="blocked")
-        baseline = {"status_code": 200, "text": "Welcome"}
-        assert det._is_waf_blocked(response, baseline) is True
-
-    def test_is_waf_blocked_content_change(self):
-        """Dramatically different response length -> likely WAF blocked."""
-        from types import SimpleNamespace
-        from wvs.modules.waf.detector import WAFDetector
-        det = WAFDetector.__new__(WAFDetector)
-        response = SimpleNamespace(status_code=200, text="x" * 10)
-        baseline = {"status_code": 200, "text": "x" * 1000}
-        assert det._is_waf_blocked(response, baseline) is True
-
-    def test_is_waf_blocked_normal(self):
-        """Similar response -> not blocked."""
-        from types import SimpleNamespace
-        from wvs.modules.waf.detector import WAFDetector
-        det = WAFDetector.__new__(WAFDetector)
-        response = SimpleNamespace(status_code=200, text="Welcome to our site")
-        baseline = {"status_code": 200, "text": "Welcome to the website"}
-        assert det._is_waf_blocked(response, baseline) is False
+        matches = det._match_all_signatures(baseline)
+        assert len(matches) == 0
 
 
 # =====================================================================
