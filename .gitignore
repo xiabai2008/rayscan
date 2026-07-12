@@ -108,3 +108,9 @@ run_batch.cmd
 run_fast.py
 targets_*.txt
 clean/
+
+# RayScan template cache (auto-generated)
+template_cache.db
+# Local templates (user-specific)
+.rayscan/
+.nuclei/

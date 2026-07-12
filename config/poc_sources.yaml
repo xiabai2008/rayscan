@@ -1,0 +1,44 @@
+# RayScan PoC 来源配置模板
+# 复制到 ~/.rayscan/config.yaml 并修改路径即可
+#
+# PoC 来源说明:
+#   - Nuclei: 12.5w+ CVE/PoC 模板 (来自 05-POC插件专区/Nuclei-Poc-12.5w)
+#   - xRay:   长亭科技 xRay POC 规则 (来自 05-POC插件专区/xray-fscan-pocs)
+#   - Beebeeto: Beebeeto 开源 PoC (来自 05-POC插件专区/beebeeto)
+#   - BugScan: BugScan 社区 PoC (来自 05-POC插件专区/bugscan)
+
+poc_sources:
+  nuclei:
+    enabled: true
+    paths:
+      - "~/.rayscan/nuclei-templates"
+    auto_update: true
+    max_templates: 500
+
+  xray:
+    enabled: true
+    paths:
+      - "~/.rayscan/xray-pocs"
+
+  beebeeto:
+    enabled: false
+    paths:
+      - "~/.rayscan/beebeeto-pocs"
+
+  bugscan:
+    enabled: false
+    paths:
+      - "~/.rayscan/bugscan-pocs"
+
+# 集成工具配置
+integrations:
+  nuclei:
+    enabled: true
+    use_template_manager: true
+    max_templates: 500
+  sqlmap:
+    enabled: true
+  ffuf:
+    enabled: true
+  wappalyzer:
+    enabled: true

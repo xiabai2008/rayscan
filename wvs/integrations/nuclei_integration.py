@@ -17,6 +17,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 from ..config import ConfigManager
+from ..core.nuclei_template_manager import NucleiTemplateManager, get_template_manager
 from ..constants import DEFAULT_VERIFY_SSL
 from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
 
@@ -68,10 +69,20 @@ class NucleiIntegration:
         config: Optional[ConfigManager] = None,
         templates_dir: Optional[str] = None,
         nuclei_exe: Optional[str] = None,
+        use_template_manager: bool = True,
     ):
         self.config = config or ConfigManager()
         self.templates_dir = templates_dir
         self.nuclei_exe = nuclei_exe or self._find_nuclei_exe()
+        self.use_template_manager = use_template_manager
+        self.template_manager = None
+        if self.use_template_manager:
+            try:
+                self.template_manager = get_template_manager()
+                if not self.template_manager.is_ready:
+                    logger.info('[Nuclei] Template manager initialized')
+            except Exception as e:
+                logger.debug(f'[Nuclei] Template manager init skipped: {e}')
         self.timeout = self.config.get("timeout", 60)
         self._stats = {
             "total_scanned": 0,
@@ -130,6 +141,42 @@ class NucleiIntegration:
             return await self._fallback_scan(url, severities)
 
     # ─────────────────────────────────────────────────────────────
+    def build_template_index(self, force: bool = False) -> int:
+        """Build local Nuclei template index from all discovered directories"""
+        if not self.template_manager:
+            logger.warning('[Nuclei] Template manager not initialized')
+            return 0
+        if self.templates_dir and os.path.isdir(self.templates_dir):
+            self.template_manager.add_template_dir(self.templates_dir)
+        total = self.template_manager.build_index(force=force)
+        if total > 0:
+            logger.info(f'[Nuclei] Template index ready: {total} templates')
+        else:
+            logger.warning('[Nuclei] No templates found - run deploy_nuclei_templates.sh first')
+        return total
+
+    def get_template_stats(self) -> dict:
+        """Get template statistics"""
+        if self.template_manager:
+            return self.template_manager.get_stats()
+        return {'total': 0}
+
+    def select_templates_by_tech(
+        self,
+        tech_stack: list,
+        severities: list = None,
+        max_templates: int = 500,
+    ) -> list:
+        """Smart-select templates based on target tech stack"""
+        if not self.template_manager or not self.template_manager.is_ready:
+            return []
+        severities = severities or ['critical', 'high', 'medium']
+        return self.template_manager.get_templates_for_target(
+            tech_stack=tech_stack,
+            severities=severities,
+            max_templates=max_templates,
+        )
+
     # Real CLI invocation
     # ─────────────────────────────────────────────────────────────
 
@@ -156,8 +203,21 @@ class NucleiIntegration:
         for sev in severities:
             cmd.extend(["-severity", sev])
 
-        # Template directory
-        if self.templates_dir and os.path.exists(self.templates_dir):
+        # Template directory - use smart selection when available
+        templates_used = False
+        if self.use_template_manager and self.template_manager and self.template_manager.is_ready:
+            selected = self.template_manager.get_templates_for_target(
+                severities=['critical', 'high', 'medium'],
+                max_templates=500,
+            )
+            if selected:
+                parent_dirs = set(os.path.dirname(t) for t in selected)
+                for pd in sorted(parent_dirs):
+                    if os.path.isdir(pd):
+                        cmd.extend(["-t", pd])
+                        templates_used = True
+                logger.info(f'[Nuclei] Smart-selected {len(selected)} templates from {len(parent_dirs)} dirs')
+        if not templates_used and self.templates_dir and os.path.exists(self.templates_dir):
             cmd.extend(["-t", self.templates_dir])
 
         # Timeout

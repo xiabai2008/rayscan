@@ -54,6 +54,10 @@ _LITE_MODULE_PRIORITY = [
     "rce",         # time-based (slowest)
     "api",         # API security
     "js_analysis", # JS sensitive info / endpoints
+    "oa",          # OA system vulnerability detection
+    "webshell",    # WebShell detection
+    "weakpass",    # Weak password detection
+    "subdomain",  # Subdomain enumeration
 ]
 
 
@@ -721,6 +725,26 @@ class WAVScanner(ScannerIntegrationsMixin):
                 if self._lab_profile.login_path:
                     await self._do_lab_auth()
         self.session._lab_mode = self._lab_profile is not None
+
+        # ── Step 1.9: OA 自动检测（轻量路径探测） ──
+        if "oa" in self._modules and self.config.get("modules.oa.enabled", True):
+            self._oa_detected = False
+            try:
+                from .nuclei_template_manager import detect_oa_fingerprint
+                # 对目标主页做一次快速指纹检测
+                import httpx
+                async with httpx.AsyncClient(timeout=10, verify=False) as client:
+                    resp = await client.get(target.url, follow_redirects=True)
+                    oa_name = detect_oa_fingerprint(target.url, resp.text)
+                    if oa_name:
+                        logger.info(f"[OA] 检测到 OA 系统: {oa_name} — 激活 OA 专项检测")
+                        self._oa_detected = True
+                        # 通知 OA 模块设置上下文
+                        oa_mod = self._modules.get("oa")
+                        if oa_mod and hasattr(oa_mod, "_detected_oa"):
+                            oa_mod._detected_oa = oa_name
+            except Exception:
+                self._oa_detected = False
 
         # ── Crawl + 流式检测 ──
         logger.info("\n[*] Phase 1/4: Crawling + streaming detection...")

@@ -14,6 +14,7 @@ import tempfile
 from typing import Dict, List, TYPE_CHECKING
 
 from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
+from ..core.result_merger import ResultMerger, merge_and_display
 
 if TYPE_CHECKING:
     from .crawler import DiscoveredEndpoint
@@ -168,6 +169,79 @@ class ScannerIntegrationsMixin:
         if not nuclei.is_available:
             logger.info("[*] Nuclei CLI not available, using built-in fallback templates (50+ checks)")
         return await nuclei.scan(url)
+
+    async def scan_with_awvs(self, url: str, instance_name: str = "default") -> List[Vulnerability]:
+        """Use AWVS to scan the target URL"""
+        from ..integrations import AWVSIntegration
+
+        awvs = AWVSIntegration(config=self.config)
+        if not awvs.is_available:
+            logger.info("[*] AWVS not configured — skipping (configure integrations.awvs.instances)")
+            return []
+        logger.info("[*] Scanning with AWVS...")
+        return await awvs.scan(url, instance_name=instance_name)
+
+    async def scan_with_nessus(self, url: str, instance_name: str = "default") -> List[Vulnerability]:
+        """Use Nessus to scan the target URL"""
+        from ..integrations import NessusIntegration
+
+        nessus = NessusIntegration(config=self.config)
+        if not nessus.is_available:
+            logger.info("[*] Nessus not configured — skipping (configure integrations.nessus.instances)")
+            return []
+        logger.info("[*] Scanning with Nessus...")
+        return await nessus.scan(url, instance_name=instance_name)
+
+    async def run_multi_engine_scan(self, url: str) -> List[Vulnerability]:
+        """Run multi-engine scan and merge results"""
+        logger.info("[*] Running multi-engine scan (RayScan + AWVS + Nessus + Nuclei)...")
+        engine_results = {}
+
+        # RayScan built-in modules (already run by scanner)
+        # Collect from this scanner instance
+        if hasattr(self, "_modules"):
+            rayscan_vulns = []
+            for mod_name, mod_instance in self._modules.items():
+                if hasattr(mod_instance, "_found_vulns"):
+                    rayscan_vulns.extend(mod_instance._found_vulns)
+            if rayscan_vulns:
+                engine_results["rayscan"] = rayscan_vulns
+
+        # Nuclei
+        try:
+            nuclei_vulns = await self.scan_with_nuclei(url)
+            if nuclei_vulns:
+                engine_results["nuclei"] = nuclei_vulns
+        except Exception as e:
+            logger.warning(f"[Scanner] Nuclei scan failed: {e}")
+
+        # AWVS (if configured)
+        try:
+            awvs_vulns = await self.scan_with_awvs(url)
+            if awvs_vulns:
+                engine_results["awvs"] = awvs_vulns
+        except Exception as e:
+            logger.warning(f"[Scanner] AWVS scan failed: {e}")
+
+        # Nessus (if configured)
+        try:
+            nessus_vulns = await self.scan_with_nessus(url)
+            if nessus_vulns:
+                engine_results["nessus"] = nessus_vulns
+        except Exception as e:
+            logger.warning(f"[Scanner] Nessus scan failed: {e}")
+
+        # Merge
+        if len(engine_results) >= 2:
+            merger = ResultMerger()
+            merged = merger.merge(engine_results)
+            logger.info(f"[Scanner] Multi-engine merge: {len(merged)} vulns from {len(engine_results)} engines")
+            return merged
+
+        # Single engine — return as-is
+        for engine, vulns in engine_results.items():
+            return vulns
+        return []
 
     # ── Progress helpers ────────────────────────────────────────
 

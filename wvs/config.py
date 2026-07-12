@@ -89,6 +89,16 @@ class ConfigManager:
                 "depth": 3,
             },
             # v19.2: JS pathfinder — disabled by default in v1.1.0 (sqli+xss focus)
+            "subdomain": {"enabled": True, "timeout": 120, "threads": 10, "depth": 1},
+            "weakpass": {"enabled": True, "timeout": 60, "threads": 3, "depth": 1},
+            "webshell": {"enabled": True, "timeout": 30, "threads": 5, "depth": 1},
+            "oa": {
+                "enabled": True,
+                "timeout": 30,
+                "threads": 3,
+                "depth": 2,
+                "custom_params": {"detect_oa_nuclei": True},
+            },
             "jspathfinder": {
                 "enabled": False,
                 "timeout": 15,
@@ -101,12 +111,22 @@ class ConfigManager:
             },
         },
         # v19.2: External tool integrations
+        # PoC 模板来源配置
+        "poc_sources": {
+            "nuclei": {"enabled": True, "dir": "nuclei-templates"},
+            "xray": {"enabled": True, "dir": "xray-pocs"},
+            "beebeeto": {"enabled": False, "dir": "beebeeto-pocs"},
+            "bugscan": {"enabled": False, "dir": "bugscan-pocs"},
+        },
         "integrations": {
             "enabled": True,
             "nuclei": {
                 "enabled": True,
                 "timeout": 300,
                 "rate_limit": 20,
+                "templates_dir": "",
+                "use_template_manager": True,
+                "max_templates": 500,
             },
             "sqlmap": {
                 "enabled": True,
@@ -123,6 +143,14 @@ class ConfigManager:
             "wappalyzer": {
                 "enabled": True,
                 "timeout": 30,
+            },
+            "awvs": {
+                "enabled": False,
+                "instances": [],
+            },
+            "nessus": {
+                "enabled": False,
+                "instances": [],
             },
         },
     }

@@ -11,10 +11,18 @@ Lite 模块（轻量辅助，需 --all-modules 启用）位于 wvs.modules.lite 
 
 from .sqli import SQLiDetector
 from .xss import XSSDetector
+from .oa import OADetector
+from .webshell import WebShellDetector
+from .weakpass import WeakPasswordDetector
+from .subdomain import SubdomainDetector
 
 __all__ = [
     "SQLiDetector",
     "XSSDetector",
+    "OADetector",
+    "WebShellDetector",
+    "WeakPasswordDetector",
+    "SubdomainDetector",
 ]
 
 

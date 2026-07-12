@@ -252,6 +252,61 @@
                 </div>
             </div>
         </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-pane fade">
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <div class="card text-white bg-primary mb-3">
+                        <div class="card-header">总扫描数</div>
+                        <div class="card-body"><h3 id="dash-total-scans">0</h3></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-danger mb-3">
+                        <div class="card-header">总漏洞数</div>
+                        <div class="card-body"><h3 id="dash-total-vulns">0</h3></div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-white bg-danger mb-3">
+                        <div class="card-header">严重</div>
+                        <div class="card-body"><h3 id="dash-critical">0</h3></div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-white bg-warning mb-3">
+                        <div class="card-header">高危</div>
+                        <div class="card-body"><h3 id="dash-high">0</h3></div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="card text-white bg-info mb-3">
+                        <div class="card-header">中危</div>
+                        <div class="card-body"><h3 id="dash-medium">0</h3></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card mt-2">
+                <div class="card-header">最近扫描</div>
+                <div class="card-body" id="dash-recent" style="max-height:400px;overflow-y:auto">
+                    <p class="text-muted">暂无扫描记录</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="history" class="tab-pane fade">
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between">
+                    <span>扫描历史</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">刷新</button>
+                </div>
+                <div class="card-body" id="history-list" style="max-height:500px;overflow-y:auto">
+                    <p class="text-muted">暂无历史记录</p>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -379,7 +434,7 @@ function startScan() {
     // POST 启动
     fetch('/api/scan', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token }}'},
         body: JSON.stringify({
             url: url,
             modules: modules,
@@ -403,7 +458,7 @@ function startScan() {
 }
 
 function stopScan() {
-    fetch('/api/stop', {method: 'POST'});
+    fetch('/api/stop', {method: 'POST', headers: {'X-CSRF-Token': '{{ csrf_token }}'}});
     appendLog('--', 'WARNING', '用户中止扫描');
     onScanDone();
 }
@@ -570,6 +625,53 @@ function escapeHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+
+// ── 仪表板和历史 ──
+async function loadDashboard() {
+    try {
+        const r = await fetch('/api/stats');
+        const data = await r.json();
+        document.getElementById('dash-total-scans').textContent = data.total_scans;
+        document.getElementById('dash-total-vulns').textContent = data.total_vulns;
+        document.getElementById('dash-critical').textContent = (data.severity_totals.critical || 0);
+        document.getElementById('dash-high').textContent = (data.severity_totals.high || 0);
+        document.getElementById('dash-medium').textContent = (data.severity_totals.medium || 0);
+    } catch(e) {}
+}
+
+async function loadHistory() {
+    try {
+        const r = await fetch('/api/history?limit=50');
+        const data = await r.json();
+        const el = document.getElementById('history-list');
+        if (!data.length) {
+            el.innerHTML = '<p class="text-muted">暂无历史记录</p>';
+            return;
+        }
+        let html = '<table class="table table-sm"><tr><th>#</th><th>目标</th><th>时间</th><th>耗时</th><th>漏洞数</th></tr>';
+        data.forEach(h => {
+            const sev = h.severity_counts || {};
+            const badge = (sev.critical ? `<span class="badge bg-danger">${sev.critical}</span> ` : '') +
+                         (sev.high ? `<span class="badge bg-warning">${sev.high}</span> ` : '');
+            html += `<tr><td>${h.id}</td><td>${h.target}</td><td>${h.time.slice(0,19)}</td><td>${h.duration}s</td><td>${badge}${h.total_vulns}</td></tr>`;
+        });
+        html += '</table>';
+        el.innerHTML = html;
+
+        // Also update dashboard recent
+        const recentEl = document.getElementById('dash-recent');
+        let rh = '<table class="table table-sm"><tr><th>目标</th><th>漏洞数</th></tr>';
+        data.slice(0,10).forEach(h => {
+            rh += `<tr><td>${h.target}</td><td>${h.total_vulns}</td></tr>`;
+        });
+        rh += '</table>';
+        recentEl.innerHTML = rh;
+    } catch(e) {}
+}
+
+// 仪表板定时刷新
+setInterval(loadDashboard, 5000);
+setInterval(loadHistory, 10000);
 
 // 定时刷新用时
 setInterval(() => {

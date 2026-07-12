@@ -325,6 +325,173 @@ class SqlmapIntegration:
         else:
             return (Severity.MEDIUM, Confidence.MEDIUM)
 
+    async def extract_data(
+        self,
+        url: str,
+        params: Optional[Dict[str, str]] = None,
+        method: str = "GET",
+        data: Optional[str] = None,
+        cookies: Optional[Dict[str, str]] = None,
+        dbms: Optional[str] = None,
+        tables: Optional[List[str]] = None,
+        columns: Optional[List[str]] = None,
+        dump_all: bool = True,
+        limit: int = 10,
+        level: int = 1,
+        risk: int = 1,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        从 SQL 注入点提取数据
+
+        Args:
+            url: 目标 URL
+            params: GET 参数字典
+            method: HTTP 方法
+            data: POST 数据
+            cookies: Cookie
+            dbms: 指定数据库类型
+            tables: 要提取的表名列表
+            columns: 要提取的列名列表
+            dump_all: 是否导出全部数据
+            limit: 最大记录数
+            level: sqlmap 检测等级
+            risk: sqlmap 风险等级
+
+        Returns:
+            {表名: [{列: 值}]} 或 None
+        """
+        if not self.is_available:
+            logger.warning("[Sqlmap] sqlmap not available, cannot extract data")
+            return None
+
+        logger.warning("[Sqlmap] 数据提取模式 — 这将发送大量请求并可能修改数据库")
+        logger.warning("[Sqlmap] 确保您有合法授权执行此操作")
+
+        cmd = [self._get_runner()]
+
+        # Build full command for sqlmap
+        if self.sqlmap_path and self.sqlmap_path.endswith(".py"):
+            cmd.append(self.sqlmap_path)
+
+        # Target
+        if params:
+            param_str = "&".join(f"{k}={v}" for k, v in params.items())
+            full_url = url + ("?" + param_str if param_str else "")
+        else:
+            full_url = url
+        cmd.extend(["-u", full_url])
+
+        # POST data
+        if data:
+            cmd.extend(["--data", data])
+
+        # Cookies
+        if cookies:
+            cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
+            cmd.extend(["--cookie", cookie_str])
+
+        # Level & risk
+        cmd.extend(["--level", str(level)])
+        cmd.extend(["--risk", str(risk)])
+
+        # DBMS
+        if dbms:
+            cmd.extend(["--dbms", dbms])
+
+        # Extraction options
+        cmd.append("--batch")
+        cmd.append("--random-agent")
+
+        if dump_all:
+            cmd.append("--dump-all")
+        elif tables:
+            for table in tables:
+                cmd.extend(["-T", table])
+            if columns:
+                for col in columns:
+                    cmd.extend(["-C", col])
+            cmd.append("--dump")
+
+        # Limit
+        if limit:
+            cmd.extend(["--stop", str(limit)])
+
+        # Threads
+        cmd.extend(["--threads", "3"])
+
+        # No interactive
+        cmd.append("--disable-coloring")
+
+        logger.info(f"[Sqlmap] 数据提取: {url} (tables={tables}, limit={limit})")
+        logger.info(f"[Sqlmap] 命令: {' '.join(cmd[:6])}...")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=self.config.get("sqlmap_extract_timeout", 600),
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                logger.warning("[Sqlmap] 数据提取超时")
+                return None
+
+            output = stdout.decode("utf-8", errors="ignore")
+
+            # Parse output for extracted data
+            result = self._parse_extracted_data(output)
+            return result
+
+        except Exception as e:
+            logger.exception(f"[Sqlmap] 数据提取失败: {e}")
+            return None
+
+    def _parse_extracted_data(self, output: str) -> Optional[Dict[str, Any]]:
+        """Parse sqlmap dump output"""
+        result = {}
+        current_table = None
+        headers = []
+        rows = []
+
+        for line in output.split("\n"):
+            line = line.strip()
+
+            # Detect table name
+            if line.startswith("Table: "):
+                if current_table and rows:
+                    result[current_table] = {"columns": headers, "rows": rows}
+                current_table = line.replace("Table: ", "").strip()
+                headers = []
+                rows = []
+
+            # Detect database
+            if line.startswith("Database: "):
+                result["_database"] = line.replace("Database: ", "").strip()
+
+            # Detect CSV-style output
+            if "|" in line and current_table:
+                parts = [p.strip() for p in line.split("|") if p.strip()]
+                if not headers:
+                    headers = parts
+                else:
+                    if len(parts) == len(headers):
+                        rows.append(dict(zip(headers, parts)))
+
+        if current_table and rows:
+            result[current_table] = {"columns": headers, "rows": rows}
+
+        if not result:
+            # Fallback: raw output
+            result["_raw_output"] = output[:2000]
+
+        return result if result else None
+
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics"""
         return self._stats.copy()

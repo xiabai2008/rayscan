@@ -7,14 +7,18 @@
 ![Version](https://img.shields.io/badge/Version-1.1.0-orange)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-316%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-79%20passing-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2004/RayScan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
 
 **🚀 SQLi + XSS 专精扫描器 | 二阶注入·宽字节·Polyglot·mXSS·SSTI | 流式检测 | CLI + Web UI 双模式**
 
-**已通过 316 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 10 真实目标实战认证**
+**已通过 79 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 10 真实目标实战认证**
+
+> 📈 **测试覆盖路线图**：当前 79 个测试集中在 SQLi/XSS/RCE/SSRF 等核心检测器。
+> v1.1.0 计划：补齐 crawler / scanner / session / cache / reporting 单元测试至 250+；
+> v1.2.0 目标：核心模块行覆盖 ≥ 80%。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ```
 # 一条命令：自动分流靶机/实战，流式爬测协同

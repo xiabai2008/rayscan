@@ -5,6 +5,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import secrets  # noqa: E402  (用于 CSRF token 与可选 API token)
+
 import asyncio
 import json
 import logging
@@ -15,13 +17,75 @@ import time as time_module
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    render_template,
+    request,
+    session,
+    stream_with_context,
+)
 
 from wvs.config import ConfigManager
 from wvs.core import HTTPPool, WAVScanner
+from wvs.core.result_merger import ResultMerger
+from wvs.integrations import NucleiIntegration, SqlmapIntegration
 from wvs.models import ScanTarget
 
 app = Flask(__name__)
+
+# ── 鉴权 + CSRF 配置 ──
+# SECRET_KEY：必需（生产环境请用环境变量覆盖）。仅在缺失时给一个进程内随机值，
+# 这意味着每次重启会让已有 session 失效 — 配合 CSRF 重新签发即可。
+_app_secret = os.environ.get("RAYSCAN_WEB_SECRET")
+if _app_secret:
+    app.secret_key = _app_secret
+else:
+    app.secret_key = secrets.token_hex(32)
+    print(
+        "[WARN] 未设置 RAYSCAN_WEB_SECRET；Web UI 使用进程内随机 secret key。"
+        "重启后所有 session/CSRF token 失效。生产请设置该环境变量。"
+    )
+
+# 简单的 API token（与登录 session 二选一）。默认生成一个并打印到终端，
+# 用户可以 RAYSCAN_WEB_TOKEN=xxx 覆盖。
+_DEFAULT_TOKEN = secrets.token_urlsafe(24)
+API_TOKEN = os.environ.get("RAYSCAN_WEB_TOKEN") or _DEFAULT_TOKEN
+print(f"[INFO] RayScan Web UI API token (header 'X-Api-Token'): {API_TOKEN}")
+print("[INFO] 访问 /login 页面用此 token 登录；或 curl 调用时带 X-Api-Token。")
+
+
+def _is_authorized() -> bool:
+    """校验当前请求是否已通过鉴权（session 或 API token 任一即可）"""
+    if session.get("authenticated"):
+        return True
+    token = request.headers.get("X-Api-Token", "")
+    if token and secrets.compare_digest(token, API_TOKEN):
+        return True
+    return False
+
+
+def _get_or_create_csrf_token() -> str:
+    """返回当前 session 的 CSRF token（缺失时生成）"""
+    tok = session.get("csrf_token")
+    if not tok:
+        tok = secrets.token_urlsafe(32)
+        session["csrf_token"] = tok
+    return tok
+
+
+def _require_csrf():
+    """校验 POST/PUT/DELETE 是否带有效 CSRF token（API token 用户不受限）"""
+    if request.headers.get("X-Api-Token") and secrets.compare_digest(
+        request.headers.get("X-Api-Token", ""), API_TOKEN
+    ):
+        return  # API token 用户已通过 _is_authorized，跳过 CSRF
+    sent = request.headers.get("X-CSRF-Token", "")
+    expected = session.get("csrf_token", "")
+    if not expected or not sent or not secrets.compare_digest(sent, expected):
+        abort(403, description="CSRF token missing or invalid")
 
 # ── 扫描会话管理 ──
 class ScanSession:
@@ -241,20 +305,52 @@ scan_session = ScanSession()
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    if not _is_authorized():
+        return _redirect_to_login()
+    return render_template("index.html", csrf_token=_get_or_create_csrf_token())
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        submitted = (request.form.get("token") or "").strip()
+        if submitted and secrets.compare_digest(submitted, API_TOKEN):
+            session["authenticated"] = True
+            return _redirect_to_index()
+        return render_template("login.html", error="Token 无效"), 401
+    return render_template("login.html", error=None)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return _redirect_to_login()
+
+
+def _redirect_to_login():
+    from flask import redirect, url_for
+    return redirect(url_for("login"))
+
+
+def _redirect_to_index():
+    from flask import redirect, url_for
+    return redirect(url_for("index"))
 
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
+    if not _is_authorized():
+        return jsonify({"error": "未授权"}), 401
+    _require_csrf()
     if scan_session.scanning:
         return jsonify({"error": "已有扫描正在运行"}), 400
 
-    data = request.get_json()
-    url = data.get("url", "").strip()
+    data = request.get_json() or {}
+    url = (data.get("url") or "").strip()
     if not url:
         return jsonify({"error": "请输入 URL"}), 400
 
-    modules = data.get("modules", [])
+    modules = data.get("modules") or []
     if not modules:
         return jsonify({"error": "至少选择一个模块"}), 400
 
@@ -274,12 +370,17 @@ def api_scan():
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    if not _is_authorized():
+        return jsonify({"error": "未授权"}), 401
+    _require_csrf()
     scan_session.stop()
     return jsonify({"status": "stopped"})
 
 
 @app.route("/api/stream")
 def api_stream():
+    if not _is_authorized():
+        return jsonify({"error": "未授权"}), 401
     return Response(
         stream_with_context(scan_session.events()),
         mimetype="text/event-stream",
@@ -292,6 +393,8 @@ def api_stream():
 
 @app.route("/api/export/<fmt>")
 def api_export(fmt):
+    if not _is_authorized():
+        return jsonify({"error": "未授权"}), 401
     result = scan_session._result
     vulns = scan_session._found_vulns
     if not result and not vulns:
@@ -324,9 +427,72 @@ def api_export(fmt):
         return jsonify({"error": "不支持格式"}), 400
 
 
+# ── 扫描历史存储 ──────────────────────────────────────
+SCAN_HISTORY: list = []  # [{id, target, time, duration, vulns, severity_counts}]
+
+
+@app.route("/api/history")
+def api_scan_history():
+    """获取扫描历史"""
+    if not _is_authorized():
+        abort(401)
+    limit = request.args.get("limit", 50, type=int)
+    history = sorted(SCAN_HISTORY, key=lambda x: x.get("time", ""), reverse=True)[:limit]
+    return jsonify(history)
+
+
+@app.route("/api/stats")
+def api_stats():
+    """获取统计概览"""
+    if not _is_authorized():
+        abort(401)
+    total_scans = len(SCAN_HISTORY)
+    total_vulns = sum(h.get("total_vulns", 0) for h in SCAN_HISTORY)
+    severity_totals = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for h in SCAN_HISTORY:
+        for sev, count in h.get("severity_counts", {}).items():
+            if sev in severity_totals:
+                severity_totals[sev] += count
+    return jsonify({
+        "total_scans": total_scans,
+        "total_vulns": total_vulns,
+        "severity_totals": severity_totals,
+        "engines_available": {
+            "nuclei": True,
+            "sqlmap": True,
+        }
+    })
+
+
+def _record_scan(target: str, vulns: list, duration: float) -> dict:
+    """记录一次扫描到历史"""
+    severity_counts = {}
+    for v in vulns:
+        sev = v.get("severity", "info") if isinstance(v, dict) else (v.severity.value if hasattr(v, "severity") else "info")
+        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+    record = {
+        "id": len(SCAN_HISTORY) + 1,
+        "target": target,
+        "time": datetime.now().isoformat(),
+        "duration": round(duration, 1),
+        "total_vulns": len(vulns),
+        "severity_counts": severity_counts,
+    }
+    SCAN_HISTORY.append(record)
+    if len(SCAN_HISTORY) > 200:
+        SCAN_HISTORY[:] = SCAN_HISTORY[-200:]
+    return record
+
+
 if __name__ == "__main__":
+    # ── 默认仅本机绑定，避免无认证状态下对外暴露 ──
+    # 需要对外服务时：RAYSCAN_WEB_HOST=0.0.0.0 python app.py
+    bind_host = os.environ.get("RAYSCAN_WEB_HOST", "127.0.0.1")
+    bind_port = int(os.environ.get("RAYSCAN_WEB_PORT", "5000"))
     print("=" * 50)
     print("  RayScan 1.0.2 — Web UI")
-    print(f"  http://localhost:5000")
+    print(f"  http://{bind_host}:{bind_port}")
+    if bind_host in ("0.0.0.0", "::"):
+        print("  [WARN] 监听所有网卡 — 请确保已启用鉴权 (RAYSCAN_WEB_TOKEN)")
     print("=" * 50)
-    app.run(debug=False, host="0.0.0.0", port=5000, threaded=True)
+    app.run(debug=False, host=bind_host, port=bind_port, threaded=True)

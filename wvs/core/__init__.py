@@ -15,6 +15,26 @@ try:
 except ImportError:
     PoCGenerator = None
     PoC = None
+from .nuclei_template_manager import (
+    NucleiTemplateManager,
+    TemplateInfo,
+    get_template_manager,
+    detect_oa_fingerprint,
+    TECH_STACK_TAGS,
+    OA_FINGERPRINTS,
+    POC_SOURCES,
+)
+from .poc_source_manager import (
+    PoCSourceManager,
+    PoCSourceInfo,
+    get_poc_source_manager,
+    DEFAULT_POC_CONFIG,
+)
+from .result_merger import (
+    ResultMerger,
+    MergedVulnerability,
+    merge_and_display,
+)
 from .lab_profiles import (
     LabProfile,
     LabEndpoint,
@@ -57,4 +77,26 @@ __all__ = [
     "METASPLOITABLE2_PROFILE",
     "PIKACHU_PROFILE",
     "ALL_PROFILES",
+    # Nuclei Template Manager
+    "NucleiTemplateManager",
+    "TemplateInfo",
+    "get_template_manager",
+    "detect_oa_fingerprint",
+    "TECH_STACK_TAGS",
+    "OA_FINGERPRINTS",
+    "POC_SOURCES",
+    # PoC Source Manager
+    "PoCSourceManager",
+    "PoCSourceInfo",
+    "get_poc_source_manager",
+    "DEFAULT_POC_CONFIG",
+    # Result Merger
+    "ResultMerger",
+    "MergedVulnerability",
+    "merge_and_display",
+    # PoC Source Manager
+    "PoCSourceManager",
+    "PoCSourceInfo",
+    "get_poc_source_manager",
+    "DEFAULT_POC_CONFIG",
 ]
