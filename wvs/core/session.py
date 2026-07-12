@@ -23,16 +23,16 @@ import httpx
 
 from ..config import ConfigManager
 from ..constants import (
-    DEFAULT_TIMEOUT,
-    DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_RETRY_COUNT,
-    DEFAULT_MAX_RPS,
-    DEFAULT_RETRY_DELAYS,
-    DEFAULT_VERIFY_SSL,
-    COOKIE_STORAGE_PATH,
     COOKIE_PLAINTEXT_PATH,
+    COOKIE_STORAGE_PATH,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_MAX_RPS,
+    DEFAULT_RETRY_COUNT,
+    DEFAULT_RETRY_DELAYS,
+    DEFAULT_TIMEOUT,
+    DEFAULT_VERIFY_SSL,
 )
-from ..exceptions import RequestError, TimeoutError, RateLimitError
+from ..exceptions import RateLimitError, RequestError, TimeoutError
 from .rate_limiter import IntelligentRateLimiter
 
 logger = logging.getLogger(__name__)
@@ -79,11 +79,12 @@ class SecureCookieStorage:
     def _init_fernet(self):
         """Initialize Fernet encryptor"""
         try:
+            import base64
+            import platform
+
             from cryptography.fernet import Fernet
             from cryptography.hazmat.primitives import hashes
             from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-            import base64
-            import platform
 
             # Derive key from machine-specific data
             key_source = f"{platform.node()}-{platform.system()}-{os.environ.get('USERNAME', 'default')}"
@@ -99,7 +100,9 @@ class SecureCookieStorage:
             return Fernet(key)
 
         except ImportError:
-            logger.warning("[Cookie] cryptography library not installed, Cookies will be stored in plaintext. Suggestion: pip install cryptography")
+            logger.warning(
+                "[Cookie] cryptography library not installed, Cookies will be stored in plaintext. Suggestion: pip install cryptography"
+            )
             return None
 
     def save(self, cookies: Dict[str, Any]) -> None:
@@ -167,7 +170,9 @@ class SecureCookieStorage:
                 backup_path = self.legacy_path.with_suffix(".json.bak")
                 self.legacy_path.rename(backup_path)
 
-                logger.info(f"[Cookie] Migrated plaintext Cookies to encrypted storage, original backed up: {backup_path}")
+                logger.info(
+                    f"[Cookie] Migrated plaintext Cookies to encrypted storage, original backed up: {backup_path}"
+                )
 
         except Exception as e:
             logger.warning(f"[Cookie] Failed to migrate plaintext file: {e}")
@@ -208,7 +213,10 @@ class HTTPPool:
         self.max_rps = self.config.get("max_requests_per_second", DEFAULT_MAX_RPS)
 
         # User-Agent
-        self.user_agent = self.config.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+        self.user_agent = self.config.get(
+            "user_agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        )
 
         # UA rotation — auto-rotate on every request (WAF evasion)
         self._ua_pool = list(UA_POOL)
@@ -216,6 +224,7 @@ class HTTPPool:
         self._fake_ua = None
         try:
             from fake_useragent import UserAgent
+
             self._fake_ua = UserAgent()
             logger.debug("[HTTPPool] fake_useragent loaded for UA rotation")
         except Exception:  # noqa: S110
@@ -294,8 +303,8 @@ class HTTPPool:
                 else:
                     # All proxies failed — fall back to direct connection
                     self._fallback_direct = True
-                    logger.warning(f"[HTTPPool] All proxies failed, falling back to direct connection")
-            
+                    logger.warning("[HTTPPool] All proxies failed, falling back to direct connection")
+
             client_kwargs = dict(
                 timeout=httpx.Timeout(self.timeout, connect=DEFAULT_CONNECT_TIMEOUT),
                 follow_redirects=self.follow_redirects,
@@ -349,7 +358,7 @@ class HTTPPool:
     def _merge_headers(self, url: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """Merge default headers and append jar cookies to the Cookie header (fixes httpx jar not auto-sending issue)"""
         headers = {"User-Agent": self._rotate_ua()}
-        if "headers" in kwargs and kwargs["headers"]:
+        if kwargs.get("headers"):
             headers.update(kwargs["headers"])
 
         # Read cookies from httpx jar, explicitly write Cookie header as fallback
@@ -425,7 +434,7 @@ class HTTPPool:
     # Core Request Entry Point
     # ─────────────────────────────────────────────────────────────
 
-    async def request(self, method: str, url: str, follow_redirects=None, **kwargs) -> httpx.Response:  # noqa: C901
+    async def request(self, method: str, url: str, follow_redirects=None, **kwargs) -> httpx.Response:
         """
         Unified HTTP request entry point
 
@@ -452,7 +461,7 @@ class HTTPPool:
         # P8: GET request dedup cache — skip identical requests across modules
         if method.upper() == "GET":
             cache_key_parts = [method.upper(), url]
-            if "params" in kwargs and kwargs["params"]:
+            if kwargs.get("params"):
                 sorted_params = tuple(sorted(kwargs["params"].items()))
                 cache_key_parts.append(str(sorted_params))
             cache_key = "|".join(cache_key_parts)
@@ -531,11 +540,15 @@ class HTTPPool:
                         last_exc = RateLimitError(f"Rate limited by {host}", retry_after=retry_after)
                         continue
                     else:
-                        raise RequestError(f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url)
+                        raise RequestError(
+                            f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url
+                        )
 
                 # 5xx server errors -> retry
                 if 500 <= resp.status_code < 600:
-                    last_exc = RequestError(f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url)
+                    last_exc = RequestError(
+                        f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url
+                    )
                     if attempt < self.retry_count:
                         logger.warning(f"Server error {resp.status_code} for {url}, retrying...")
                         continue
@@ -544,7 +557,7 @@ class HTTPPool:
                 # Success — cache GET responses for cross-module dedup
                 if method.upper() == "GET" and resp.status_code < 400:
                     cache_key_parts = [method.upper(), url]
-                    if "params" in kwargs and kwargs["params"]:
+                    if kwargs.get("params"):
                         sorted_params = tuple(sorted(kwargs["params"].items()))
                         cache_key_parts.append(str(sorted_params))
                     self._request_cache["|".join(cache_key_parts)] = resp
@@ -553,13 +566,15 @@ class HTTPPool:
             except httpx.TimeoutException:
                 # Proxy failure detection — if using a proxy, mark it and retry direct
                 if not self._fallback_direct and self._proxy_pool:
-                    proxy_in_use = getattr(self._sc, '_transport', None)
+                    proxy_in_use = getattr(self._sc, "_transport", None)
                     logger.warning(f"[HTTPPool] Proxy timeout on {url}, marking bad and retrying...")
                     for p in self._proxy_pool:
                         if p not in self._bad_proxies:
                             self.mark_bad_proxy(p)
                             break
-                last_exc = TimeoutError(f"Timeout after {self.timeout}s for {url}", timeout=float(self.timeout), url=url)
+                last_exc = TimeoutError(
+                    f"Timeout after {self.timeout}s for {url}", timeout=float(self.timeout), url=url
+                )
                 if attempt < self.retry_count:
                     logger.debug(f"Timeout for {url}, retrying ({attempt + 1}/{self.retry_count})...")
                     continue

@@ -17,28 +17,28 @@ RayScan Lite 模块 — 轻量辅助检测
 - js_analysis : JS 敏感信息分析
 """
 
+from ..api import APIDetector
 from ..cmdi import CMDInjectionDetector
+from ..js_analysis import JSAnalysisDetector
+from ..jspathfinder import JSPathfinderDetector
 from ..lfi import LFIDetector
 from ..rce import RCEDetector
-from ..ssrf import SSRFDetector
-from ..xxe import XXEDetector
 from ..sensitive import SensitiveDetector
-from ..api import APIDetector
+from ..ssrf import SSRFDetector
 from ..waf import WAFDetector
-from ..jspathfinder import JSPathfinderDetector
-from ..js_analysis import JSAnalysisDetector
+from ..xxe import XXEDetector
 
 __all__ = [
+    "APIDetector",
     "CMDInjectionDetector",
+    "JSAnalysisDetector",
+    "JSPathfinderDetector",
     "LFIDetector",
     "RCEDetector",
     "SSRFDetector",
-    "XXEDetector",
     "SensitiveDetector",
-    "APIDetector",
     "WAFDetector",
-    "JSPathfinderDetector",
-    "JSAnalysisDetector",
+    "XXEDetector",
 ]
 
 

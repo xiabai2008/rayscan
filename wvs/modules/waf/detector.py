@@ -7,15 +7,13 @@ Upgraded features:
   3. WAF bypass capability test
 """
 
-import asyncio
 import logging
 import re
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
 
-from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, ScanTarget, Severity, Confidence
 from ...core.session import HTTPPool
+from ...models import Confidence, ScanTarget, Severity, Vulnerability
+from ..base import DetectionModule, ModuleInfo, register_module
 
 logger = logging.getLogger("wvs.module.waf")
 
@@ -25,113 +23,143 @@ logger = logging.getLogger("wvs.module.waf")
 
 WAF_SIGNATURES: List[Tuple[str, Dict]] = [
     # ── Cloud / CDN WAFs ──
-    ("Cloudflare",             {"headers": {"server": r"cloudflare", "cf-ray": r".+"}, "cookies": {"__cfduid": None, "cf_clearance": None}}),
-    ("AWS WAF / ELB",          {"headers": {"x-amzn-requestid": r".+", "x-amz-id": r".+", "x-amz-request-id": r".+", "x-blocked-by-waf": r".+"}, "cookies": {"awsalb": r".+"}}),
-    ("Akamai Kona",            {"headers": {"x-akamai-transformed": r".+", "x-akamai-request-id": r".+"}, "cookies": {"ak_bmsc": None}}),
-    ("Azure Front Door",       {"headers": {"x-azure-ref": r".+", "x-ms-request-id": r".+"}}),
-    ("CloudFront (Amazon)",     {"headers": {"x-amz-cf-id": r".+", "x-amz-cf-pop": r".+"}}),
-    ("Cloudbric",              {"cookies": {"Cloudbric": r".+"}}),
-    ("ArvanCloud",             {"headers": {"ar-sid": r".+", "ar-request-id": r".+"}}),
-    ("Fastly",                  {"headers": {"x-served-by": r".+", "x-cache": r"(?:HIT|MISS)"}}),
-    ("StackPath",              {"headers": {"x-stackpath-cache": r".+"}}),
-    ("ZScaler",                {"headers": {"x-zscaler-firewall": r".+"}}),
-    ("Edgecast / Verizon",     {"headers": {"server": r"ECDs", "x-ec-custom-error": r".+"}}),
-    ("PowerCDN",               {"headers": {"x-cdn": r"PowerCDN", "x-via": r".+"}}),
-    ("CacheFly CDN",           {"headers": {"x-cachefly": r".+"}}),
-    ("LimeLight CDN",          {"cookies": {"Limelight": r".+"}}),
-    ("Squarespace",            {"headers": {"x-squarespace-request-id": r".+"}, "cookies": {"SS_MID": r".+", "SS_SESSION": r".+"}}),
-    ("Varnish WAF",            {"headers": {"x-varnish": r"\d+", "via": r"varnish"}}),
-    ("OpenResty Lua Nginx",    {"headers": {"x-openresty-waf": r".+", "luawaf": r".+"}}),
-    ("Envoy Proxy",            {"headers": {"x-envoy-upstream-healthchecked": r".+", "x-envoy-decorator-operation": r".+"}}),
-
+    (
+        "Cloudflare",
+        {"headers": {"server": r"cloudflare", "cf-ray": r".+"}, "cookies": {"__cfduid": None, "cf_clearance": None}},
+    ),
+    (
+        "AWS WAF / ELB",
+        {
+            "headers": {
+                "x-amzn-requestid": r".+",
+                "x-amz-id": r".+",
+                "x-amz-request-id": r".+",
+                "x-blocked-by-waf": r".+",
+            },
+            "cookies": {"awsalb": r".+"},
+        },
+    ),
+    (
+        "Akamai Kona",
+        {"headers": {"x-akamai-transformed": r".+", "x-akamai-request-id": r".+"}, "cookies": {"ak_bmsc": None}},
+    ),
+    ("Azure Front Door", {"headers": {"x-azure-ref": r".+", "x-ms-request-id": r".+"}}),
+    ("CloudFront (Amazon)", {"headers": {"x-amz-cf-id": r".+", "x-amz-cf-pop": r".+"}}),
+    ("Cloudbric", {"cookies": {"Cloudbric": r".+"}}),
+    ("ArvanCloud", {"headers": {"ar-sid": r".+", "ar-request-id": r".+"}}),
+    ("Fastly", {"headers": {"x-served-by": r".+", "x-cache": r"(?:HIT|MISS)"}}),
+    ("StackPath", {"headers": {"x-stackpath-cache": r".+"}}),
+    ("ZScaler", {"headers": {"x-zscaler-firewall": r".+"}}),
+    ("Edgecast / Verizon", {"headers": {"server": r"ECDs", "x-ec-custom-error": r".+"}}),
+    ("PowerCDN", {"headers": {"x-cdn": r"PowerCDN", "x-via": r".+"}}),
+    ("CacheFly CDN", {"headers": {"x-cachefly": r".+"}}),
+    ("LimeLight CDN", {"cookies": {"Limelight": r".+"}}),
+    (
+        "Squarespace",
+        {"headers": {"x-squarespace-request-id": r".+"}, "cookies": {"SS_MID": r".+", "SS_SESSION": r".+"}},
+    ),
+    ("Varnish WAF", {"headers": {"x-varnish": r"\d+", "via": r"varnish"}}),
+    ("OpenResty Lua Nginx", {"headers": {"x-openresty-waf": r".+", "luawaf": r".+"}}),
+    ("Envoy Proxy", {"headers": {"x-envoy-upstream-healthchecked": r".+", "x-envoy-decorator-operation": r".+"}}),
     # ── Enterprise WAFs ──
-    ("F5 BIG-IP ASM",          {"cookies": {"TS[0-9a-f]{4,}": r".+", "F5_ST": r".+", "TSe[0-9a-f]{4,}": r".+"}}),
-    ("F5 BIG-IP LTM",          {"cookies": {"BIGipServer": r".+", "BIGipServerpool": r".+"}}),
-    ("F5 TrafficShield",       {"headers": {"f5-trafficshield": r".+"}, "cookies": {"TSASHSID": r".+", "F5_TRACK_USER": r".+"}}),
-    ("Imperva Incapsula",      {"cookies": {"incap_ses_": r".+", "visid_incap_": r".+"}}),
-    ("Imperva SecureSphere",   {"headers": {"x-isecsphere": r".+"}}),
-    ("Barracuda",              {"cookies": {"barracuda_nocache": r".+", "barracuda_": r".+"}}),
-    ("Fortinet FortiWeb",      {"cookies": {"FORTIWAFSID": None}}),
-    ("Fortinet FortiGate",     {"headers": {"fortigate": r".+"}}),
-    ("Citrix NetScaler",       {"headers": {"x-ns-protection": r".+"}, "cookies": {"ns_af": None, "citrix_ns_id": None}}),
-    ("Citrix Teros",           {"cookies": {"st8id": r".+", "st8_waf": r".+"}}),
-    ("Radware AppWall",        {"headers": {"x-sl-compstate": r".+"}}),
-    ("Palo Alto NGFW",         {"headers": {"x-paloalto-firewall": r".+", "x-auth-request-access": r".+"}}),
-    ("WatchGuard",             {"headers": {"x-watchguard-firewall": r".+", "request-id": r".+"}}),
-    ("SonicWall",              {"headers": {"server": r"SonicWALL"}}),
-    ("IBM WebSEAL",            {"headers": {"webseal": r".+"}}),
-    ("IBM DataPower",          {"headers": {"x-datapower-waf": r".+"}}),
-    ("Sophos UTM",             {"headers": {"x-sophos-waf": r".+"}}),
-    ("Wallarm",                {"headers": {"x-wallarm-instance": r".+", "x-wallarm-waf": r".+"}}),
-    ("ThreatX (A10)",          {"headers": {"x-threatx-waf": r".+"}}),
-    ("DenyALL",                {"headers": {"x-denyall": r".+"}}),
-
+    ("F5 BIG-IP ASM", {"cookies": {"TS[0-9a-f]{4,}": r".+", "F5_ST": r".+", "TSe[0-9a-f]{4,}": r".+"}}),
+    ("F5 BIG-IP LTM", {"cookies": {"BIGipServer": r".+", "BIGipServerpool": r".+"}}),
+    (
+        "F5 TrafficShield",
+        {"headers": {"f5-trafficshield": r".+"}, "cookies": {"TSASHSID": r".+", "F5_TRACK_USER": r".+"}},
+    ),
+    ("Imperva Incapsula", {"cookies": {"incap_ses_": r".+", "visid_incap_": r".+"}}),
+    ("Imperva SecureSphere", {"headers": {"x-isecsphere": r".+"}}),
+    ("Barracuda", {"cookies": {"barracuda_nocache": r".+", "barracuda_": r".+"}}),
+    ("Fortinet FortiWeb", {"cookies": {"FORTIWAFSID": None}}),
+    ("Fortinet FortiGate", {"headers": {"fortigate": r".+"}}),
+    ("Citrix NetScaler", {"headers": {"x-ns-protection": r".+"}, "cookies": {"ns_af": None, "citrix_ns_id": None}}),
+    ("Citrix Teros", {"cookies": {"st8id": r".+", "st8_waf": r".+"}}),
+    ("Radware AppWall", {"headers": {"x-sl-compstate": r".+"}}),
+    ("Palo Alto NGFW", {"headers": {"x-paloalto-firewall": r".+", "x-auth-request-access": r".+"}}),
+    ("WatchGuard", {"headers": {"x-watchguard-firewall": r".+", "request-id": r".+"}}),
+    ("SonicWall", {"headers": {"server": r"SonicWALL"}}),
+    ("IBM WebSEAL", {"headers": {"webseal": r".+"}}),
+    ("IBM DataPower", {"headers": {"x-datapower-waf": r".+"}}),
+    ("Sophos UTM", {"headers": {"x-sophos-waf": r".+"}}),
+    ("Wallarm", {"headers": {"x-wallarm-instance": r".+", "x-wallarm-waf": r".+"}}),
+    ("ThreatX (A10)", {"headers": {"x-threatx-waf": r".+"}}),
+    ("DenyALL", {"headers": {"x-denyall": r".+"}}),
     # ── Chinese WAFs ──
-    ("SafeDog",                {"headers": {"safedog": r".+"}, "cookies": {"safedog-flow-item": None}}),
-    ("Aliyun WAF",             {"headers": {"aliyunwaf": r".+", "wzws-ray": r".+"}}),
-    ("Tencent Cloud WAF",      {"headers": {"tencent-waf": r".+", "qcloud-waf": r".+"}}),
-    ("Baidu Yunjiasu",         {"headers": {"yunjiasu-nginx": r".+"}}),
-    ("Chuangyu (Yunaq)",       {"headers": {"chuangyu": r".+", "yunaq": r".+"}}),
-    ("KnownSec KS-WAF",        {"headers": {"knownsec-waf": r".+"}}),
-    ("NSFocus WAF",            {"headers": {"nsfocus-waf": r".+", "x-nsfocus": r".+"}}),
-    ("360 WZB",                {"headers": {"x-powered-by-360wzb": r".+", "360wzws": r".+"}, "cookies": {"360wzws": None}}),
-    ("Yundun",                 {"headers": {"yundun": r".+"}, "cookies": {"yundun": r".+"}}),
-    ("Yunsuo",                 {"cookies": {"yunsuo": r".+"}}),
-    ("YXLink",                 {"headers": {"yxlink-waf": r".+"}, "cookies": {"yx_sid": r".+", "yx_lang": r".+"}}),
-    ("UEWaf (UCloud)",         {"headers": {"uewaf": r".+"}}),
-    ("Qiniu CDN WAF",          {"headers": {"qiniu-waf": r".+"}}),
-    ("Safeline (Chaitin)",     {"headers": {"x-safeline-waf": r".+"}}),
-    ("WebRay",                 {"headers": {"webray-waf": r".+", "x-webray": r".+"}}),
-
+    ("SafeDog", {"headers": {"safedog": r".+"}, "cookies": {"safedog-flow-item": None}}),
+    ("Aliyun WAF", {"headers": {"aliyunwaf": r".+", "wzws-ray": r".+"}}),
+    ("Tencent Cloud WAF", {"headers": {"tencent-waf": r".+", "qcloud-waf": r".+"}}),
+    ("Baidu Yunjiasu", {"headers": {"yunjiasu-nginx": r".+"}}),
+    ("Chuangyu (Yunaq)", {"headers": {"chuangyu": r".+", "yunaq": r".+"}}),
+    ("KnownSec KS-WAF", {"headers": {"knownsec-waf": r".+"}}),
+    ("NSFocus WAF", {"headers": {"nsfocus-waf": r".+", "x-nsfocus": r".+"}}),
+    ("360 WZB", {"headers": {"x-powered-by-360wzb": r".+", "360wzws": r".+"}, "cookies": {"360wzws": None}}),
+    ("Yundun", {"headers": {"yundun": r".+"}, "cookies": {"yundun": r".+"}}),
+    ("Yunsuo", {"cookies": {"yunsuo": r".+"}}),
+    ("YXLink", {"headers": {"yxlink-waf": r".+"}, "cookies": {"yx_sid": r".+", "yx_lang": r".+"}}),
+    ("UEWaf (UCloud)", {"headers": {"uewaf": r".+"}}),
+    ("Qiniu CDN WAF", {"headers": {"qiniu-waf": r".+"}}),
+    ("Safeline (Chaitin)", {"headers": {"x-safeline-waf": r".+"}}),
+    ("WebRay", {"headers": {"webray-waf": r".+", "x-webray": r".+"}}),
     # ── Web App / WordPress WAFs ──
-    ("Wordfence",              {"headers": {"x-wordfence": r".+"}, "cookies": {"wordfence_verifiedHuman": None}}),
-    ("Sucuri CloudProxy",      {"headers": {"x-sucuri-id": r".+", "x-sucuri-cache": r".+", "x-sucuri-block": r".+"}}),
-    ("BulletProof Security",   {"headers": {"x-bps-waf": r".+"}}),
-    ("Comodo cWatch",          {"headers": {"x-cwatch-waf": r".+"}}),
-    ("Malcare",                {"headers": {"x-malcare-waf": r".+"}}),
-    ("SiteLock TrueShield",    {"headers": {"x-sitelock-waf": r".+"}}),
-    ("SiteGuard",              {"headers": {"x-siteguard-waf": r".+"}}),
-    ("SecuPress",              {"headers": {"x-secupress-waf": r".+"}}),
-    ("WP Cerber",              {"headers": {"x-cerber-waf": r".+"}}),
-    ("NinjaFirewall",          {"headers": {"x-ninja-waf": r".+"}}),
-    ("WebARX",                 {"headers": {"x-webarx-waf": r".+"}}),
-    ("Shield Security",        {"headers": {"x-shield-waf": r".+"}}),
-    ("Shieldon",               {"headers": {"x-shieldon-waf": r".+"}}),
-
+    ("Wordfence", {"headers": {"x-wordfence": r".+"}, "cookies": {"wordfence_verifiedHuman": None}}),
+    ("Sucuri CloudProxy", {"headers": {"x-sucuri-id": r".+", "x-sucuri-cache": r".+", "x-sucuri-block": r".+"}}),
+    ("BulletProof Security", {"headers": {"x-bps-waf": r".+"}}),
+    ("Comodo cWatch", {"headers": {"x-cwatch-waf": r".+"}}),
+    ("Malcare", {"headers": {"x-malcare-waf": r".+"}}),
+    ("SiteLock TrueShield", {"headers": {"x-sitelock-waf": r".+"}}),
+    ("SiteGuard", {"headers": {"x-siteguard-waf": r".+"}}),
+    ("SecuPress", {"headers": {"x-secupress-waf": r".+"}}),
+    ("WP Cerber", {"headers": {"x-cerber-waf": r".+"}}),
+    ("NinjaFirewall", {"headers": {"x-ninja-waf": r".+"}}),
+    ("WebARX", {"headers": {"x-webarx-waf": r".+"}}),
+    ("Shield Security", {"headers": {"x-shield-waf": r".+"}}),
+    ("Shieldon", {"headers": {"x-shieldon-waf": r".+"}}),
     # ── ModSecurity & derivatives ──
-    ("ModSecurity",            {"headers": {"x-modsecurity": r".+", "mod_security": r".+", "x-waf-rule": r".+"}}),
-    ("NAXSI",                  {"headers": {"x-naxsi": r".+", "x-naxsi-blocked": r".+"}}),
-    ("DotDefender",            {"headers": {"x-dotdefender": r".+"}}),
-    ("Imunify360",             {"headers": {"x-imunify360": r".+"}}),
-    ("LiteSpeed WAF",          {"headers": {"x-litespeed-cache": r".+"}}),
-    ("eEye SecureIIS",         {"headers": {"x-secureiis": r".+"}}),
-    ("Safe3 WAF",              {"headers": {"safe3waf": r".+", "x-safe3": r".+"}}),
-
+    ("ModSecurity", {"headers": {"x-modsecurity": r".+", "mod_security": r".+", "x-waf-rule": r".+"}}),
+    ("NAXSI", {"headers": {"x-naxsi": r".+", "x-naxsi-blocked": r".+"}}),
+    ("DotDefender", {"headers": {"x-dotdefender": r".+"}}),
+    ("Imunify360", {"headers": {"x-imunify360": r".+"}}),
+    ("LiteSpeed WAF", {"headers": {"x-litespeed-cache": r".+"}}),
+    ("eEye SecureIIS", {"headers": {"x-secureiis": r".+"}}),
+    ("Safe3 WAF", {"headers": {"safe3waf": r".+", "x-safe3": r".+"}}),
     # ── Generic / Behavioral ──
-    ("Generic WAF",            {"headers": {"x-waf": r".+", "x-firewall": r".+", "waf": r".+", "x-protected-by": r".+", "x-secured-by": r".+", "x-security": r".+"}}),
-    ("DDoS-GUARD",             {"headers": {"ddos-guard": r".+"}, "cookies": {"ddosguard": r".+", "ddos": r".+"}}),
-    ("BlockDoS",               {"headers": {"blockdos": r".+"}}),
-    ("Armor Defense",          {"headers": {"x-armor-waf": r".+"}}),
-    ("Bekchy",                 {"cookies": {"bekchy": r".+"}}),
-    ("BinarySec",              {"headers": {"binarysec-waf": r".+", "x-binarysec": r".+"}}),
-    ("BitNinja",               {"headers": {"x-bitninja-waf": r".+"}}),
-    ("DDoS-GUARD CORP",        {"headers": {"ddosguard": r".+"}}),
-    ("Link11",                 {"headers": {"x-link11-waf": r".+"}}),
-    ("NexusGuard",             {"headers": {"x-nexusguard-waf": r".+"}}),
-    ("Reblaze",                {"headers": {"x-reblaze-waf": r".+"}, "cookies": {"reblaze": r".+"}}),
-    ("SecKing",                {"headers": {"secking-waf": r".+"}}),
-    ("Shadow Daemon",          {"headers": {"x-shadowd-waf": r".+"}}),
-    ("VirusDie",               {"headers": {"x-virusdie-waf": r".+"}}),
-    ("XLabs Security",         {"headers": {"xlabs-waf": r".+", "x-xlabs-security": r".+"}}),
-    ("Zenedge",                {"headers": {"x-zenedge": r".+", "x-ze-waf": r".+"}}),
+    (
+        "Generic WAF",
+        {
+            "headers": {
+                "x-waf": r".+",
+                "x-firewall": r".+",
+                "waf": r".+",
+                "x-protected-by": r".+",
+                "x-secured-by": r".+",
+                "x-security": r".+",
+            }
+        },
+    ),
+    ("DDoS-GUARD", {"headers": {"ddos-guard": r".+"}, "cookies": {"ddosguard": r".+", "ddos": r".+"}}),
+    ("BlockDoS", {"headers": {"blockdos": r".+"}}),
+    ("Armor Defense", {"headers": {"x-armor-waf": r".+"}}),
+    ("Bekchy", {"cookies": {"bekchy": r".+"}}),
+    ("BinarySec", {"headers": {"binarysec-waf": r".+", "x-binarysec": r".+"}}),
+    ("BitNinja", {"headers": {"x-bitninja-waf": r".+"}}),
+    ("DDoS-GUARD CORP", {"headers": {"ddosguard": r".+"}}),
+    ("Link11", {"headers": {"x-link11-waf": r".+"}}),
+    ("NexusGuard", {"headers": {"x-nexusguard-waf": r".+"}}),
+    ("Reblaze", {"headers": {"x-reblaze-waf": r".+"}, "cookies": {"reblaze": r".+"}}),
+    ("SecKing", {"headers": {"secking-waf": r".+"}}),
+    ("Shadow Daemon", {"headers": {"x-shadowd-waf": r".+"}}),
+    ("VirusDie", {"headers": {"x-virusdie-waf": r".+"}}),
+    ("XLabs Security", {"headers": {"xlabs-waf": r".+", "x-xlabs-security": r".+"}}),
+    ("Zenedge", {"headers": {"x-zenedge": r".+", "x-ze-waf": r".+"}}),
 ]
 
 # ── Behavioral Detection Payloads ──────────────────────────────
 BEHAVIORAL_ROUNDS = [
-    ("NORMAL",  None),
-    ("XSS",     "<script>alert('WAF_DETECTION_PROBE_xsR8')</script>"),
-    ("SQLi",    "' UNION SELECT 'WAF_PROBE_sqL9--"),
-    ("LFI",     "../../../../etc/passwd"),
+    ("NORMAL", None),
+    ("XSS", "<script>alert('WAF_DETECTION_PROBE_xsR8')</script>"),
+    ("SQLi", "' UNION SELECT 'WAF_PROBE_sqL9--"),
+    ("LFI", "../../../../etc/passwd"),
 ]
 
 # ── WAF Bypass Test Payloads ───────────────────────────────────
@@ -178,44 +206,62 @@ class WAFDetector(DetectionModule):
         waf_matches = self._match_all_signatures(baseline)
         if waf_matches:
             evidence = f"WAF identified: {', '.join(waf_matches)}"
-            findings.append(self._create_vuln(
-                url=url, param="N/A", param_type="N/A", method="GET",
-                payload="WAF signature probe",
-                vuln_type="waf_identified",
-                severity=Severity.INFO,
-                confidence=Confidence.HIGH if len(waf_matches) > 1 else Confidence.MEDIUM,
-                evidence=evidence,
-            ))
+            findings.append(
+                self._create_vuln(
+                    url=url,
+                    param="N/A",
+                    param_type="N/A",
+                    method="GET",
+                    payload="WAF signature probe",
+                    vuln_type="waf_identified",
+                    severity=Severity.INFO,
+                    confidence=Confidence.HIGH if len(waf_matches) > 1 else Confidence.MEDIUM,
+                    evidence=evidence,
+                )
+            )
 
         # ── 2. Behavioral Detection ──
         behavioral = await self._behavioral_detect(url, params, baseline)
         if behavioral and not waf_matches:
-            findings.append(self._create_vuln(
-                url=url, param="N/A", param_type="N/A", method="GET",
-                payload="WAF behavioral probe",
-                vuln_type="waf_detected",
-                severity=Severity.INFO, confidence=Confidence.MEDIUM,
-                evidence=f"Behavioral WAF detection: {behavioral}",
-            ))
+            findings.append(
+                self._create_vuln(
+                    url=url,
+                    param="N/A",
+                    param_type="N/A",
+                    method="GET",
+                    payload="WAF behavioral probe",
+                    vuln_type="waf_detected",
+                    severity=Severity.INFO,
+                    confidence=Confidence.MEDIUM,
+                    evidence=f"Behavioral WAF detection: {behavioral}",
+                )
+            )
 
         # ── 3. Bypass Test ──
         bypass_results = await self._test_bypass(url, params, baseline)
         if bypass_results and (waf_matches or behavioral):
-            findings.append(self._create_vuln(
-                url=url, param="N/A", param_type="N/A", method="GET",
-                payload="WAF bypass probe",
-                vuln_type="waf_bypass_test",
-                severity=Severity.LOW if bypass_results else Severity.INFO,
-                confidence=Confidence.MEDIUM,
-                evidence=f"WAF bypass test: {bypass_results}",
-            ))
+            findings.append(
+                self._create_vuln(
+                    url=url,
+                    param="N/A",
+                    param_type="N/A",
+                    method="GET",
+                    payload="WAF bypass probe",
+                    vuln_type="waf_bypass_test",
+                    severity=Severity.LOW if bypass_results else Severity.INFO,
+                    confidence=Confidence.MEDIUM,
+                    evidence=f"WAF bypass test: {bypass_results}",
+                )
+            )
 
         if not findings:
             # No WAF detected
             pass  # This is normal — many sites have no WAF
         else:
             total = len(findings)
-            logger.info(f"[WAF] Detection complete: {', '.join(waf_matches) if waf_matches else 'generic WAF'}, {total} findings")
+            logger.info(
+                f"[WAF] Detection complete: {', '.join(waf_matches) if waf_matches else 'generic WAF'}, {total} findings"
+            )
 
         return findings
 
@@ -246,7 +292,7 @@ class WAFDetector(DetectionModule):
 
         # Cookies
         for cookie_name, pattern in sig.get("cookies", {}).items():
-            for c_name in (cookies or {}):
+            for c_name in cookies or {}:
                 if re.search(cookie_name, c_name, re.IGNORECASE):
                     if pattern is None:
                         return True
@@ -270,7 +316,6 @@ class WAFDetector(DetectionModule):
 
     async def _behavioral_detect(self, url, params, baseline) -> Optional[str]:
         """4-round behavioral WAF detection."""
-        parsed = urlparse(url)
         base_headers = baseline.get("headers", {}) or {}
         base_body = baseline.get("text", "")[:5000]
         base_status = baseline.get("status", 0)
@@ -311,9 +356,20 @@ class WAFDetector(DetectionModule):
 
             # Signal 3: WAF keywords in body
             waf_keywords = [
-                "request denied", "access denied", "blocked", "not acceptable",
-                "waf", "firewall", "security policy", "incident id", "your request",
-                "事件ID", "访问被拒绝", "攻击", "非法请求", "安全拦截",
+                "request denied",
+                "access denied",
+                "blocked",
+                "not acceptable",
+                "waf",
+                "firewall",
+                "security policy",
+                "incident id",
+                "your request",
+                "事件ID",
+                "访问被拒绝",
+                "攻击",
+                "非法请求",
+                "安全拦截",
             ]
             for kw in waf_keywords:
                 if kw.lower() in round_body.lower() and kw.lower() not in base_body.lower():
@@ -334,7 +390,6 @@ class WAFDetector(DetectionModule):
 
     async def _test_bypass(self, url, params, baseline) -> Optional[str]:
         """Test WAF bypass capabilities (encoding/case/etc)."""
-        parsed = urlparse(url)
         base_status = baseline.get("status", 0)
         bypassed = []
         blocked = []
@@ -348,7 +403,6 @@ class WAFDetector(DetectionModule):
                 continue
 
             round_status = resp.get("status", 0)
-            round_body = resp.get("text", "")[:2000]
 
             # If the base request was blocked (403), and this variant passes (200)
             if base_status in (403, 406) and round_status < 400:

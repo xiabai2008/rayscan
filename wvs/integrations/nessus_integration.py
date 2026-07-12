@@ -12,12 +12,12 @@ Nessus Integration Module — Tenable Nessus API 集成
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
 from ..config import ConfigManager
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
+from ..models import Confidence, Severity, Vulnerability, VulnerabilityType
 
 logger = logging.getLogger("wvs.integrations.nessus")
 
@@ -37,6 +37,7 @@ NESSUS_DEFAULT_TIMEOUT = 7200  # 2 hours
 @dataclass
 class NessusInstance:
     """Nessus 实例配置"""
+
     name: str
     host: str
     port: int = 8834

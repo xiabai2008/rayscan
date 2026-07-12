@@ -12,15 +12,13 @@ AWVS Integration Module — Acunetix Web Vulnerability Scanner API 集成
 """
 
 import asyncio
-import json
 import logging
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 from ..config import ConfigManager
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
+from ..models import Confidence, Severity, Vulnerability, VulnerabilityType
 
 logger = logging.getLogger("wvs.integrations.awvs")
 
@@ -63,6 +61,7 @@ AWVS_VULN_TYPE_KEYWORDS: Dict[str, VulnerabilityType] = {
 @dataclass
 class AWVSInstance:
     """AWVS 实例配置"""
+
     name: str
     host: str
     port: int = AWVS_DEFAULT_PORT
@@ -76,6 +75,7 @@ class AWVSInstance:
 @dataclass
 class AWVSScanResult:
     """AWVS 扫描结果摘要"""
+
     scan_id: str
     target_url: str
     status: str  # processing / completed / failed / aborted
@@ -90,6 +90,7 @@ class AWVSScanResult:
 
 
 # ── AWVS REST 客户端 ──────────────────────────────────────────
+
 
 class AWVSClient:
     """AWVS REST API 客户端 (v1)"""
@@ -249,6 +250,7 @@ class AWVSClient:
 
 
 # ── AWVS 集成主类 ─────────────────────────────────────────────
+
 
 class AWVSIntegration:
     """AWVS 扫描器集成"""
@@ -431,9 +433,7 @@ class AWVSIntegration:
         return self._stats.copy()
 
 
-def create_awvs_instance_config(
-    name: str, host: str, api_key: str, port: int = 3443
-) -> dict:
+def create_awvs_instance_config(name: str, host: str, api_key: str, port: int = 3443) -> dict:
     """创建 AWVS 实例配置（供 config.yaml 使用）"""
     return {
         "name": name,

@@ -182,7 +182,7 @@ class TaskScheduler:
                             t.status = "completed"
                             self._stats["completed"] += 1
                             return result
-                        except Exception as e:
+                        except Exception:
                             logger.exception(f"[Scheduler] Task execution failed: {t.task_id}")
                             t.status = "failed"
                             self._stats["failed"] += 1
@@ -255,7 +255,9 @@ class TaskScheduler:
 
             # Wait
             if self._running_tasks:
-                done, self._running_tasks = await asyncio.wait(self._running_tasks.values(), return_when=asyncio.FIRST_COMPLETED)
+                done, self._running_tasks = await asyncio.wait(
+                    self._running_tasks.values(), return_when=asyncio.FIRST_COMPLETED
+                )
 
                 for task in done:
                     try:

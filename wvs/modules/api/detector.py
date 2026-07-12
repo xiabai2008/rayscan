@@ -9,9 +9,8 @@ import logging
 import re
 from typing import List
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 
 logger = logging.getLogger("wvs.module.api")
 
@@ -163,7 +162,7 @@ class APIDetector(DetectionModule):
                 'type="password"',
                 "type='password'",
             ]
-            login_score = sum(1 for ind in login_indicators if ind in noauth_text[:2000])
+            login_score = sum(1 for ind in login_indicators if ind in resp_noauth.text[:2000])
             if login_score >= 3:
                 logger.debug(f"[API] Skipping auth bypass — page looks like a login form (score={login_score})")
                 return vulns
@@ -188,13 +187,13 @@ class APIDetector(DetectionModule):
                 "admin panel",
                 "control panel",
             ]
-            has_sensitive = any(ind in noauth_text[:3000] for ind in sensitive_content_indicators)
+            has_sensitive = any(ind in resp_noauth.text[:3000] for ind in sensitive_content_indicators)
             if not has_sensitive:
                 logger.debug("[API] Skipping auth bypass — no sensitive content indicators in response")
                 return vulns
 
             # P11-3: Confirm both responses have substantially the same content (not just similar length)
-            len_diff = abs(len(auth_text) - len(noauth_text))
+            len_diff = abs(len(resp_auth.text) - len(resp_noauth.text))
             if len_diff >= 500:
                 return vulns  # Large length difference indicates different responses
 
@@ -210,8 +209,8 @@ class APIDetector(DetectionModule):
                 t = _re.sub(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", "", t)  # UUIDs
                 return t
 
-            norm_noauth = _normalize_text(noauth_text[:5000])
-            norm_auth = _normalize_text(auth_text[:5000])
+            norm_noauth = _normalize_text(resp_noauth.text[:5000])
+            norm_auth = _normalize_text(resp_auth.text[:5000])
             content_similarity = abs(len(norm_noauth) - len(norm_auth)) / max(len(norm_noauth), 1)
 
             if content_similarity > 0.2:

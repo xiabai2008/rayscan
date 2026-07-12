@@ -13,9 +13,8 @@ import re
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urljoin, urlparse
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 
 logger = logging.getLogger("wvs.module.jspathfinder")
 
@@ -170,9 +169,15 @@ class JSPathfinderDetector(DetectionModule):
         self._seen_js: Set[str] = set()
         self._seen_endpoints: Set[str] = set()
         self._found_vulns: List[Vulnerability] = []
-        self._thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=getattr(self.module_config, "threads", 10))
+        self._thread_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=getattr(self.module_config, "threads", 10)
+        )
         self._timeout = self.module_config.timeout
-        self._use_playwright = self.module_config.custom_params.get("use_playwright", False) and HAS_PLAYWRIGHT and self._check_playwright_available()
+        self._use_playwright = (
+            self.module_config.custom_params.get("use_playwright", False)
+            and HAS_PLAYWRIGHT
+            and self._check_playwright_available()
+        )
 
     def _check_playwright_available(self) -> bool:
         """Check if Playwright browser is available"""
@@ -226,7 +231,7 @@ class JSPathfinderDetector(DetectionModule):
             return None
 
     # ── JS extraction ──
-    def _extract_js_sources(self, url: str) -> List[Dict]:  # noqa: C901
+    def _extract_js_sources(self, url: str) -> List[Dict]:
         """Extract all JS file references from HTML page"""
         js_list = []
         resp = self._http_get(url)
@@ -387,13 +392,25 @@ class JSPathfinderDetector(DetectionModule):
         def fuzz_one(path: str):
             url = f"{target_base}{path}"
             try:
-                resp = _requests.get(url, timeout=self._timeout, allow_redirects=False, verify=False, headers={"User-Agent": "Mozilla/5.0"})
+                resp = _requests.get(
+                    url,
+                    timeout=self._timeout,
+                    allow_redirects=False,
+                    verify=False,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
                 if resp.status_code not in [404, 500, 503] and len(resp.text or "") > 0:
                     title = ""
                     tm = re.search(r"<title[^>]*>(.*?)</title>", resp.text or "", re.IGNORECASE | re.DOTALL)
                     if tm:
                         title = tm.group(1).strip()[:80]
-                    return {"url": url, "status": resp.status_code, "size": len(resp.text or ""), "title": title, "path": path}
+                    return {
+                        "url": url,
+                        "status": resp.status_code,
+                        "size": len(resp.text or ""),
+                        "title": title,
+                        "path": path,
+                    }
             except Exception:  # noqa: S110
                 pass
             return None

@@ -9,20 +9,20 @@ Lite 模块（轻量辅助，需 --all-modules 启用）位于 wvs.modules.lite 
   - cmdi / lfi / rce / ssrf / xxe / sensitive / api / waf / jspathfinder / js_analysis
 """
 
-from .sqli import SQLiDetector
-from .xss import XSSDetector
 from .oa import OADetector
-from .webshell import WebShellDetector
-from .weakpass import WeakPasswordDetector
+from .sqli import SQLiDetector
 from .subdomain import SubdomainDetector
+from .weakpass import WeakPasswordDetector
+from .webshell import WebShellDetector
+from .xss import XSSDetector
 
 __all__ = [
-    "SQLiDetector",
-    "XSSDetector",
     "OADetector",
-    "WebShellDetector",
-    "WeakPasswordDetector",
+    "SQLiDetector",
     "SubdomainDetector",
+    "WeakPasswordDetector",
+    "WebShellDetector",
+    "XSSDetector",
 ]
 
 

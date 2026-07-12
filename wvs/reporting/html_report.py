@@ -9,8 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from ..models import ScanResult, Vulnerability, Severity, Confidence
-
+from ..models import Confidence, ScanResult, Severity, Vulnerability
 
 SEV_COLORS_HTML = {
     Severity.CRITICAL: ("#d32f2f", "#ffcdd2", "CRITICAL"),
@@ -350,9 +349,13 @@ document.querySelectorAll('.section-header').forEach(h => {{
         ]:
             count = stats.get(sev, 0)
             if count:
-                parts.append(f'<div class="stat-card {cls}"><div class="value">{count}</div><div class="label">{sev.upper()}</div></div>')
+                parts.append(
+                    f'<div class="stat-card {cls}"><div class="value">{count}</div><div class="label">{sev.upper()}</div></div>'
+                )
 
-        parts.append(f'<div class="stat-card total"><div class="value">{total}</div><div class="label">TOTAL</div></div>')
+        parts.append(
+            f'<div class="stat-card total"><div class="value">{total}</div><div class="label">TOTAL</div></div>'
+        )
 
         return f'<div class="stats-grid">{"".join(parts)}</div>'
 
@@ -397,19 +400,28 @@ document.querySelectorAll('.section-header').forEach(h => {{
         vuln_id = f"vuln-{v.type.value}-{i}"
         color_cls = v.severity.value.lower()
         badge_cls = f"badge-{color_cls}"
-        conf_cls = "badge-high-confidence" if v.confidence in (Confidence.HIGH, Confidence.CERTAIN) else "badge-medium-confidence"
+        conf_cls = (
+            "badge-high-confidence"
+            if v.confidence in (Confidence.HIGH, Confidence.CERTAIN)
+            else "badge-medium-confidence"
+        )
         detail_rows = []
         if v.description:
             detail_rows.append(
-                f'<div class="detail-row"><span class="detail-label">描述</span><span class="detail-value">{html.escape(v.description[:300])}</span></div>'  # noqa: E501
+                f'<div class="detail-row"><span class="detail-label">描述</span><span class="detail-value">{html.escape(v.description[:300])}</span></div>'
             )
         if v.recommendation:
             detail_rows.append(
-                f'<div class="detail-row"><span class="detail-label">修复建议</span><span class="detail-value">{html.escape(v.recommendation[:300])}</span></div>'  # noqa: E501
+                f'<div class="detail-row"><span class="detail-label">修复建议</span><span class="detail-value">{html.escape(v.recommendation[:300])}</span></div>'
             )
         if v.references:
-            refs = " | ".join(f'<a href="{html.escape(r)}" target="_blank" style="color:#58a6ff">{html.escape(r[:50])}</a>' for r in v.references[:3])
-            detail_rows.append(f'<div class="detail-row"><span class="detail-label">参考</span><span class="detail-value">{refs}</span></div>')
+            refs = " | ".join(
+                f'<a href="{html.escape(r)}" target="_blank" style="color:#58a6ff">{html.escape(r[:50])}</a>'
+                for r in v.references[:3]
+            )
+            detail_rows.append(
+                f'<div class="detail-row"><span class="detail-label">参考</span><span class="detail-value">{refs}</span></div>'
+            )
 
         return f"""
 <tr>

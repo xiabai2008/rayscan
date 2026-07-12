@@ -9,10 +9,11 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
+
 import yaml
 
-from .models import ScannerConfig, ModuleConfig
-from .constants import DEFAULT_TIMEOUT, DEFAULT_RETRY_COUNT, DEFAULT_DELAY, DEFAULT_VERIFY_SSL
+from .constants import DEFAULT_DELAY, DEFAULT_RETRY_COUNT, DEFAULT_TIMEOUT, DEFAULT_VERIFY_SSL
+from .models import ModuleConfig, ScannerConfig
 
 
 class ConfigError(Exception):
@@ -315,7 +316,7 @@ class ConfigManager:
 
     def _create_scanner_config(self) -> ScannerConfig:
         """Create ScannerConfig from config dictionary (auto-map dataclass fields)"""
-        from dataclasses import fields, MISSING
+        from dataclasses import MISSING, fields
 
         # Create module configurations
         modules_config = {}
@@ -433,8 +434,20 @@ EXAMPLE_CONFIG = {
     "output_format": "html",
     "verbose": True,
     "modules": {
-        "sqli": {"enabled": True, "timeout": 60, "threads": 3, "depth": 5, "custom_params": {"test_boolean_blind": True, "test_time_based": True}},
-        "xss": {"enabled": True, "timeout": 45, "threads": 4, "depth": 4, "custom_params": {"test_dom_xss": True, "confidence_threshold": 0.7}},
+        "sqli": {
+            "enabled": True,
+            "timeout": 60,
+            "threads": 3,
+            "depth": 5,
+            "custom_params": {"test_boolean_blind": True, "test_time_based": True},
+        },
+        "xss": {
+            "enabled": True,
+            "timeout": 45,
+            "threads": 4,
+            "depth": 4,
+            "custom_params": {"test_dom_xss": True, "confidence_threshold": 0.7},
+        },
         "api_security": {"enabled": True, "timeout": 90, "threads": 2, "depth": 3},
     },
 }

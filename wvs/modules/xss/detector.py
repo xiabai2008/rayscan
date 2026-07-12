@@ -9,22 +9,20 @@ import re
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, ScanTarget
-from ...core.session import HTTPPool
 from ...core.oob import OOBManager
+from ...core.session import HTTPPool
+from ...models import ScanTarget, Vulnerability
+from ..base import DetectionModule, ModuleInfo, register_module
+from .context_analyzer import (
+    XSS_CHECKER,
+    ReflectionContext,
+    analyze_reflection,
+    select_payload,
+)
 from .payloads import (
     REFLECTED_PAYLOADS,
-    ENCODED_PAYLOADS,
     generate_stored_xss_marker,
 )
-from .context_analyzer import (
-    analyze_reflection,
-    ReflectionContext,
-    select_payload,
-    XSS_CHECKER,
-)
-
 
 logger = logging.getLogger("wvs.module.xss")
 
@@ -102,12 +100,30 @@ class XSSDetector(DetectionModule):
         param_names = list(params.keys())
         if len(param_names) > 4:
             # Prioritize parameters whose names suggest user-facing output
-            high_priority = {"page", "q", "query", "search", "text", "msg", "message", "comment",
-                             "content", "body", "title", "subject", "name", "username", "cat",
-                             "category", "id", "uid", "pid"}
+            high_priority = {
+                "page",
+                "q",
+                "query",
+                "search",
+                "text",
+                "msg",
+                "message",
+                "comment",
+                "content",
+                "body",
+                "title",
+                "subject",
+                "name",
+                "username",
+                "cat",
+                "category",
+                "id",
+                "uid",
+                "pid",
+            }
             prioritized = [p for p in param_names if p.lower() in high_priority]
             remaining = [p for p in param_names if p.lower() not in high_priority]
-            param_names = prioritized + remaining[:max(4 - len(prioritized), 1)]
+            param_names = prioritized + remaining[: max(4 - len(prioritized), 1)]
             self.logger.debug(f"[XSS] Sampled {len(param_names)}/{len(params)} params for {url}")
 
         baseline = await self._send_request(method, url, params, param_type)
@@ -306,7 +322,7 @@ class XSSDetector(DetectionModule):
                     method=method,
                     payload=payload[:80],
                     vuln_type="reflected",
-                    evidence=evidence or f"Polyglot XSS: multi-context payload reflected",
+                    evidence=evidence or "Polyglot XSS: multi-context payload reflected",
                 )
                 self._found_vulns.append(vuln)
                 logger.info(f"[XSS] Polyglot XSS: {url} [{param_name}]")
@@ -342,7 +358,7 @@ class XSSDetector(DetectionModule):
                     method=method,
                     payload=payload[:80],
                     vuln_type="reflected",
-                    evidence=evidence or f"mXSS payload reflected — verify browser-side mutation",
+                    evidence=evidence or "mXSS payload reflected — verify browser-side mutation",
                 )
                 self._found_vulns.append(vuln)
                 logger.info(f"[XSS] mXSS payload reflected: {url} [{param_name}]")
@@ -381,7 +397,7 @@ class XSSDetector(DetectionModule):
                     method=method,
                     payload=payload,
                     vuln_type="ssti",
-                    evidence=f"SSTI: '7*7' evaluated to '49' in response — template engine active",
+                    evidence="SSTI: '7*7' evaluated to '49' in response — template engine active",
                 )
                 self._found_vulns.append(vuln)
                 logger.info(f"[XSS] SSTI detected: {url} [{param_name}] (7*7=49)")
@@ -397,7 +413,7 @@ class XSSDetector(DetectionModule):
                     method=method,
                     payload=payload[:80],
                     vuln_type="ssti",
-                    evidence=evidence or f"Template syntax reflected with context clues",
+                    evidence=evidence or "Template syntax reflected with context clues",
                 )
                 self._found_vulns.append(vuln)
                 logger.info(f"[XSS] SSTI reflection: {url} [{param_name}]")
@@ -435,17 +451,14 @@ class XSSDetector(DetectionModule):
                 if c.is_executable():
                     context = c
                     logger.debug(
-                        f"[XSS] Context: {c.context} | tag={c.tag} | "
-                        f"type={c.attr_type} | quote={c.quote_char}"
+                        f"[XSS] Context: {c.context} | tag={c.tag} | type={c.attr_type} | quote={c.quote_char}"
                     )
                     break
             if not contexts:
                 logger.debug(f"[XSS] Marker not reflected: {url} [{param_name}]")
                 return
             if context and not context.is_executable():
-                logger.debug(
-                    f"[XSS] Non-executable context ({context.context}), trying escape"
-                )
+                logger.debug(f"[XSS] Non-executable context ({context.context}), trying escape")
 
         # ── Phase 2: Context-aware payloads ──
         if context:
@@ -489,12 +502,13 @@ class XSSDetector(DetectionModule):
                         payload=payload,
                         vuln_type="reflected",
                         evidence=(
-                            evidence
-                            or f"Reflected XSS ({context.context}{ctx_info}): payload '{payload}' reflected"
+                            evidence or f"Reflected XSS ({context.context}{ctx_info}): payload '{payload}' reflected"
                         ),
                     )
                     self._found_vulns.append(vuln)
-                    logger.warning(f"[XSS] Reflected confirmed [{context.context if context else 'generic'}]: {url} [{param_name}]")
+                    logger.warning(
+                        f"[XSS] Reflected confirmed [{context.context if context else 'generic'}]: {url} [{param_name}]"
+                    )
                     return
 
         # ── Phase 3: Fallback generic payloads ──

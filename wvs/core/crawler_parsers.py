@@ -6,12 +6,12 @@ import asyncio
 import logging
 import re
 import urllib.parse
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
-    from .crawler import WebCrawler, DiscoveredEndpoint, HTTPPool
+    from .crawler import DiscoveredEndpoint, HTTPPool, WebCrawler
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class CrawlerParsersMixin:
 
     async def _parse_sitemap(
         self: "WebCrawler", url: str, session: "HTTPPool", depth: int
-    ) -> "List[DiscoveredEndpoint]":  # noqa: C901
+    ) -> "List[DiscoveredEndpoint]":
         """Parse an XML sitemap to extract URLs."""
         from .crawler import DiscoveredEndpoint
 
@@ -80,7 +80,10 @@ class CrawlerParsersMixin:
                     if loc_url and self._is_crawlable(loc_url):
                         endpoints.append(
                             DiscoveredEndpoint(
-                                url=loc_url, method="GET", source_url=url, source_depth=depth,
+                                url=loc_url,
+                                method="GET",
+                                source_url=url,
+                                source_depth=depth,
                             )
                         )
         except (OSError, asyncio.TimeoutError) as e:
@@ -118,9 +121,13 @@ class CrawlerParsersMixin:
                                             param_types[pname] = pin
                             endpoints.append(
                                 DiscoveredEndpoint(
-                                    url=full_url, method=method.upper(),
-                                    parameters=params, param_types=param_types,
-                                    source_url=source_url, source_depth=1, is_api=True,
+                                    url=full_url,
+                                    method=method.upper(),
+                                    parameters=params,
+                                    param_types=param_types,
+                                    source_url=source_url,
+                                    source_depth=1,
+                                    is_api=True,
                                 )
                             )
         return endpoints
@@ -147,8 +154,10 @@ class CrawlerParsersMixin:
                 if self._is_crawlable(full_url):
                     endpoints.append(
                         DiscoveredEndpoint(
-                            url=full_url, method="GET",
-                            source_url=js_url, source_depth=depth,
+                            url=full_url,
+                            method="GET",
+                            source_url=js_url,
+                            source_depth=depth,
                         )
                     )
         return endpoints

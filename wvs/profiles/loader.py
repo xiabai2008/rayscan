@@ -1,6 +1,7 @@
-import yaml
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import yaml
 
 from .builtin import BUILTIN_PROFILES
 
@@ -21,12 +22,14 @@ class ProfileManager:
 
         # Built-in profiles
         for name, data in BUILTIN_PROFILES.items():
-            profiles.append({
-                "name": name,
-                "description": data["description"],
-                "builtin": True,
-                "path": None,
-            })
+            profiles.append(
+                {
+                    "name": name,
+                    "description": data["description"],
+                    "builtin": True,
+                    "path": None,
+                }
+            )
 
         # Custom profiles from disk
         for path in self.profiles_dir.glob("*.yaml"):
@@ -34,12 +37,14 @@ class ProfileManager:
             if name not in BUILTIN_PROFILES:
                 try:
                     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-                    profiles.append({
-                        "name": data.get("name", name),
-                        "description": data.get("description", ""),
-                        "builtin": False,
-                        "path": str(path),
-                    })
+                    profiles.append(
+                        {
+                            "name": data.get("name", name),
+                            "description": data.get("description", ""),
+                            "builtin": False,
+                            "path": str(path),
+                        }
+                    )
                 except Exception:
                     pass
 

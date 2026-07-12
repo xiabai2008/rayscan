@@ -143,4 +143,8 @@ def build_oob_payloads(callback_url_or_token: str, mode: str = "http") -> List[s
     if mode == "http":
         return [p.format(callback_url=callback_url_or_token) for p in OOB_PAYLOADS[:8]]
     else:
-        return [p.format(token=callback_url_or_token, dns_domain="oob.wvs.local") for p in OOB_PAYLOADS if "dns" in p or "ping" in p]
+        return [
+            p.format(token=callback_url_or_token, dns_domain="oob.wvs.local")
+            for p in OOB_PAYLOADS
+            if "dns" in p or "ping" in p
+        ]

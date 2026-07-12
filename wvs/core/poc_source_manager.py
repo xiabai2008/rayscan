@@ -27,11 +27,11 @@ poc_sources:
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .nuclei_template_manager import POC_SOURCES, get_template_manager
+from .nuclei_template_manager import get_template_manager
 
 logger = logging.getLogger("wvs.poc_source_manager")
 
@@ -75,6 +75,7 @@ DEFAULT_POC_CONFIG: Dict[str, dict] = {
 @dataclass
 class PoCSourceInfo:
     """PoC 来源信息"""
+
     name: str
     label: str
     description: str

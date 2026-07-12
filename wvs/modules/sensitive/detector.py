@@ -8,9 +8,8 @@ import re
 from typing import List
 from urllib.parse import urlparse
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 
 logger = logging.getLogger("wvs.module.sensitive")
 
@@ -254,7 +253,10 @@ class SensitiveDetector(DetectionModule):
         "private_key": (r"-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----", Severity.CRITICAL),
         "facebook_token": (r"EAACEdEose0cBA[0-9A-Za-z]+", Severity.HIGH),
         # Credentials — P10: exclude HTML attribute context (type="password", name="passwd")
-        "password_plain": (r"(?i)(?:^\s*|[^{])(password|passwd|pwd|pass)\s*[:=]\s*['\"]([^'\"]{6,})['\"]", Severity.MEDIUM),
+        "password_plain": (
+            r"(?i)(?:^\s*|[^{])(password|passwd|pwd|pass)\s*[:=]\s*['\"]([^'\"]{6,})['\"]",
+            Severity.MEDIUM,
+        ),
         "connection_string": (r"(?i)(connection|conn|string)[\s:=]+['\"][^'\"]{10,}['\"]", Severity.MEDIUM),
         "jwt_token": (r"eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*", Severity.MEDIUM),
         "bearer_token": (r"Bearer\s+[a-zA-Z0-9_-]{20,}", Severity.MEDIUM),
@@ -354,9 +356,9 @@ class SensitiveDetector(DetectionModule):
             else:
                 existing = groups[key]
                 # Keep the more specific (longer evidence) + higher confidence
-                if len(v.evidence or "") > len(existing.evidence or ""):
-                    groups[key] = v
-                elif Confidence._member_map_.get(v.confidence.value, 0) > Confidence._member_map_.get(existing.confidence.value, 0):
+                if len(v.evidence or "") > len(existing.evidence or "") or Confidence._member_map_.get(
+                    v.confidence.value, 0
+                ) > Confidence._member_map_.get(existing.confidence.value, 0):
                     groups[key] = v
         return list(groups.values())
 
@@ -544,7 +546,10 @@ class SensitiveDetector(DetectionModule):
             return "refs/heads" in content or "refs/tags" in content or "[core]" in content
 
         # Config files must contain recognizable config patterns
-        if any(x in path for x in [".env", "config.php", "wp-config", "web.config", "database.yml", "settings.py", "application.yml"]):
+        if any(
+            x in path
+            for x in [".env", "config.php", "wp-config", "web.config", "database.yml", "settings.py", "application.yml"]
+        ):
             config_indicators = [
                 "db_host",
                 "database",
@@ -576,11 +581,32 @@ class SensitiveDetector(DetectionModule):
 
         # Log files
         if any(x in path for x in [".log", "error.log", "access.log"]):
-            log_indicators = ["error", "warn", "info", "debug", "trace", "exception", "stack trace", "thread", "timestamp"]
+            log_indicators = [
+                "error",
+                "warn",
+                "info",
+                "debug",
+                "trace",
+                "exception",
+                "stack trace",
+                "thread",
+                "timestamp",
+            ]
             return any(ind in content_lower for ind in log_indicators)
 
         # Source code leaks (.gitignore, .htaccess, etc.)
-        if any(x in path for x in [".gitignore", ".htaccess", "robots.txt", "composer.json", "package.json", "requirements.txt", "Dockerfile"]):
+        if any(
+            x in path
+            for x in [
+                ".gitignore",
+                ".htaccess",
+                "robots.txt",
+                "composer.json",
+                "package.json",
+                "requirements.txt",
+                "Dockerfile",
+            ]
+        ):
             return True
 
         # API/docs endpoints — check for JSON/Swagger content
@@ -607,7 +633,16 @@ class SensitiveDetector(DetectionModule):
             "/jenkins",
         ]
         if any(x in path for x in admin_paths):
-            admin_indicators = ["login", "password", "username", "sign in", "dashboard", "control panel", "administration", "管理"]
+            admin_indicators = [
+                "login",
+                "password",
+                "username",
+                "sign in",
+                "dashboard",
+                "control panel",
+                "administration",
+                "管理",
+            ]
             if any(ind in content_lower for ind in admin_indicators):
                 return True
             # P10: admin/login path but content looks like an error/redirect, not an admin panel
@@ -628,7 +663,14 @@ class SensitiveDetector(DetectionModule):
             ]
             if not any(ind in content_lower for ind in admin_specific):
                 # Must at least have login form + 2 other admin-specific indicators
-                secondary_indicators = ["remember me", "forgot password", "sign in to", "authorized", "privileges", "permissions"]
+                secondary_indicators = [
+                    "remember me",
+                    "forgot password",
+                    "sign in to",
+                    "authorized",
+                    "privileges",
+                    "permissions",
+                ]
                 form_match = "<form" in content_lower and any(x in content_lower for x in ["password", "login"])
                 if not form_match:
                     return False
@@ -648,7 +690,15 @@ class SensitiveDetector(DetectionModule):
         is_html = all(ind in content_lower[:500] for ind in html_indicators)
 
         if is_html:
-            error_indicators = ["404", "not found", "page not found", "error", "access denied", "forbidden", "unauthorized"]
+            error_indicators = [
+                "404",
+                "not found",
+                "page not found",
+                "error",
+                "access denied",
+                "forbidden",
+                "unauthorized",
+            ]
             if any(ind in content_lower[:1000] for ind in error_indicators):
                 return False
             return "index of" in content_lower or "directory listing" in content_lower

@@ -9,16 +9,16 @@ Nuclei Template Manager — 12.5w+ PoC 模板管理与智能加载
 5. SQLite 索引缓存加速
 """
 
-import json
 import logging
 import os
 import re
 import sqlite3
-import yaml
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
+
+import yaml
 
 logger = logging.getLogger("wvs.nuclei_template_manager")
 
@@ -119,21 +119,22 @@ CURRENT_YEAR = datetime.now().year
 @dataclass
 class TemplateInfo:
     """Nuclei 模板元数据"""
-    path: str                          # 模板文件路径
-    filename: str                      # 文件名
-    template_id: str = ""              # template-id
-    name: str = ""                     # info.name
-    severity: str = "unknown"          # info.severity
+
+    path: str  # 模板文件路径
+    filename: str  # 文件名
+    template_id: str = ""  # template-id
+    name: str = ""  # info.name
+    severity: str = "unknown"  # info.severity
     tags: List[str] = field(default_factory=list)  # info.tags
     cve_ids: List[str] = field(default_factory=list)  # 关联 CVE
     cwe_ids: List[str] = field(default_factory=list)  # 关联 CWE
-    source: str = "nuclei"             # 来源 (nuclei/xray 等)
+    source: str = "nuclei"  # 来源 (nuclei/xray 等)
     tech_stack: List[str] = field(default_factory=list)  # 关联技术栈
-    category: str = "other"            # 分类: cve/misconfig/tech/other
-    description: str = ""              # 描述
-    remediation: str = ""              # 修复建议
+    category: str = "other"  # 分类: cve/misconfig/tech/other
+    description: str = ""  # 描述
+    remediation: str = ""  # 修复建议
     reference: List[str] = field(default_factory=list)
-    matched_at: str = ""               # 匹配路径
+    matched_at: str = ""  # 匹配路径
 
     @property
     def year(self) -> Optional[int]:
@@ -272,7 +273,7 @@ class NucleiTemplateManager:
     def _parse_template(self, fpath: str, source: str) -> Optional[TemplateInfo]:
         """解析单个模板文件，提取元数据"""
         try:
-            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+            with open(fpath, encoding="utf-8", errors="ignore") as f:
                 content = f.read(4096)  # 只读前 4KB 足够解析头部
 
             data = yaml.safe_load(content)
@@ -525,10 +526,7 @@ class NucleiTemplateManager:
         sev = severity.lower()
         if min_count:
             sev_order = SEVERITY_ORDER.get(sev, 5)
-            return [
-                t for t in self._templates.values()
-                if SEVERITY_ORDER.get(t.severity, 5) <= sev_order
-            ]
+            return [t for t in self._templates.values() if SEVERITY_ORDER.get(t.severity, 5) <= sev_order]
         return [t for t in self._templates.values() if t.severity == sev]
 
     def get_templates_by_year(self, year: int) -> List[TemplateInfo]:
@@ -631,8 +629,7 @@ class NucleiTemplateManager:
 
         result = list(sorted_candidates[:max_templates])
         logger.info(
-            f"[TemplateManager] 为目标选择 {len(result)} 个模板 "
-            f"(tech_stack={tech_stack}, severities={severities})"
+            f"[TemplateManager] 为目标选择 {len(result)} 个模板 (tech_stack={tech_stack}, severities={severities})"
         )
         return result
 
@@ -650,8 +647,8 @@ class NucleiTemplateManager:
     def print_summary(self) -> str:
         """打印模板索引摘要"""
         lines = []
-        lines.append(f"📊 Nuclei 模板索引摘要")
-        lines.append(f"{'='*50}")
+        lines.append("📊 Nuclei 模板索引摘要")
+        lines.append(f"{'=' * 50}")
         lines.append(f"  总数: {self._stats['total']}")
         lines.append(f"  按严重程度: {self._stats.get('by_severity', {})}")
         lines.append(f"  按来源: {self._stats.get('by_source', {})}")
@@ -672,6 +669,7 @@ class NucleiTemplateManager:
 
 
 # ── OA 指纹识别 ───────────────────────────────────────────────
+
 
 def detect_oa_fingerprint(url: str, response_text: str) -> Optional[str]:
     """

@@ -5,67 +5,93 @@ WebShell 检测模块
 利用本地 04-webshell/ 中的样本生成检测指纹。
 """
 
-import hashlib
 import logging
 import re
 from typing import List, Optional, Set
 
+from ...models import Confidence, ScanTarget, Severity, Vulnerability
 from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
 
 logger = logging.getLogger("wvs.module.webshell")
 
 # ── 已知 WebShell 路径特征 ────────────────────────────────────
 WEBSHELL_PATHS = {
-    "/shell.php", "/shell.asp", "/shell.aspx", "/shell.jsp",
-    "/cmd.php", "/cmd.asp", "/webshell.php", "/webshell.asp",
-    "/b374k.php", "/b374k/", "/b374k",
-    "/c99.php", "/c99shell.php", "/r57.php", "/r57shell.php",
-    "/wso.php", "/wso112.php", "/wsoshell.php",
-    "/ma.php", "/ma.asp", "/ant.aspx", "/ant.php",
-    "/godzilla.php", "/godzilla.jsp",
-    "/behinder.php", "/behinder.jsp", "/behinder.aspx",
-    "/冰蝎.php", "/冰蝎.jsp",
-    "/哥斯拉.php", "/哥斯拉.jsp",
-    "/_shell.php", "/_webshell.php",
-    "/up.php", "/upload.php", "/files.php",
-    "/404.php", "/admin_shell.php",
-    "/1.php", "/2.php", "/3.php",
+    "/shell.php",
+    "/shell.asp",
+    "/shell.aspx",
+    "/shell.jsp",
+    "/cmd.php",
+    "/cmd.asp",
+    "/webshell.php",
+    "/webshell.asp",
+    "/b374k.php",
+    "/b374k/",
+    "/b374k",
+    "/c99.php",
+    "/c99shell.php",
+    "/r57.php",
+    "/r57shell.php",
+    "/wso.php",
+    "/wso112.php",
+    "/wsoshell.php",
+    "/ma.php",
+    "/ma.asp",
+    "/ant.aspx",
+    "/ant.php",
+    "/godzilla.php",
+    "/godzilla.jsp",
+    "/behinder.php",
+    "/behinder.jsp",
+    "/behinder.aspx",
+    "/冰蝎.php",
+    "/冰蝎.jsp",
+    "/哥斯拉.php",
+    "/哥斯拉.jsp",
+    "/_shell.php",
+    "/_webshell.php",
+    "/up.php",
+    "/upload.php",
+    "/files.php",
+    "/404.php",
+    "/admin_shell.php",
+    "/1.php",
+    "/2.php",
+    "/3.php",
 }
 
 # ── WebShell 内容特征 (正则) ──────────────────────────────────
 WEBSHELL_PATTERNS = [
     # 一句话木马
-    re.compile(r'eval\s*\(\s*\$_\s*(POST|GET|REQUEST|SERVER)\s*\[', re.I),
-    re.compile(r'assert\s*\(\s*\$_\s*(POST|GET|REQUEST)\s*\[', re.I),
-    re.compile(r'@eval\(', re.I),
-    re.compile(r'@\s*assert\(', re.I),
+    re.compile(r"eval\s*\(\s*\$_\s*(POST|GET|REQUEST|SERVER)\s*\[", re.I),
+    re.compile(r"assert\s*\(\s*\$_\s*(POST|GET|REQUEST)\s*\[", re.I),
+    re.compile(r"@eval\(", re.I),
+    re.compile(r"@\s*assert\(", re.I),
     re.compile(r'\$_\s*(POST|GET|REQUEST)\s*\[\s*[\'"]\w+[\'"]\s*\]\s*\)', re.I),
     # 大马特征
-    re.compile(r'class\s+.*WebShell', re.I),
-    re.compile(r'class\s+.*FileManager', re.I),
-    re.compile(r'class\s+.*ShellManager', re.I),
-    re.compile(r'class\s+.*C99', re.I),
-    re.compile(r'class\s+.*R57', re.I),
-    re.compile(r'class\s+.*WSO', re.I),
+    re.compile(r"class\s+.*WebShell", re.I),
+    re.compile(r"class\s+.*FileManager", re.I),
+    re.compile(r"class\s+.*ShellManager", re.I),
+    re.compile(r"class\s+.*C99", re.I),
+    re.compile(r"class\s+.*R57", re.I),
+    re.compile(r"class\s+.*WSO", re.I),
     # JSP 木马
-    re.compile(r'Runtime\.getRuntime\(\)\.exec\(', re.I),
-    re.compile(r'ProcessBuilder\(\)', re.I),
-    re.compile(r'java\.lang\.Runtime', re.I),
+    re.compile(r"Runtime\.getRuntime\(\)\.exec\(", re.I),
+    re.compile(r"ProcessBuilder\(\)", re.I),
+    re.compile(r"java\.lang\.Runtime", re.I),
     # ASP 木马
     re.compile(r'CreateObject\s*\(\s*[\'"]WScript\.Shell[\'"]\s*\)', re.I),
     re.compile(r'CreateObject\s*\(\s*[\'"]Shell\.Application[\'"]\s*\)', re.I),
     # 编码器
-    re.compile(r'base64_decode\s*\(\s*\$_\s*(POST|GET)', re.I),
-    re.compile(r'gzinflate\s*\(\s*base64_decode', re.I),
-    re.compile(r'str_rot13', re.I),
+    re.compile(r"base64_decode\s*\(\s*\$_\s*(POST|GET)", re.I),
+    re.compile(r"gzinflate\s*\(\s*base64_decode", re.I),
+    re.compile(r"str_rot13", re.I),
     # 冰蝎特征
-    re.compile(r'@error_reporting\(0\)', re.I),
-    re.compile(r'session_start\(\)', re.I),
-    re.compile(r'base64_decode\(\$postStr\)', re.I),
+    re.compile(r"@error_reporting\(0\)", re.I),
+    re.compile(r"session_start\(\)", re.I),
+    re.compile(r"base64_decode\(\$postStr\)", re.I),
     # 哥斯拉特征
-    re.compile(r'Godzilla', re.I),
-    re.compile(r'goddess', re.I),
+    re.compile(r"Godzilla", re.I),
+    re.compile(r"goddess", re.I),
 ]
 
 # ── WebShell 文件哈希黑名单 ────────────────────────────────────
@@ -94,6 +120,7 @@ class WebShellDetector(DetectionModule):
 
         # 提取域名根路径
         from urllib.parse import urlparse
+
         parsed = urlparse(base)
         root = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -129,8 +156,12 @@ class WebShellDetector(DetectionModule):
 
                 if matched_patterns:
                     return self._create_vuln(
-                        url=url, param=None, param_type="query", method="GET",
-                        payload="", vuln_type="webshell",
+                        url=url,
+                        param=None,
+                        param_type="query",
+                        method="GET",
+                        payload="",
+                        vuln_type="webshell",
                         severity=Severity.CRITICAL,
                         confidence=Confidence.HIGH,
                         evidence=f"匹配 {len(matched_patterns)} 个 WebShell 特征",
@@ -150,8 +181,12 @@ class WebShellDetector(DetectionModule):
 
                 if heuristic_score >= 3:
                     return self._create_vuln(
-                        url=url, param=None, param_type="query", method="GET",
-                        payload="", vuln_type="webshell",
+                        url=url,
+                        param=None,
+                        param_type="query",
+                        method="GET",
+                        payload="",
+                        vuln_type="webshell",
                         severity=Severity.HIGH,
                         confidence=Confidence.LOW,
                         evidence=f"启发式评分: {heuristic_score}/5",

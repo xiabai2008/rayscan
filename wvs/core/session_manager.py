@@ -171,7 +171,7 @@ class SessionManager:
                 logger.info(f"[Session] {host} re-auth OK: {len(new_cookies)} cookies")
             else:
                 logger.warning(f"[Session] re-auth failed for {host}")
-        except Exception as e:
+        except Exception:
             logger.exception(f"[Session] re-auth error {host}")
 
         return self.get_cookies(host)
@@ -184,7 +184,17 @@ class SessionManager:
         csrf_names: Optional[List[str]] = None,
     ) -> Optional[str]:
         """Extract CSRF token from a page."""
-        default_names = ["csrf_token", "_csrf", "csrf", "xsrf_token", "_token", "authenticity_token", "user_token", "nonce", "_wpnonce"]
+        default_names = [
+            "csrf_token",
+            "_csrf",
+            "csrf",
+            "xsrf_token",
+            "_token",
+            "authenticity_token",
+            "user_token",
+            "nonce",
+            "_wpnonce",
+        ]
         names = csrf_names or default_names
 
         try:

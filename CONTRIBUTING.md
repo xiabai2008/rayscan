@@ -35,15 +35,20 @@ pre-commit run --all-files  # run manually
 
 ## Code Quality
 
+RayScan 以 **ruff** 作为唯一的 lint + format 工具（不再混用 black/isort/flake8），统一行宽 **120**。
+
 ```bash
-# Lint
-flake8 wvs/ --max-line-length=150 --max-complexity=20
+# 自动修复可安全修复的问题（未用导入、导入排序、现代语法等）
+ruff check wvs/ tests/ --fix
 
-# Auto-format
-ruff format wvs/
-ruff check wvs/ --fix
+# 格式化（ruff-format，唯一格式化器）
+ruff format wvs/ tests/
 
-# Type checking (work in progress)
+# 仅检查、不修改（CI 使用此命令做门禁）
+ruff check wvs/ tests/
+ruff format --check wvs/ tests/
+
+# 类型检查（渐进严格，当前为非阻断告警）
 mypy wvs/ --ignore-missing-imports
 ```
 
@@ -93,10 +98,11 @@ wvs/
 `master` 分支已受保护，**所有改动必须通过 Pull Request 合入，禁止直接 push 到 master**。合并前必须满足：
 
 1. **分支**：从最新的 `master` 切出功能分支（建议前缀 `feat/`、`fix/`、`docs/`、`chore/`）。
-2. **本地验证**：`pytest tests/ -q` 与 `flake8 wvs/ --max-line-length=150 --max-complexity=20` 均通过。
+2. **本地验证**：`pytest tests/ -q` 与 `ruff check wvs/ tests/ && ruff format --check wvs/ tests/` 均通过。
 3. **提交 PR**：目标分支选 `master`，按模板填写（改动类型、关联 Issue、测试情况）。
-4. **CI 通过**：GitHub Actions 的 `CI` 检查（Python 3.9–3.12 测试矩阵）必须全部通过。
-5. **代码评审**：至少需要 1 名团队成员的 Approving Review；所有评审对话需 Resolve 后方可合并。
+4. **CI 通过**：GitHub Actions 的 `CI` 质量门禁（pytest 测试矩阵 + ruff lint/format + 覆盖率）必须全部通过。
+   > 注：lint/format/coverage 门禁正在接入 CI；接入完成前，请务必在本地运行上述 ruff 命令，PR 评审也会检查。
+5. **代码评审**：至少需要 1 名团队成员的 Approving Review；所有评审对话需 Resolve 后方可合并。评审标准见 [`docs/REVIEW_CHECKLIST.md`](docs/REVIEW_CHECKLIST.md)，技术债追踪见 [`docs/TECH_DEBT.md`](docs/TECH_DEBT.md)。
 6. **合并**：推荐使用 Squash merge，保持 `master` 主干历史整洁。
 
 > 说明：仓库管理员（admin）默认保留紧急情况下的绕过权限；团队日常改动请严格走 PR 流程，不要直接推送 `master`。
@@ -104,6 +110,6 @@ wvs/
 ## PR Guidelines
 
 - Keep changes focused — one PR per feature/fix
-- Run `pytest tests/` and `flake8 wvs/` before pushing
+- Run `pytest tests/` and `ruff check wvs/ tests/ && ruff format --check wvs/ tests/` before pushing
 - Add tests for new functionality
 - Follow existing module structure and naming conventions

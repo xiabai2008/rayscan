@@ -7,18 +7,16 @@ better separation of concerns.
 """
 
 import asyncio
-import json
 import logging
 import sys
-import tempfile
-from typing import Dict, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
-from ..core.result_merger import ResultMerger, merge_and_display
+from ..core.result_merger import ResultMerger
+from ..models import Vulnerability
 
 if TYPE_CHECKING:
+    from ..models import ScanResult, ScanTarget
     from .crawler import DiscoveredEndpoint
-    from ..models import ScanTarget, ScanResult
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +37,7 @@ class ScannerIntegrationsMixin:
         except ImportError:
             logger.warning("[Scanner] JSPathfinder module not available")
             return []
-        except Exception as e:
+        except Exception:
             logger.exception("[Scanner] JSPathfinder error")
             return []
 
@@ -149,13 +147,18 @@ class ScannerIntegrationsMixin:
             level = self.config.get("integrations.sqlmap.level", 2)  # type: ignore[attr-defined]
             risk = self.config.get("integrations.sqlmap.risk", 1)  # type: ignore[attr-defined]
             param_endpoints = [
-                e for e in endpoints
-                if e.parameters and any(k.lower() in ("id", "page", "query", "search", "cat", "user", "item") for k in e.parameters)
+                e
+                for e in endpoints
+                if e.parameters
+                and any(k.lower() in ("id", "page", "query", "search", "cat", "user", "item") for k in e.parameters)
             ]
             target_url = param_endpoints[0].url if param_endpoints else url
 
             return await self._sqlmap.scan(  # type: ignore[attr-defined]
-                url=target_url, level=level, risk=risk, techniques="BEUST",
+                url=target_url,
+                level=level,
+                risk=risk,
+                techniques="BEUST",
             )
         except Exception as e:
             logger.warning(f"    [sqlmap] failed: {e}")

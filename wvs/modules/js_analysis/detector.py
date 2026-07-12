@@ -11,12 +11,12 @@ Based on: GerbenJavado/LinkFinder regex patterns.
 
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, ScanTarget, Severity, Confidence
 from ...core.session import HTTPPool
-from .analyzer import extract_sensitive_info, extract_endpoints_from_js
+from ...models import Confidence, ScanTarget, Severity, Vulnerability
+from ..base import DetectionModule, ModuleInfo, register_module
+from .analyzer import extract_endpoints_from_js, extract_sensitive_info
 
 logger = logging.getLogger("wvs.module.js_analysis")
 

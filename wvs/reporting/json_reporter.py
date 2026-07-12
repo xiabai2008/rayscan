@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from ..models import ScanResult, Vulnerability, Severity, VulnerabilityType
+from ..models import ScanResult, Severity, Vulnerability, VulnerabilityType
 
 
 class JSONReporter:
@@ -155,7 +155,9 @@ class JSONReporter:
             }
 
             if v.cwe_id:
-                rule["relationships"] = [{"target": {"id": f"CWE-{v.cwe_id}", "toolComponent": {"name": "CWE"}}, "kinds": ["superset"]}]
+                rule["relationships"] = [
+                    {"target": {"id": f"CWE-{v.cwe_id}", "toolComponent": {"name": "CWE"}}, "kinds": ["superset"]}
+                ]
 
             rules.append(rule)
 
@@ -176,7 +178,10 @@ class JSONReporter:
 
         # Add optional fields
         if v.parameter:
-            result["locations"][0]["physicalLocation"]["region"] = {"startLine": 1, "snippet": {"text": f"Parameter: {v.parameter}"}}
+            result["locations"][0]["physicalLocation"]["region"] = {
+                "startLine": 1,
+                "snippet": {"text": f"Parameter: {v.parameter}"},
+            }
 
         if v.payload:
             result["properties"]["payload"] = v.payload

@@ -17,8 +17,7 @@ import shutil
 from typing import Any, Dict, List, Optional
 
 from ..config import ConfigManager
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
-
+from ..models import Confidence, Severity, Vulnerability, VulnerabilityType
 
 logger = logging.getLogger("wvs.integrations.sqlmap")
 
@@ -206,7 +205,7 @@ class SqlmapIntegration:
         except FileNotFoundError:
             logger.exception(f"[Sqlmap] Not found: {self.sqlmap_path}")
             return []
-        except Exception as e:
+        except Exception:
             logger.exception("[Sqlmap] Execution failed")
             return []
 
@@ -292,7 +291,9 @@ class SqlmapIntegration:
                 severity=severity,
                 confidence=confidence,
                 description=f"参数 '{param}' 存在 SQL 注入 ({inj_type})。后端数据库: {dbms}",
-                recommendation=("1. 使用参数化查询/预编译语句\n2. 对输入进行严格校验和转义\n3. 最小化数据库用户权限\n4. 启用 WAF 作为额外防护层"),
+                recommendation=(
+                    "1. 使用参数化查询/预编译语句\n2. 对输入进行严格校验和转义\n3. 最小化数据库用户权限\n4. 启用 WAF 作为额外防护层"
+                ),
                 module="sqlmap",
                 tags=["sqlmap", "sqli", inj_type.lower()],
                 context={
@@ -316,9 +317,7 @@ class SqlmapIntegration:
             return (Severity.HIGH, Confidence.CERTAIN)
         elif "stacked" in inj_type_lower:
             return (Severity.CRITICAL, Confidence.CERTAIN)
-        elif "time-based" in inj_type_lower:
-            return (Severity.HIGH, Confidence.HIGH)
-        elif "boolean-based" in inj_type_lower:
+        elif "time-based" in inj_type_lower or "boolean-based" in inj_type_lower:
             return (Severity.HIGH, Confidence.HIGH)
         elif "union" in inj_type_lower:
             return (Severity.CRITICAL, Confidence.CERTAIN)

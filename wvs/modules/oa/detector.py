@@ -17,10 +17,10 @@ RayScan OA (办公自动化) 专项检测模块
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
 from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
 
 logger = logging.getLogger("wvs.module.oa")
 
@@ -32,17 +32,37 @@ OA_RULES: Dict[str, dict] = {
         "paths": ["/weaver/", "/ecology/", "/wui/"],
         "keywords": ["weaver", "ecology", "e-cology", "eoffice"],
         "checks": [
-            {"path": "/weaver/weaver.file.FileDownloadForOutDoc", "params": {"isFromOutDoc": "true", "downloadFileId": "../../../../etc/passwd"}, "type": "lfi", "severity": "high"},
+            {
+                "path": "/weaver/weaver.file.FileDownloadForOutDoc",
+                "params": {"isFromOutDoc": "true", "downloadFileId": "../../../../etc/passwd"},
+                "type": "lfi",
+                "severity": "high",
+            },
             {"path": "/api/portal/weaver/weaver.do", "method": "POST", "type": "rce", "severity": "critical"},
-            {"path": "/workflow/WorkflowCenterTreeData.jsp", "params": {"nodeid": "1' UNION SELECT 1,2,3,4,5,6,7,8,9,10--"}, "type": "sqli", "severity": "high"},
+            {
+                "path": "/workflow/WorkflowCenterTreeData.jsp",
+                "params": {"nodeid": "1' UNION SELECT 1,2,3,4,5,6,7,8,9,10--"},
+                "type": "sqli",
+                "severity": "high",
+            },
         ],
     },
     "通达OA": {
         "paths": ["/ispirit/", "/mac/", "/general/", "/templates/"],
         "keywords": ["tongda", "通达", "td_", "/general/"],
         "checks": [
-            {"path": "/ispirit/remotelogin.php", "params": {"type": "mobile"}, "type": "auth_bypass", "severity": "critical"},
-            {"path": "/mac/gateway.php", "params": {"json": "{\"id\":\"1' AND 1=1--\"}"}, "type": "sqli", "severity": "high"},
+            {
+                "path": "/ispirit/remotelogin.php",
+                "params": {"type": "mobile"},
+                "type": "auth_bypass",
+                "severity": "critical",
+            },
+            {
+                "path": "/mac/gateway.php",
+                "params": {"json": '{"id":"1\' AND 1=1--"}'},
+                "type": "sqli",
+                "severity": "high",
+            },
             {"path": "/general/document/index.php", "type": "sqli", "severity": "medium"},
         ],
     },
@@ -50,14 +70,23 @@ OA_RULES: Dict[str, dict] = {
         "paths": ["/kingdee/", "/k3cloud/", "/k3/"],
         "keywords": ["kingdee", "金蝶", "k3cloud"],
         "checks": [
-            {"path": "/k3cloud/Kingdee.BOS.ServiceFacade.ServicesStub.InstallService.CommonInstallService.commoninstallService.commoninstallServiceHttpFlowService", "type": "rce", "severity": "critical"},
+            {
+                "path": "/k3cloud/Kingdee.BOS.ServiceFacade.ServicesStub.InstallService.CommonInstallService.commoninstallService.commoninstallServiceHttpFlowService",
+                "type": "rce",
+                "severity": "critical",
+            },
         ],
     },
     "蓝凌-Landray": {
         "paths": ["/landray/", "/sys/", "/km/"],
         "keywords": ["landray", "蓝凌", "ekp"],
         "checks": [
-            {"path": "/sys/ui/extend/varkind/custom_pf.jsp", "params": {"var": "1"}, "type": "file_read", "severity": "high"},
+            {
+                "path": "/sys/ui/extend/varkind/custom_pf.jsp",
+                "params": {"var": "1"},
+                "type": "file_read",
+                "severity": "high",
+            },
         ],
     },
     "致远-Seeyon": {
@@ -79,7 +108,12 @@ OA_RULES: Dict[str, dict] = {
         "paths": ["/zentao/", "/chanzhi/"],
         "keywords": ["zentao", "禅道", "zentaopms"],
         "checks": [
-            {"path": "/zentao/api-getModel-api-sql.json", "params": {"sql": "select+1"}, "type": "sqli", "severity": "critical"},
+            {
+                "path": "/zentao/api-getModel-api-sql.json",
+                "params": {"sql": "select+1"},
+                "type": "sqli",
+                "severity": "critical",
+            },
         ],
     },
     "万户-Whir": {
@@ -94,7 +128,11 @@ OA_RULES: Dict[str, dict] = {
         "keywords": ["nacos"],
         "checks": [
             {"path": "/nacos/v1/auth/users?pageNo=1&pageSize=10", "type": "unauth", "severity": "critical"},
-            {"path": "/nacos/v1/cs/configs?dataId=&group=&appName=&config_tags=&pageNo=1&pageSize=10", "type": "unauth", "severity": "high"},
+            {
+                "path": "/nacos/v1/cs/configs?dataId=&group=&appName=&config_tags=&pageNo=1&pageSize=10",
+                "type": "unauth",
+                "severity": "high",
+            },
         ],
     },
     "Spring": {
@@ -267,7 +305,7 @@ class OADetector(DetectionModule):
                         param_type="query",
                         method=method,
                         payload=check_url,
-                        vuln_type=vuln_type_str,
+                        vuln_type=vuln_type,
                         severity=severity,
                         confidence=Confidence.MEDIUM,
                         evidence=f"HTTP {status}",
@@ -285,10 +323,17 @@ class OADetector(DetectionModule):
         vulns = []
         common_paths = [
             # 常见 OA 入口
-            "/admin/", "/login/", "/system/", "/api/", "/webservice/",
+            "/admin/",
+            "/login/",
+            "/system/",
+            "/api/",
+            "/webservice/",
             # 常见泄露路径
-            "/WEB-INF/web.xml", "/META-INF/MANIFEST.MF",
-            "/.git/HEAD", "/.env", "/backup/",
+            "/WEB-INF/web.xml",
+            "/META-INF/MANIFEST.MF",
+            "/.git/HEAD",
+            "/.env",
+            "/backup/",
         ]
 
         for path in common_paths:
@@ -298,19 +343,21 @@ class OADetector(DetectionModule):
                 if resp and resp.get("status_code") in (200, 401, 403):
                     status = resp["status_code"]
                     severity = Severity.INFO if status in (401, 403) else Severity.LOW
-                    vulns.append(self._create_vuln(
-                        url=check_url,
-                        param=None,
-                        param_type="query",
-                        method="GET",
-                        payload="",
-                        vuln_type="info_disclosure",
-                        severity=severity,
-                        confidence=Confidence.LOW,
-                        evidence=f"HTTP {status}",
-                        description=f"发现 OA 路径: {check_url}",
-                        recommendation="限制敏感路径的外部访问",
-                    ))
+                    vulns.append(
+                        self._create_vuln(
+                            url=check_url,
+                            param=None,
+                            param_type="query",
+                            method="GET",
+                            payload="",
+                            vuln_type="info_disclosure",
+                            severity=severity,
+                            confidence=Confidence.LOW,
+                            evidence=f"HTTP {status}",
+                            description=f"发现 OA 路径: {check_url}",
+                            recommendation="限制敏感路径的外部访问",
+                        )
+                    )
             except Exception:
                 continue
 

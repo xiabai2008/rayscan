@@ -11,17 +11,17 @@ Components:
 - ScanResultSerializer: Serializes/deserializes ScanResult objects
 """
 
-import time
-import json
 import hashlib
-import threading
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-from urllib.parse import urlparse, parse_qs, urlunparse
-from collections import OrderedDict
+import json
 import logging
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlparse, urlunparse
 
-from wvs.models import Vulnerability, ScanResult, ScanTarget
+from wvs.models import ScanResult, ScanTarget, Vulnerability
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,9 @@ class CacheManager:
     Manages multiple cache instances with a unified interface and persistence support.
     """
 
-    def __init__(self, persist_path: Optional[str] = None, default_max_size: int = 1000, default_ttl: Optional[float] = 3600):
+    def __init__(
+        self, persist_path: Optional[str] = None, default_max_size: int = 1000, default_ttl: Optional[float] = 3600
+    ):
         self.persist_path = persist_path
         self.default_max_size = default_max_size
         self.default_ttl = default_ttl
@@ -349,7 +351,9 @@ class CacheManager:
         """Get the fingerprint generator"""
         return self._fingerprinter
 
-    def cache_scan_result(self, target: str, result: ScanResult, cache_name: str = "vuln_scan", ttl: Optional[float] = None) -> str:
+    def cache_scan_result(
+        self, target: str, result: ScanResult, cache_name: str = "vuln_scan", ttl: Optional[float] = None
+    ) -> str:
         """Cache a scan result"""
         cache = self.get_cache(cache_name)
         fingerprint = self._fingerprinter.fingerprint(target)
@@ -424,14 +428,18 @@ class CacheManager:
                                 "ttl": entry.ttl,
                             }
 
-                    cache_data[name] = {"max_size": cache.max_size, "default_ttl": cache.default_ttl, "entries": entries}
+                    cache_data[name] = {
+                        "max_size": cache.max_size,
+                        "default_ttl": cache.default_ttl,
+                        "entries": entries,
+                    }
 
                 with open(save_path, "w", encoding="utf-8") as f:
                     json.dump(cache_data, f, indent=2, default=str)
 
                 logger.info(f"Cache saved to: {save_path}")
 
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to save cache")
 
     def _load_from_disk(self):
@@ -440,7 +448,7 @@ class CacheManager:
             return
 
         try:
-            with open(self.persist_path, "r", encoding="utf-8") as f:
+            with open(self.persist_path, encoding="utf-8") as f:
                 cache_data = json.load(f)
 
             with self._lock:
@@ -476,7 +484,7 @@ class CacheManager:
             logger.info(f"Persist file does not exist: {self.persist_path}")
         except json.JSONDecodeError:
             logger.warning(f"Persist file format error: {self.persist_path}")
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load cache")
 
     def __enter__(self):

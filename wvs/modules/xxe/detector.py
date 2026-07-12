@@ -10,10 +10,9 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
 from ...core.session import HTTPPool
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 from .payloads import (
     CLASSIC_PAYLOADS,
     PARAM_ENTITY_PAYLOADS,
@@ -22,7 +21,6 @@ from .payloads import (
     WAF_BYPASS_PAYLOADS,
     XXE_SUCCESS_PATTERNS,
 )
-
 
 logger = logging.getLogger("wvs.module.xxe")
 

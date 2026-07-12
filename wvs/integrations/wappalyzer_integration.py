@@ -20,7 +20,6 @@ from typing import Dict, List, Optional, Tuple
 
 from ..config import ConfigManager
 
-
 logger = logging.getLogger("wvs.integrations.wappalyzer")
 
 
@@ -244,9 +243,9 @@ class WappalyzerIntegration:
                             if re.search(pattern, f"{h_key}: {h_val}", re.IGNORECASE):
                                 matched = True
                                 break
-                    elif source == "cookie" and re.search(pattern, cookie_keys, re.IGNORECASE):
-                        matched = True
-                    elif source == "url" and re.search(pattern, url.lower(), re.IGNORECASE):
+                    elif (source == "cookie" and re.search(pattern, cookie_keys, re.IGNORECASE)) or (
+                        source == "url" and re.search(pattern, url.lower(), re.IGNORECASE)
+                    ):
                         matched = True
                     if matched:
                         break
@@ -256,7 +255,9 @@ class WappalyzerIntegration:
                     break
 
         self._enrich_fingerprint(fingerprint)
-        logger.info(f"[Wappalyzer:Builtin] Identified {len(fingerprint.technologies)} technologies: {fingerprint.summary()}")
+        logger.info(
+            f"[Wappalyzer:Builtin] Identified {len(fingerprint.technologies)} technologies: {fingerprint.summary()}"
+        )
         return fingerprint
 
     def _enrich_fingerprint(self, fp: TechFingerprint):

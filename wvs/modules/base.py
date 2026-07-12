@@ -10,21 +10,21 @@ import logging
 import statistics
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from ..models import Vulnerability, ScanTarget, ModuleConfig, Severity, Confidence, VulnerabilityType
 from ..config import ConfigManager
 from ..constants import (
     DEFAULT_VERIFY_SSL,
     TIME_BASED_BASELINE_SAMPLES,
-    TIME_BASED_MAX_BASELINE_STD,
     TIME_BASED_MAX_BASELINE_AVG,
-    TIME_BASED_STDEV_COEFF,
+    TIME_BASED_MAX_BASELINE_STD,
     TIME_BASED_MIN_VALID_DELAYED,
+    TIME_BASED_STDEV_COEFF,
     TIME_BASED_VERIFICATION_ATTEMPTS,
 )
+from ..models import Confidence, ModuleConfig, ScanTarget, Severity, Vulnerability, VulnerabilityType
 
 if TYPE_CHECKING:
     from ..core.oob import OOBManager
@@ -72,7 +72,13 @@ class DetectionModule(ABC):
 
         # Runtime state
         self._enabled = self.module_config.enabled
-        self._stats = {"requests_made": 0, "vulnerabilities_found": 0, "errors": 0, "start_time": None, "end_time": None}
+        self._stats = {
+            "requests_made": 0,
+            "vulnerabilities_found": 0,
+            "errors": 0,
+            "start_time": None,
+            "end_time": None,
+        }
 
         # In-scan state
         self._found_vulns: List[Vulnerability] = []
@@ -83,7 +89,7 @@ class DetectionModule(ABC):
         self._scan_lock = asyncio.Lock()
 
         # OOB manager (optional, injected by scanner)
-        self._oob_manager: Optional["OOBManager"] = None
+        self._oob_manager: Optional[OOBManager] = None
 
         # WAF bypass auto-switch (P4 optimisation)
         self._waf_detected: bool = False
@@ -224,8 +230,10 @@ class DetectionModule(ABC):
 
             # Cookie param type: use a cached httpx client with custom Cookie header
             if param_type == "cookie":
+                from urllib.parse import urljoin
+                from urllib.parse import urlparse as url_parse
+
                 import httpx
-                from urllib.parse import urljoin, urlparse as url_parse
 
                 # Merge existing cookies with test parameters
                 existing_cookies = {}
@@ -377,7 +385,13 @@ class DetectionModule(ABC):
                 return True
 
         # HTML debug echo heuristics
-        debug_indicators = ["Request Details", "Query String Parameters", "Your Input:", "You entered:", "Debug Information"]
+        debug_indicators = [
+            "Request Details",
+            "Query String Parameters",
+            "Your Input:",
+            "You entered:",
+            "Debug Information",
+        ]
         if any(ind in resp_text for ind in debug_indicators):
             if payload in resp_text:
                 self._echo_server_checked[cache_key] = True
@@ -857,7 +871,13 @@ class DetectionModule(ABC):
 
     def reset_stats(self):
         """Reset module statistics."""
-        self._stats = {"requests_made": 0, "vulnerabilities_found": 0, "errors": 0, "start_time": None, "end_time": None}
+        self._stats = {
+            "requests_made": 0,
+            "vulnerabilities_found": 0,
+            "errors": 0,
+            "start_time": None,
+            "end_time": None,
+        }
 
     def validate(self) -> bool:
         """
@@ -989,7 +1009,9 @@ class ModuleFactory:
         return module_class.get_info()
 
     @classmethod
-    def create_all(cls, config: Optional[ConfigManager] = None, enabled_only: bool = True) -> Dict[str, DetectionModule]:
+    def create_all(
+        cls, config: Optional[ConfigManager] = None, enabled_only: bool = True
+    ) -> Dict[str, DetectionModule]:
         """
         Create instances of all registered modules.
 
@@ -1067,6 +1089,6 @@ if __name__ == "__main__":
         vulnerabilities = await test_module.scan(target)
         print(f"  Vulnerabilities found: {len(vulnerabilities)}")
 
-    asyncio.run(run_test())  # noqa: F405 — asyncio imported at module level
+    asyncio.run(run_test())
 
     print("\nTests complete!")

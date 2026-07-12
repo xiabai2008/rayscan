@@ -14,9 +14,9 @@ RayScan 多引擎结果合并器
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set
 
-from ..models import Vulnerability, Severity, Confidence, VulnerabilityType
+from ..models import Confidence, Severity, Vulnerability
 
 logger = logging.getLogger("wvs.result_merger")
 
@@ -54,6 +54,7 @@ ENGINE_PRIORITY = {
 @dataclass
 class MergedVulnerability:
     """合并后的漏洞信息"""
+
     vuln: Vulnerability
     engines: List[str] = field(default_factory=list)  # 报告此漏洞的引擎
     original_vulns: List[Vulnerability] = field(default_factory=list)  # 各引擎原始数据
@@ -212,14 +213,14 @@ class ResultMerger:
         lines.append(f"  输出漏洞:    {self._stats['total_output']}")
         lines.append(f"  缩减率:      {self._stats.get('reduction_ratio', '0%')}")
         lines.append("")
-        lines.append(f"  按引擎来源:")
+        lines.append("  按引擎来源:")
         for engine, count in sorted(self._stats.get("by_engine", {}).items()):
             lines.append(f"    {engine}: {count}")
 
         severity_count = defaultdict(int)
         for v in merged:
             severity_count[v.severity.value] += 1
-        lines.append(f"\n  按严重程度:")
+        lines.append("\n  按严重程度:")
         for sev in ["critical", "high", "medium", "low", "info"]:
             if severity_count[sev] > 0:
                 lines.append(f"    [{sev.upper():<8}] {severity_count[sev]}")

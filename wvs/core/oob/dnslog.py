@@ -80,7 +80,9 @@ class DNSLogClient:
             session = await self._get_session()
 
             # Get new domain from DNSLog.cn
-            async with session.get(f"{self.API_BASE}/newdomain.php", timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
+            async with session.get(
+                f"{self.API_BASE}/newdomain.php", timeout=aiohttp.ClientTimeout(total=self.timeout)
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.text()
                     # Response format: domain|token
@@ -100,7 +102,7 @@ class DNSLogClient:
 
         except asyncio.TimeoutError:
             logger.exception("[DNSLog] Registration timeout")
-        except Exception as e:
+        except Exception:
             logger.exception("[DNSLog] Registration failed")
 
         return False
@@ -131,7 +133,9 @@ class DNSLogClient:
 
             # Get records from DNSLog.cn
             async with session.get(
-                f"{self.API_BASE}/getrecords.php", params={"token": use_token}, timeout=aiohttp.ClientTimeout(total=self.timeout)
+                f"{self.API_BASE}/getrecords.php",
+                params={"token": use_token},
+                timeout=aiohttp.ClientTimeout(total=self.timeout),
             ) as resp:
                 if resp.status == 200:
                     data = await resp.text()
@@ -139,7 +143,7 @@ class DNSLogClient:
 
         except asyncio.TimeoutError:
             logger.warning("[DNSLog] Poll timeout")
-        except Exception as e:
+        except Exception:
             logger.exception("[DNSLog] Poll failed")
 
         return records

@@ -206,7 +206,9 @@ class SQLiTechniquesMixin:
         baseline_status = baseline_resp.get("status_code", 200)
         baseline_len = len(baseline_resp.get("text", ""))
 
-        col_count = await self._binary_search_column_count(url, params, param_name, method, param_type, baseline_status, baseline_len)
+        col_count = await self._binary_search_column_count(
+            url, params, param_name, method, param_type, baseline_status, baseline_len
+        )
         if col_count:
             logger.debug(f"[SQLi] Binary search detected column count: {col_count}")
             return col_count
@@ -511,7 +513,17 @@ class SQLiTechniquesMixin:
                     f'" AND SLEEP({int(expected_delay)})--',
                 ]
 
-                if await self._verify_time_based(url, params, param_name, method, param_type, expected_delay, baseline_avg, baseline_std, verify_payloads):
+                if await self._verify_time_based(
+                    url,
+                    params,
+                    param_name,
+                    method,
+                    param_type,
+                    expected_delay,
+                    baseline_avg,
+                    baseline_std,
+                    verify_payloads,
+                ):
                     vuln = self._create_vuln(
                         url=url,
                         param=param_name,
@@ -696,9 +708,7 @@ class SQLiTechniquesMixin:
             status = resp.get("status_code", 0)
             text = (resp.get("text", "") or "")[:500].lower()
             stored_ok = status in (200, 201, 302, 303)
-            stored_ok = stored_ok and not any(
-                m in text for m in ("error", "invalid", "not allowed", "failed")
-            )
+            stored_ok = stored_ok and not any(m in text for m in ("error", "invalid", "not allowed", "failed"))
 
             if stored_ok:
                 vuln = self._create_vuln(
@@ -738,7 +748,7 @@ class SQLiTechniquesMixin:
         from .payloads import get_oob_payloads
 
         # Only run if OOB manager is available
-        oob_manager = getattr(self, '_oob_manager', None)
+        oob_manager = getattr(self, "_oob_manager", None)
         if oob_manager is None:
             return
 
@@ -795,7 +805,7 @@ class SQLiTechniquesMixin:
         verify_payloads = {
             "error": ["' AND 1=1--", "') AND 1=1--", '") AND 1=1--'],
             "union": ["' UNION SELECT 1,2,3--", "'; SELECT 1--"],
-            "boolean": ["' OR '1'='1", '\" OR "1"="1'],
+            "boolean": ["' OR '1'='1", '" OR "1"="1'],
             "time": ["'; SELECT SLEEP(2)--"],
         }
 
@@ -805,15 +815,13 @@ class SQLiTechniquesMixin:
         # produce valid SQL, so the verification fails on false negatives.
         # Add bare-quote payloads that preserve the syntax error.
         orig_val = params.get(param_name, "")
-        is_numeric_param = orig_val.isdigit() or (
-            orig_val.lstrip("-+").isdigit() if orig_val else False
-        )
+        is_numeric_param = orig_val.isdigit() or (orig_val.lstrip("-+").isdigit() if orig_val else False)
         if vuln_type == "error" and is_numeric_param:
             # Numeric context: use payloads that also break SQL syntax
             verify_payloads["error"] = [
-                "'",           # bare quote — same error as original detection
-                "%27",          # URL-encoded quote — same effect
-                "1'",           # prefix + quote — different error location
+                "'",  # bare quote — same error as original detection
+                "%27",  # URL-encoded quote — same effect
+                "1'",  # prefix + quote — different error location
                 "' AND 1=1--",  # fallback for string-context
             ]
 
@@ -841,7 +849,12 @@ class SQLiTechniquesMixin:
                         t = _re2.sub(r"<[^>]+>", "", t)
                         t = _re2.sub(r"'[^']*'", "", t)
                         t = _re2.sub(r'"[^"]*"', "", t)
-                        t = _re2.sub(r"\b(?:AND|OR|NOT|SELECT|UNION|NULL|WHERE|FROM|ORDER|BY|SLEEP|HAVING|LIKE)\b", "", t, flags=_re2.IGNORECASE)
+                        t = _re2.sub(
+                            r"\b(?:AND|OR|NOT|SELECT|UNION|NULL|WHERE|FROM|ORDER|BY|SLEEP|HAVING|LIKE)\b",
+                            "",
+                            t,
+                            flags=_re2.IGNORECASE,
+                        )
                         t = _re2.sub(r"\b\d+\b", "N", t)
                         t = _re2.sub(r"[=\<\>\!\+\-\*/%]", " ", t)
                         t = _re2.sub(r"--|#", " ", t)

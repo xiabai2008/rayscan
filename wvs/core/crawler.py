@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from bs4 import BeautifulSoup
 
-from .crawler_parsers import CrawlerParsersMixin, _JS_URL_RE
+from .crawler_parsers import _JS_URL_RE, CrawlerParsersMixin
 from .session import HTTPPool
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,9 @@ class DiscoveredEndpoint:
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DiscoveredEndpoint):
             return False
-        return self.url == other.url and self.method == other.method and self.param_signature() == other.param_signature()
+        return (
+            self.url == other.url and self.method == other.method and self.param_signature() == other.param_signature()
+        )
 
 
 # ── Constants ──────────────────────────────────────────────────
@@ -126,7 +128,20 @@ CRAWLABLE_EXTENSIONS = {".html", ".htm", ".jsp", ".asp", ".aspx", ".php", ".do",
 CRAWL_DELAY_RANGE = (0.3, 1.5)
 
 # Query parameter names that indicate page identity (preserved in URL keys)
-PAGE_IDENT_PARAMS = {"page", "p", "action", "view", "id", "cat", "category", "product", "mode", "type", "Submit", "submit"}
+PAGE_IDENT_PARAMS = {
+    "page",
+    "p",
+    "action",
+    "view",
+    "id",
+    "cat",
+    "category",
+    "product",
+    "mode",
+    "type",
+    "Submit",
+    "submit",
+}
 
 # Common parameter names for discovery on parameterless endpoints
 COMMON_PARAM_NAMES = [
@@ -301,6 +316,7 @@ class WebCrawler(CrawlerParsersMixin):
         self._fake_ua = None
         try:
             from fake_useragent import UserAgent
+
             self._fake_ua = UserAgent()
         except Exception:  # noqa: S110
             pass
@@ -309,7 +325,7 @@ class WebCrawler(CrawlerParsersMixin):
 
     # ── Main entry ──────────────────────────────────────────────
 
-    async def crawl(self, target_url: str, session: HTTPPool) -> List[DiscoveredEndpoint]:  # noqa: C901
+    async def crawl(self, target_url: str, session: HTTPPool) -> List[DiscoveredEndpoint]:
         target_url = self._normalize_url(target_url)
         self._urls_to_visit = [(target_url, 1)]
         self._visited.clear()
@@ -336,7 +352,7 @@ class WebCrawler(CrawlerParsersMixin):
             return list(self._endpoints)
 
         # P11: Seed with known Metasploitable2 common paths for multi-service targets
-        is_lab = getattr(session, '_lab_mode', False)
+        is_lab = getattr(session, "_lab_mode", False)
         await self._seed_common_paths(target_url, session, is_lab=is_lab)
 
         # -- SPA detection: crawl 3 pages, compare body hashes --
@@ -348,7 +364,9 @@ class WebCrawler(CrawlerParsersMixin):
             self._spa_detected, self._spa_body_hash = await self._check_spa(target_url, session)
             self._spa_checked = True
             if self._spa_detected:
-                logger.warning(f"[Crawler] SPA detected (body hash: {hashlib.md5((self._spa_body_hash or '').encode()).hexdigest()[:8]}) — switching to JS API extraction + Playwright rendering")
+                logger.warning(
+                    f"[Crawler] SPA detected (body hash: {hashlib.md5((self._spa_body_hash or '').encode()).hexdigest()[:8]}) — switching to JS API extraction + Playwright rendering"
+                )
                 # In SPA mode: enable Playwright rendering for deeper content discovery
                 self._js_render = True
                 # Extract API endpoints from JS bundles
@@ -394,7 +412,9 @@ class WebCrawler(CrawlerParsersMixin):
             if prior >= self.max_urls_per_prefix:
                 if prefix_key not in self._prefix_warned:
                     self._prefix_warned.add(prefix_key)
-                    logger.warning(f"[Crawler] prefix limit reached for /{prefix_key.replace('.', '/')}/ — skipping deeper pages")
+                    logger.warning(
+                        f"[Crawler] prefix limit reached for /{prefix_key.replace('.', '/')}/ — skipping deeper pages"
+                    )
                 continue
             self._prefix_hits[prefix_key] = prior + 1
 
@@ -463,12 +483,13 @@ class WebCrawler(CrawlerParsersMixin):
 
     # ── Static HTML parsing ─────────────────────────────────────
 
-    async def crawl_static(self, url: str, session: HTTPPool, depth: int = 1) -> List[DiscoveredEndpoint]:  # noqa: C901
+    async def crawl_static(self, url: str, session: HTTPPool, depth: int = 1) -> List[DiscoveredEndpoint]:
         endpoints: List[DiscoveredEndpoint] = []
         timeout_val = max(getattr(session, "timeout", 30), 30)  # crawler needs >=30s for slow local servers
 
         # Anti-detection: random delay before request (from smart-crawler concept)
         import random
+
         await asyncio.sleep(random.uniform(*self._delay_range))
 
         # P14: retry with exponential backoff (from smart-crawler concept)
@@ -479,8 +500,10 @@ class WebCrawler(CrawlerParsersMixin):
                 break
             except Exception as e:
                 if attempt < max_attempts - 1:
-                    backoff = 2 ** attempt  # 0→1s, 1→2s, 2→4s
-                    logger.debug(f"[Crawler] retry {url} (attempt {attempt+1}/{max_attempts}): {e} (backoff={backoff}s)")
+                    backoff = 2**attempt  # 0→1s, 1→2s, 2→4s
+                    logger.debug(
+                        f"[Crawler] retry {url} (attempt {attempt + 1}/{max_attempts}): {e} (backoff={backoff}s)"
+                    )
                     await asyncio.sleep(backoff)
                     continue
                 logger.debug(f"[Crawler] failed {url} after {max_attempts} attempts: {e}")
@@ -560,7 +583,9 @@ class WebCrawler(CrawlerParsersMixin):
                             v = opt.get("value", "") or opt.get_text(strip=True)
                             if v:
                                 options.append(v)
-                    fields.append(FormField(name=name, field_type=ftype, default_value=tag.get("value"), options=options))
+                    fields.append(
+                        FormField(name=name, field_type=ftype, default_value=tag.get("value"), options=options)
+                    )
 
             param_types: Dict[str, str] = {}
             params: Dict[str, str] = {}
@@ -735,7 +760,7 @@ class WebCrawler(CrawlerParsersMixin):
         if parsed.query:
             qs = urllib.parse.parse_qs(parsed.query)
             endpoint.parameters = {k: v[0] if v else "" for k, v in qs.items()}
-            endpoint.param_types = {k: "query" for k in endpoint.parameters}
+            endpoint.param_types = dict.fromkeys(endpoint.parameters, "query")
             return endpoint
 
         found_params: Dict[str, str] = {}
@@ -751,7 +776,7 @@ class WebCrawler(CrawlerParsersMixin):
         # Instead of N separate requests, make ceil(N/10) requests.
         batch_size = 10
         for i in range(0, len(param_list), batch_size):
-            batch = param_list[i: i + batch_size]
+            batch = param_list[i : i + batch_size]
             # Build single URL with all params in this batch
             sep = "&" if "?" in base_url else "?"
             qs_parts = [f"{p}={test_value}" for p in batch]
@@ -776,11 +801,15 @@ class WebCrawler(CrawlerParsersMixin):
         endpoint.parameters = {**found_params, **reflected_params}
         endpoint.param_types = {**found_types, **reflected_types}
         if endpoint.parameters:
-            logger.debug(f"[Crawler] discover_params({endpoint.url}): {len(reflected_params)} reflected, {len(found_params)} non-reflected kept")
+            logger.debug(
+                f"[Crawler] discover_params({endpoint.url}): {len(reflected_params)} reflected, {len(found_params)} non-reflected kept"
+            )
 
         return endpoint
 
-    async def discover_params_batch(self, endpoints: List[DiscoveredEndpoint], session: HTTPPool) -> List[DiscoveredEndpoint]:
+    async def discover_params_batch(
+        self, endpoints: List[DiscoveredEndpoint], session: HTTPPool
+    ) -> List[DiscoveredEndpoint]:
         """Discover params for multiple endpoints concurrently. P5: amortized — one request tests multiple params."""
         # Only run param discovery once per host
         if not endpoints:
@@ -847,7 +876,7 @@ class WebCrawler(CrawlerParsersMixin):
                     )
                 )
         except Exception:
-            logger.debug(f"[Crawler] SPA JS extraction failed", exc_info=True)
+            logger.debug("[Crawler] SPA JS extraction failed", exc_info=True)
         return endpoints
 
     # ── Seed common paths (P11) ───────────────────────────────────
@@ -1076,7 +1105,6 @@ class WebCrawler(CrawlerParsersMixin):
         if len(bodies) < 2:
             return False, None
         # If all bodies are the same (or very close), it's an SPA
-        sizes = [len(b) for b in bodies]
         body0 = bodies[0]
         if all(abs(len(b) - len(body0)) < max(50, len(body0) * 0.05) for b in bodies):
             return True, body0
@@ -1102,7 +1130,9 @@ class WebCrawler(CrawlerParsersMixin):
                     js_urls.add(full_url)
             # Download each JS and extract API paths
             api_pattern = re.compile(r"""['"`](/[a-zA-Z][a-zA-Z0-9_/\-\.{}?=&%@+#]*)['"`]""")
-            api_prefix_pattern = re.compile(r"""['"`]((?:https?://[^/]+)?/(?:api|v[12]/|graphql|rest)/[^'"`\s]*)['"`]""")
+            api_prefix_pattern = re.compile(
+                r"""['"`]((?:https?://[^/]+)?/(?:api|v[12]/|graphql|rest)/[^'"`\s]*)['"`]"""
+            )
             for js_url in js_urls:
                 try:
                     js_resp = await session.get(js_url, timeout=8, follow_redirects=True)
@@ -1117,14 +1147,18 @@ class WebCrawler(CrawlerParsersMixin):
                     # Also find any URL with common API patterns
                     for match in api_pattern.finditer(js_text):
                         path = match.group(1)
-                        if any(kw in path.lower() for kw in ["/api/", "/v1/", "/v2/", "/graphql", "/rest/", "/swagger"]):
+                        if any(
+                            kw in path.lower() for kw in ["/api/", "/v1/", "/v2/", "/graphql", "/rest/", "/swagger"]
+                        ):
                             full_url = urllib.parse.urljoin(target_url, path)
-                            eps.append(DiscoveredEndpoint(url=full_url, method="GET", is_api=True, source_url=target_url))
+                            eps.append(
+                                DiscoveredEndpoint(url=full_url, method="GET", is_api=True, source_url=target_url)
+                            )
                 except Exception:
-                    logger.debug(f"[Crawler] JS endpoint extraction failed", exc_info=True)
+                    logger.debug("[Crawler] JS endpoint extraction failed", exc_info=True)
                     continue
         except Exception:
-            logger.debug(f"[Crawler] JS API extraction failed", exc_info=True)
+            logger.debug("[Crawler] JS API extraction failed", exc_info=True)
         # Deduplicate
         seen = set()
         unique_eps = []
@@ -1162,11 +1196,7 @@ class WebCrawler(CrawlerParsersMixin):
                 )
                 context = await browser.new_context(
                     viewport={"width": 1920, "height": 1080},
-                    user_agent=(
-                        self._fake_ua.random
-                        if self._fake_ua
-                        else self._ua_pool[self._ua_idx]
-                    ),
+                    user_agent=(self._fake_ua.random if self._fake_ua else self._ua_pool[self._ua_idx]),
                 )
                 page = await context.new_page()
 
@@ -1281,9 +1311,7 @@ class WebCrawler(CrawlerParsersMixin):
             for k, vals in urllib.parse.parse_qs(parsed.query).items():
                 v = vals[0] if vals else ""
                 ext = os.path.splitext(v.split("?")[0])[1].lower()
-                if ext in CRAWLABLE_EXTENSIONS and ext:
-                    important.append(f"{k}={v}")
-                elif k.lower() in PAGE_IDENT_PARAMS:
+                if (ext in CRAWLABLE_EXTENSIONS and ext) or k.lower() in PAGE_IDENT_PARAMS:
                     important.append(f"{k}={v}")
             if important:
                 base += "?" + "&".join(sorted(important))

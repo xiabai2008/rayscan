@@ -28,17 +28,18 @@ if sys.platform == "win32":
     except Exception:  # noqa: S110
         pass  # not available on older Windows or already reconfigured
 
+logger = logging.getLogger(__name__)
+
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 from .config import ConfigManager
 from .core import HTTPPool, WAVScanner
-from .models import ScanTarget, ScanResult, Severity
+from .models import ScanResult, ScanTarget, Severity
 from .modules.base import ModuleFactory
 from .plugins.auth import AuthManager
 from .reporting import ConsoleReporter, HTMLReporter, MarkdownReporter
-
 
 console = Console()
 
@@ -69,16 +70,22 @@ def _collect_partial_vulns(scanner) -> list:
 
 
 def _save_partial_results(
-    partial_vulns: list, target_url: str, max_time: int,
-    session, scanner, args,
+    partial_vulns: list,
+    target_url: str,
+    max_time: int,
+    session,
+    scanner,
+    args,
 ):
     """去重并保存部分扫描结果"""
     if not partial_vulns:
         return
-    from .models import ScanResult, ScanTarget
-    from pathlib import Path
+    import json
+    import re
     from datetime import datetime
-    import json, re
+    from pathlib import Path
+
+    from .models import ScanResult, ScanTarget
 
     seen = set()
     unique = []
@@ -106,6 +113,7 @@ def _save_partial_results(
         encoding="utf-8",
     )
     from rich.console import Console
+
     console = Console()
     console.print(f"[green]📄 部分结果报告已保存: {output_file.resolve()}[/green]")
     console.print(f"[yellow]共 {len(unique)} 个漏洞 (去重后)[/yellow]")
@@ -116,7 +124,7 @@ def _save_partial_results(
 # ─────────────────────────────────────────────────────────────────
 
 
-def cmd_scan(args):  # noqa: C901
+def cmd_scan(args):
     """执行单目标扫描"""
     target_url = args.url
 
@@ -172,7 +180,7 @@ def cmd_scan(args):  # noqa: C901
         console.print(f"[cyan][OOB] 使用 OOB 服务器: {args.oob_server}[/cyan]")
 
     # 加载指定模块
-    if hasattr(args, 'all_modules') and args.all_modules:
+    if hasattr(args, "all_modules") and args.all_modules:
         scanner._load_all_modules = True
         scanner.load_all_modules()
         console.print(f"[cyan][*] 加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
@@ -183,7 +191,7 @@ def cmd_scan(args):  # noqa: C901
         scanner.load_all_modules()
 
     # 过滤禁用的模块（--no-modules）
-    if hasattr(args, 'disabled_modules') and args.disabled_modules:
+    if hasattr(args, "disabled_modules") and args.disabled_modules:
         disable_set = set(args.disabled_modules)
         for mod_name in list(scanner._modules.keys()):
             if mod_name in disable_set:
@@ -281,12 +289,10 @@ def cmd_scan(args):  # noqa: C901
         console.print(f"[cyan]  已同步 {len(target.cookies)} 个 cookie 到扫描 session[/cyan]")
 
     # ── 利用引擎开关校验（默认禁用） ──
-    exploit_enabled = False
     if hasattr(args, "i_have_permission") and args.i_have_permission:
         if os.environ.get("RAYSCAN_ENABLE_EXPLOIT") != "1":
             console.print(
-                "[red][X] --i-have-permission 已设置，但环境变量 "
-                "RAYSCAN_ENABLE_EXPLOIT != 1。利用模块拒绝加载。[/red]"
+                "[red][X] --i-have-permission 已设置，但环境变量 RAYSCAN_ENABLE_EXPLOIT != 1。利用模块拒绝加载。[/red]"
             )
             return 1
         console.print(
@@ -300,18 +306,13 @@ def cmd_scan(args):  # noqa: C901
             )
         )
         try:
-            confirm = console.input(
-                "[bold red]请输入 YES 确认继续（任意其他输入取消）：[/bold red]"
-            )
+            confirm = console.input("[bold red]请输入 YES 确认继续（任意其他输入取消）：[/bold red]")
         except (EOFError, KeyboardInterrupt):
             confirm = ""
         if confirm.strip() != "YES":
             console.print("[yellow]已取消。[/yellow]")
             return 0
-        exploit_enabled = True
-        logger.warning(
-            "[EXPLOIT] 用户已确认授权 — 启用自动利用模块，目标: %s", target_url
-        )
+        logger.warning("[EXPLOIT] 用户已确认授权 — 启用自动利用模块，目标: %s", target_url)
 
     # 执行扫描
     console.print(
@@ -357,13 +358,14 @@ def cmd_scan(args):  # noqa: C901
     except Exception as e:
         console.print(f"\n[red]扫描异常: {e}[/red]")
         import traceback
+
         console.print(f"[dim]{traceback.format_exc()[:500]}[/dim]")
         partial_vulns = _collect_partial_vulns(scanner)
         if partial_vulns:
             console.print(f"[yellow]异常前已发现 {len(partial_vulns)} 个漏洞，尝试保存...[/yellow]")
             _save_partial_results(partial_vulns, target_url, None, session, scanner, args)
         else:
-            completed = getattr(scanner, '_modules_completed', [])
+            completed = getattr(scanner, "_modules_completed", [])
             if completed:
                 console.print(f"[yellow]异常，{len(completed)} 个模块已完成扫描但未发现漏洞[/yellow]")
             else:
@@ -379,8 +381,9 @@ def cmd_scan(args):  # noqa: C901
         console.print(f"\n[red]报告生成失败: {e}[/red]")
         # 兜底：手动保存 JSON
         try:
-            from pathlib import Path
             from datetime import datetime
+            from pathlib import Path
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
             fallback_path = Path("scan_reports") / f"report_{safe_name}_{timestamp}.json"
@@ -402,7 +405,11 @@ def cmd_batch(args):
         console.print(f"[red]错误：找不到目标文件 {target_file}[/red]")
         return 1
 
-    targets = [line.strip() for line in target_file.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
+    targets = [
+        line.strip()
+        for line in target_file.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
     if not targets:
         console.print("[yellow]警告：目标文件为空[/yellow]")
@@ -418,7 +425,7 @@ def cmd_batch(args):
     config = ConfigManager()
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
-    if hasattr(args, 'all_modules') and args.all_modules:
+    if hasattr(args, "all_modules") and args.all_modules:
         scanner._load_all_modules = True
         scanner.load_all_modules()
         console.print(f"[cyan][*] 批量加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
@@ -515,7 +522,7 @@ def cmd_list_modules(args):
             )
 
     console.print(table)
-    console.print(f"\n共 {len(modules)} 个模块（核心: sqli+xss, lite: {len(modules)-2} 个）")
+    console.print(f"\n共 {len(modules)} 个模块（核心: sqli+xss, lite: {len(modules) - 2} 个）")
     console.print("[dim]提示: 使用 --all-modules 加载全部 lite 模块[/dim]")
     return 0
 
@@ -550,6 +557,7 @@ def cmd_profile(args):
             console.print(table)
         else:
             import json
+
             console.print(json.dumps(profiles, indent=2, ensure_ascii=False))
         return 0
 
@@ -609,6 +617,7 @@ def cmd_profile(args):
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file = output_dir / f"{args.name}.yaml"
         import yaml
+
         output_file.write_text(
             yaml.dump(profile, default_flow_style=False, allow_unicode=True),
             encoding="utf-8",
@@ -694,6 +703,7 @@ def cmd_use(args):
         if auth_path.exists():
             try:
                 import json
+
                 auth_data = json.loads(auth_path.read_text(encoding="utf-8"))
                 auth_manager = AuthManager(config)
 
@@ -709,9 +719,11 @@ def cmd_use(args):
 
                 # Apply auth
                 import httpx
+
                 async def _do_auth():
                     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
                         return await auth_manager.authenticate(tmp_client)
+
                 asyncio.run(_do_auth())
                 auth_manager.apply_to_target(target)
 
@@ -750,6 +762,7 @@ def cmd_use(args):
     except Exception as e:
         console.print(f"\n[red]扫描异常: {e}[/red]")
         import traceback
+
         console.print(f"[dim]{traceback.format_exc()[:500]}[/dim]")
         return 1
 
@@ -785,7 +798,9 @@ def display_result(result: ScanResult, elapsed: float, args):
     if args.output:
         output_file = Path(args.output)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        fmt = args.format or ("html" if output_file.suffix == ".html" else "json" if output_file.suffix == ".json" else "json")
+        fmt = args.format or (
+            "html" if output_file.suffix == ".html" else "json" if output_file.suffix == ".json" else "json"
+        )
     else:
         # 未指定 -o：自动生成路径
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -822,20 +837,32 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser = sub.add_parser("scan", help="扫描单个目标")
     scan_parser.add_argument("url", help="目标 URL（支持 http/https）")
     scan_parser.add_argument("-o", "--output", help="输出报告文件路径")
-    scan_parser.add_argument("-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式（默认 json）")
+    scan_parser.add_argument(
+        "-f",
+        "--format",
+        choices=["json", "html", "markdown", "sarif", "csv"],
+        default="json",
+        help="报告格式（默认 json）",
+    )
     scan_parser.add_argument("-t", "--threads", type=int, help="并发线程数")
     scan_parser.add_argument("--timeout", type=int, help="请求超时（秒）")
-    scan_parser.add_argument("--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块，默认只加载 sqli+xss）")
+    scan_parser.add_argument(
+        "--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块，默认只加载 sqli+xss）"
+    )
     scan_parser.add_argument("--modules", nargs="+", help="指定启用的模块（如 sqli xss）")
     scan_parser.add_argument("--no-modules", nargs="+", dest="disabled_modules", help="禁用的模块")
     scan_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
 
     # 扫描控制选项
     control_group = scan_parser.add_argument_group("扫描控制")
-    control_group.add_argument("--max-time", type=int, default=7200, help="全局扫描超时（秒），默认 7200（2小时），0 表示无限制")
+    control_group.add_argument(
+        "--max-time", type=int, default=7200, help="全局扫描超时（秒），默认 7200（2小时），0 表示无限制"
+    )
     control_group.add_argument("--resume", action="store_true", help="从上次 checkpoint 恢复扫描")
     control_group.add_argument("--rate", type=int, default=10, help="每秒最大请求数（默认 10）")
-    control_group.add_argument("--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)")
+    control_group.add_argument(
+        "--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)"
+    )
     control_group.add_argument("--delay", type=float, default=0.0, help="请求间延迟（秒）")
     control_group.add_argument("-c", "--config", type=str, help="配置文件路径（YAML/JSON）")
     control_group.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证（不推荐，存在安全风险）")
@@ -860,7 +887,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 认证选项
     auth_group = scan_parser.add_argument_group("认证选项")
-    auth_group.add_argument("--auth-type", choices=["form", "bearer", "basic", "apikey", "cookie"], help="认证类型（默认自动检测）")
+    auth_group.add_argument(
+        "--auth-type", choices=["form", "bearer", "basic", "apikey", "cookie"], help="认证类型（默认自动检测）"
+    )
     auth_group.add_argument("--login-url", help="表单登录 URL（auth-type=form 时必填）")
     auth_group.add_argument("--username", help="认证用户名")
     auth_group.add_argument("--password", help="认证密码")
@@ -868,8 +897,15 @@ def build_parser() -> argparse.ArgumentParser:
     auth_group.add_argument("--cookies", help="直接注入 Cookie（格式：name=value; name2=value2）")
     auth_group.add_argument("--api-key", help="API Key")
     auth_group.add_argument("--api-key-header", default="X-API-Key", help="API Key Header 名称（默认 X-API-Key）")
-    auth_group.add_argument("--login-extra", nargs="*", dest="login_extra", help="额外表单字段（格式：fieldname=value）")
-    auth_group.add_argument("--csrf-fields", nargs="*", dest="csrf_fields", help="CSRF token 字段名（默认自动检测，如 user_token csrf_token）")
+    auth_group.add_argument(
+        "--login-extra", nargs="*", dest="login_extra", help="额外表单字段（格式：fieldname=value）"
+    )
+    auth_group.add_argument(
+        "--csrf-fields",
+        nargs="*",
+        dest="csrf_fields",
+        help="CSRF token 字段名（默认自动检测，如 user_token csrf_token）",
+    )
     auth_group.add_argument("--success-check", dest="success_check", help="登录成功标识（响应中包含的字符串）")
     auth_group.add_argument("--fail-check", dest="fail_check", help="登录失败标识（响应中包含的字符串）")
 
@@ -927,7 +963,9 @@ def build_parser() -> argparse.ArgumentParser:
     use_parser.add_argument("profile", help="Profile 名称")
     use_parser.add_argument("-u", "--url", required=True, help="目标 URL")
     use_parser.add_argument("-o", "--output", help="输出报告文件路径")
-    use_parser.add_argument("-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式")
+    use_parser.add_argument(
+        "-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式"
+    )
     use_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
     use_parser.add_argument("--auth", help="认证文件路径（JSON）")
     use_parser.add_argument("--max-time", type=int, default=7200, help="扫描超时（秒）")

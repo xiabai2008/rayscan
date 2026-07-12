@@ -11,13 +11,12 @@ Metasploit Integration Module — 漏洞验证链
 """
 
 import asyncio
-import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import ConfigManager
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
+from ..models import Vulnerability, VulnerabilityType
 
 logger = logging.getLogger("wvs.integrations.metasploit")
 
@@ -63,6 +62,7 @@ COMMON_TARGET_PATTERNS: Dict[str, str] = {
 
 try:
     from msgpack import Unpacker, packb
+
     MSGPACK_AVAILABLE = True
 except ImportError:
     MSGPACK_AVAILABLE = False
@@ -71,6 +71,7 @@ except ImportError:
 @dataclass
 class MSFResult:
     """Metasploit 验证结果"""
+
     module_name: str
     module_type: str  # exploit / auxiliary
     target_url: str
@@ -119,7 +120,11 @@ class MetasploitRPCClient:
             # 认证
             result = await self._send_request("auth.login", self.password)
             if result and isinstance(result, dict) and result.get(b"result") == b"success":
-                self._token = result.get(b"token", b"").decode() if isinstance(result.get(b"token"), bytes) else str(result.get("token", ""))
+                self._token = (
+                    result.get(b"token", b"").decode()
+                    if isinstance(result.get(b"token"), bytes)
+                    else str(result.get("token", ""))
+                )
                 self._connected = True
                 logger.info(f"[MSF] 连接成功 ({self.host}:{self.port})")
                 return True
@@ -235,36 +240,54 @@ class MetasploitRPCClient:
         # 解析结果
         if isinstance(result, dict):
             output = str(result.get(b"message", result.get("message", "")))
-            status_text = (result.get(b"result") or result.get("result") or b"").decode() if isinstance(result.get(b"result"), bytes) else str(result.get("result", ""))
+            status_text = (
+                (result.get(b"result") or result.get("result") or b"").decode()
+                if isinstance(result.get(b"result"), bytes)
+                else str(result.get("result", ""))
+            )
 
             if "vulnerable" in output.lower() or "vulnerable" in status_text.lower():
                 return MSFResult(
-                    module_name=module_name, module_type=module_type,
-                    target_url=target_url, status="vulnerable",
-                    confidence=0.9, output=output[:500],
+                    module_name=module_name,
+                    module_type=module_type,
+                    target_url=target_url,
+                    status="vulnerable",
+                    confidence=0.9,
+                    output=output[:500],
                 )
             elif status_text == "success" or "success" in output.lower():
                 return MSFResult(
-                    module_name=module_name, module_type=module_type,
-                    target_url=target_url, status="vulnerable",
-                    confidence=0.8, output=output[:500],
+                    module_name=module_name,
+                    module_type=module_type,
+                    target_url=target_url,
+                    status="vulnerable",
+                    confidence=0.8,
+                    output=output[:500],
                 )
             elif "not vulnerable" in output.lower() or "not found" in output.lower():
                 return MSFResult(
-                    module_name=module_name, module_type=module_type,
-                    target_url=target_url, status="not_vulnerable",
-                    confidence=0.1, output=output[:500],
+                    module_name=module_name,
+                    module_type=module_type,
+                    target_url=target_url,
+                    status="not_vulnerable",
+                    confidence=0.1,
+                    output=output[:500],
                 )
             else:
                 return MSFResult(
-                    module_name=module_name, module_type=module_type,
-                    target_url=target_url, status="unknown",
-                    confidence=0.3, output=output[:500],
+                    module_name=module_name,
+                    module_type=module_type,
+                    target_url=target_url,
+                    status="unknown",
+                    confidence=0.3,
+                    output=output[:500],
                 )
 
         return MSFResult(
-            module_name=module_name, module_type=module_type,
-            target_url=target_url, status="error",
+            module_name=module_name,
+            module_type=module_type,
+            target_url=target_url,
+            status="error",
             error=str(result),
         )
 
@@ -320,11 +343,16 @@ class MetasploitIntegration:
         self._stats["checks_run"] += 1
 
         # 确定模块类型
-        module_type = "exploit" if vuln.type in (
-            VulnerabilityType.REMOTE_CODE_EXECUTION,
-            VulnerabilityType.SQL_INJECTION,
-            VulnerabilityType.COMMAND_INJECTION,
-        ) else "auxiliary"
+        module_type = (
+            "exploit"
+            if vuln.type
+            in (
+                VulnerabilityType.REMOTE_CODE_EXECUTION,
+                VulnerabilityType.SQL_INJECTION,
+                VulnerabilityType.COMMAND_INJECTION,
+            )
+            else "auxiliary"
+        )
 
         result = await client.check_vulnerability(module_name, vuln.url or "", module_type)
 

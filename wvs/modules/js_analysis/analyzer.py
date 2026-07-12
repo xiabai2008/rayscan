@@ -22,24 +22,20 @@ SENSITIVE_PATTERNS = [
     (r'(?:secret[_-]?key|secretkey)\s*[:=]\s*["\']([\w\-]{16,})["\']', "Secret key"),
     (r'(?:bearer|jwt)\s+["\']?([\w\-\.]{20,})["\']?', "JWT / Bearer token"),
     (r'(?:password|passwd|pwd)\s*[:=]\s*["\']([^"\'\s]{3,})["\']', "Password in code"),
-
     # Cloud service keys
-    (r'AKIA[0-9A-Z]{16}', "AWS Access Key"),
-    (r'AIza[0-9A-Za-z\-_]{35}', "GCP API Key"),
-    (r'(?:xox[pboa]-[\w\-]{10,})', "Slack Token"),
-
+    (r"AKIA[0-9A-Z]{16}", "AWS Access Key"),
+    (r"AIza[0-9A-Za-z\-_]{35}", "GCP API Key"),
+    (r"(?:xox[pboa]-[\w\-]{10,})", "Slack Token"),
     # Internal infrastructure
-    (r'(?:https?://)(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?', "Internal IP endpoint"),
+    (r"(?:https?://)(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?", "Internal IP endpoint"),
     (r'(?:mongodb|mysql|postgres(?:ql)?|redis)://[^\s"\'<>]+', "Database connection string"),
     (r'jdbc:[^\s"\'<>]+', "JDBC connection string"),
-
     # SSH / private keys
-    (r'-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----', "Private key in code"),
-    (r'ssh-rsa\s+[A-Za-z0-9+/=]{100,}', "SSH public key"),
-
+    (r"-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----", "Private key in code"),
+    (r"ssh-rsa\s+[A-Za-z0-9+/=]{100,}", "SSH public key"),
     # .env / config patterns
-    (r'(?:DATABASE_URL|DB_URL|MONGO_URL|REDIS_URL)\s*=\s*(\S+)', "Database URL"),
-    (r'(?:SENDGRID|MAILGUN|STRIPE|TWILIO)_(?:API_)?KEY\s*=\s*(\S+)', "Service API key"),
+    (r"(?:DATABASE_URL|DB_URL|MONGO_URL|REDIS_URL)\s*=\s*(\S+)", "Database URL"),
+    (r"(?:SENDGRID|MAILGUN|STRIPE|TWILIO)_(?:API_)?KEY\s*=\s*(\S+)", "Service API key"),
 ]
 
 
@@ -70,12 +66,14 @@ def extract_sensitive_info(js_text: str) -> List[dict]:
                     break
                 pos += len(line) + 1
 
-            findings.append({
-                "type": ptype,
-                "value": value[:100],
-                "line": line_num,
-                "context": lines[line_num - 1].strip()[:120] if line_num <= len(lines) else "",
-            })
+            findings.append(
+                {
+                    "type": ptype,
+                    "value": value[:100],
+                    "line": line_num,
+                    "context": lines[line_num - 1].strip()[:120] if line_num <= len(lines) else "",
+                }
+            )
 
     return findings
 

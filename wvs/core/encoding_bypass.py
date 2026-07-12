@@ -10,8 +10,8 @@ Generates encoding-variant payloads to evade WAF/IDS detection:
 - Character escaping
 """
 
-from typing import List
 import urllib.parse
+from typing import List
 
 
 def url_encode(payload: str) -> str:

@@ -11,14 +11,14 @@ Thread-safe, async-compatible, with burst/uniform modes.
 """
 
 import asyncio
-import time
 import random
-import statistics
-from dataclasses import dataclass
-from typing import List, Dict, Deque
-from collections import deque
-from enum import Enum
 import secrets
+import statistics
+import time
+from collections import deque
+from dataclasses import dataclass
+from enum import Enum
+from typing import Deque, Dict, List
 
 
 class RateLimitMode(Enum):
@@ -163,8 +163,12 @@ class RateLimiter:
             "request_count": self.metrics.request_count,
             "success_count": self.metrics.success_count,
             "error_count": self.metrics.error_count,
-            "avg_response_time": (self.metrics.total_response_time / self.metrics.request_count if self.metrics.request_count > 0 else 0.0),
-            "error_rate": (self.metrics.error_count / self.metrics.request_count if self.metrics.request_count > 0 else 0.0),
+            "avg_response_time": (
+                self.metrics.total_response_time / self.metrics.request_count if self.metrics.request_count > 0 else 0.0
+            ),
+            "error_rate": (
+                self.metrics.error_count / self.metrics.request_count if self.metrics.request_count > 0 else 0.0
+            ),
             "window_size": self.window_size,
             "mode": self.mode.value,
         }
@@ -380,7 +384,9 @@ class WAFEvasion:
             headers["Cache-Control"] = random.choice(["no-cache", "max-age=0"])
 
         if random.random() > 0.9:
-            headers["X-Forwarded-For"] = f"{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}"
+            headers["X-Forwarded-For"] = (
+                f"{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}.{random.randint(1, 255)}"
+            )
 
         self.request_counter += 1
         return headers
@@ -495,7 +501,9 @@ class IntelligentRateLimiter:
         stats = {
             "total_requests": self.total_requests,
             "total_wait_time": self.total_wait_time,
-            "avg_wait_time_per_request": (self.total_wait_time / self.total_requests if self.total_requests > 0 else 0.0),
+            "avg_wait_time_per_request": (
+                self.total_wait_time / self.total_requests if self.total_requests > 0 else 0.0
+            ),
             "rate_limiter": self.rate_limiter.get_metrics(),
         }
 

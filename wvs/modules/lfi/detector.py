@@ -7,9 +7,9 @@ Verification: only report if file marker content is present (do not report empty
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from ..base import DetectionModule, ModuleInfo, register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
 from ...core.session import HTTPPool
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 from .payloads import (
     LFI_PAYLOADS_LINUX,
     LFI_PAYLOADS_WINDOWS,
@@ -17,7 +17,6 @@ from .payloads import (
     PHP_WRAPPER_PAYLOADS,
     build_path_traversal_payloads,
 )
-
 
 logger = logging.getLogger("wvs.module.lfi")
 
@@ -155,7 +154,7 @@ class LFIDetector(DetectionModule):
         baseline_text = baseline.get("text", "")[:10000]
 
         # Test each parameter
-        for param_name in params.keys():
+        for param_name in params:
             found = await self._test_lfi(url, params, param_name, method, param_type, baseline_text)
             if found:
                 # Only report one LFI per endpoint (avoid reporting multiple on same param)
@@ -184,7 +183,18 @@ class LFIDetector(DetectionModule):
         # P17: Skip LFI detection on non-file-inclusion endpoints
         # DVWA only /vulnerabilities/fi/ has file inclusion vulnerability
         # xss_/sqli/brute/exec/csrf/csp/upload/javascript do not have file inclusion capability
-        non_fi_patterns = ["/xss_", "/csrf", "/sqli", "/sqli_blind", "/brute", "/exec", "/csp", "/javascript", "/upload", "/captcha"]
+        non_fi_patterns = [
+            "/xss_",
+            "/csrf",
+            "/sqli",
+            "/sqli_blind",
+            "/brute",
+            "/exec",
+            "/csp",
+            "/javascript",
+            "/upload",
+            "/captcha",
+        ]
         if any(pattern in url for pattern in non_fi_patterns):
             logger.debug(f"[LFI] Skipping non-FI endpoint: {url}")
             return False
@@ -348,7 +358,9 @@ class LFIDetector(DetectionModule):
                     return marker
         return payload
 
-    def _check_file_content(self, resp_text: str, payload: str, baseline_text: str, url: str = "") -> Tuple[Optional[str], Optional[str]]:
+    def _check_file_content(
+        self, resp_text: str, payload: str, baseline_text: str, url: str = ""
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         Detect if the response contains file content
 

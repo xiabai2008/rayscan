@@ -135,7 +135,12 @@ class ResponseAnalyzer:
             t = _re.sub(r"<[^>]+>", "", t)
             t = _re.sub(r"'[^']*'", "", t)
             t = _re.sub(r'"[^"]*"', "", t)
-            t = _re.sub(r"\b(?:AND|OR|NOT|SELECT|UNION|NULL|WHERE|FROM|ORDER|BY|SLEEP|HAVING|LIKE)\b", "", t, flags=_re.IGNORECASE)
+            t = _re.sub(
+                r"\b(?:AND|OR|NOT|SELECT|UNION|NULL|WHERE|FROM|ORDER|BY|SLEEP|HAVING|LIKE)\b",
+                "",
+                t,
+                flags=_re.IGNORECASE,
+            )
             t = _re.sub(r"\b\d+\b", "N", t)
             t = _re.sub(r"[=\<\>\!\+\-\*/%]", " ", t)
             t = _re.sub(r"--|#", " ", t)
@@ -153,7 +158,9 @@ class ResponseAnalyzer:
             t = _re.sub(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", " ", t)
             t = _re.sub(r"[a-f0-9]{32,}", " ", t)
             t = _re.sub(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}", " ", t)
-            t = _re.sub(r"\b(?:AND|OR|NOT|NULL|TRUE|FALSE|SELECT|UNION|ORDER|BY|WHERE|FROM)\b", "", t, flags=_re.IGNORECASE)
+            t = _re.sub(
+                r"\b(?:AND|OR|NOT|NULL|TRUE|FALSE|SELECT|UNION|ORDER|BY|WHERE|FROM)\b", "", t, flags=_re.IGNORECASE
+            )
             t = _re.sub(r"'[^']*'", "''", t)
             t = _re.sub(r"\b\d+\b", "N", t)
             t = _re.sub(r"[+\-*/%]=?", " ", t)

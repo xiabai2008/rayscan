@@ -1,0 +1,39 @@
+# CODEOWNERS — 自动指派 Pull Request 评审人
+#
+# 语法:  <路径模式>    @github-用户名
+# 当 PR 修改了匹配路径的文件时，GitHub 会自动请求对应负责人评审。
+# 团队请在此登记各自长期负责的模块；未明确归属的改动由默认负责人兜底。
+
+# ── 默认负责人（仓库管理员，兜底）──
+*                                     @xiabai2004
+
+# ── 核心引擎 ──
+/wvs/core/                            @xiabai2004
+/wvs/cli.py                           @xiabai2004
+/wvs/config.py                        @xiabai2004
+/wvs/constants.py                     @xiabai2004
+/wvs/exceptions.py                    @xiabai2004
+/wvs/models.py                        @xiabai2004
+
+# ── 检测模块（请各模块负责人把 @xiabai2004 换成自己的账号）──
+/wvs/modules/sqli/                    @xiabai2004
+/wvs/modules/xss/                     @xiabai2004
+/wvs/modules/cmdi/                    @xiabai2004
+/wvs/modules/lfi/                     @xiabai2004
+/wvs/modules/rce/                     @xiabai2004
+/wvs/modules/ssrf/                    @xiabai2004
+/wvs/modules/xxe/                     @xiabai2004
+/wvs/modules/api/                     @xiabai2004
+
+# ── 集成与外部工具封装 ──
+/wvs/integrations/                    @xiabai2004
+/wvs/core/scanner_integrations.py     @xiabai2004
+
+# ── 报告与 UI ──
+/wvs/reporting/                       @xiabai2004
+/web_ui/                              @xiabai2004
+
+# ── 工程配置与文档 ──
+/pyproject.toml                       @xiabai2004
+/.github/                             @xiabai2004
+/docs/                                @xiabai2004

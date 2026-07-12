@@ -9,10 +9,9 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
 from ...core.session import HTTPPool
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 from .payloads import (
     BASIC_PAYLOADS,
     CLOUD_METADATA_PAYLOADS,
@@ -20,7 +19,6 @@ from .payloads import (
     PROTOCOL_PAYLOADS,
     SSRF_SUCCESS_PATTERNS,
 )
-
 
 logger = logging.getLogger("wvs.module.ssrf")
 
@@ -155,7 +153,9 @@ class SSRFDetector(DetectionModule):
                     if self._check_ssrf_success(resp_text, payload):
                         # P16: Filter input reflection false positives
                         if self._is_input_reflection_ssrf(resp_text, baseline_text, payload):
-                            logger.debug(f"[SSRF] Skipping reflection false positive: {url} [{param_name}] payload={payload[:30]}")
+                            logger.debug(
+                                f"[SSRF] Skipping reflection false positive: {url} [{param_name}] payload={payload[:30]}"
+                            )
                             continue
                         # P18: file:// protocol reads local files -> this is LFI not SSRF
                         if payload.startswith("file://"):
@@ -506,7 +506,13 @@ class SSRFDetector(DetectionModule):
         if payload in response_text:
             return f"SSRF: payload URL echoed in response via parameter '{param_name}'"
         # Connection attempt evidence
-        for keyword in ["connection refused", "connection timed out", "no route to host", "failed to open stream", "getaddrinfo"]:
+        for keyword in [
+            "connection refused",
+            "connection timed out",
+            "no route to host",
+            "failed to open stream",
+            "getaddrinfo",
+        ]:
             if keyword in text_lower:
                 return f"SSRF (blind): '{keyword}' via parameter '{param_name}' (payload: {payload})"
         return f"SSRF detected via parameter '{param_name}' (payload: {payload})"

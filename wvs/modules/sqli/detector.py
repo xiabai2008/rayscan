@@ -12,10 +12,9 @@ import re
 from typing import Dict, List, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
 from ...core.session import HTTPPool
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 from .analyzer import ResponseAnalyzer
 from .payloads import (
     ERROR_BASED_PAYLOADS,
@@ -130,10 +129,23 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
                 async with sem:
                     try:
                         await self._test_time_based(
-                            c_url, c_params, c_pname, c_pval, c_method, c_ptype, c_baseline, c_dbtype,
+                            c_url,
+                            c_params,
+                            c_pname,
+                            c_pval,
+                            c_method,
+                            c_ptype,
+                            c_baseline,
+                            c_dbtype,
                         )
                         await self._test_stacked_query(
-                            c_url, c_params, c_pname, c_pval, c_method, c_ptype, c_baseline,
+                            c_url,
+                            c_params,
+                            c_pname,
+                            c_pval,
+                            c_method,
+                            c_ptype,
+                            c_baseline,
                         )
                     except Exception as e:
                         logger.debug(f"[SQLi] time-based detection failed {c_url}: {e}")
@@ -163,16 +175,46 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
         db_type = await self._fingerprint_dbms(url, params, method, param_type, baseline)
         waf_prefix = WAF_BYPASS_PAYLOADS[:6] if self._waf_detected else []
 
-        _sqli_url_kw = {"sqli", "product", "news", "item", "user", "search", "login", "member", "article", "cat", "id", "brute"}
-        _sqli_param_kw = {"id", "uid", "user", "search", "q", "query", "pid", "cat", "page", "username", "password", "email"}
+        _sqli_url_kw = {
+            "sqli",
+            "product",
+            "news",
+            "item",
+            "user",
+            "search",
+            "login",
+            "member",
+            "article",
+            "cat",
+            "id",
+            "brute",
+        }
+        _sqli_param_kw = {
+            "id",
+            "uid",
+            "user",
+            "search",
+            "q",
+            "query",
+            "pid",
+            "cat",
+            "page",
+            "username",
+            "password",
+            "email",
+        }
         url_lower = url.lower()
-        is_sqli_endpoint = any(kw in url_lower for kw in _sqli_url_kw) or any(p.lower() in _sqli_param_kw for p in params.keys())
+        is_sqli_endpoint = any(kw in url_lower for kw in _sqli_url_kw) or any(
+            p.lower() in _sqli_param_kw for p in params
+        )
 
         # P23: On POST form endpoints with many params, only test the most
         # security-relevant ones to avoid form-storm on registration/comment forms.
         param_names = list(params.keys())
         if method == "POST" and len(param_names) > 4:
-            prioritized = [p for p in param_names if p.lower() in {"username", "password", "pass", "email", "id", "uid", "user"}]
+            prioritized = [
+                p for p in param_names if p.lower() in {"username", "password", "pass", "email", "id", "uid", "user"}
+            ]
             remaining = [p for p in param_names if p not in prioritized]
             param_names = prioritized + remaining[:1]
             logger.debug(f"[SQLi] Sampled {len(param_names)}/{len(params)} params for POST {url}")
@@ -180,7 +222,9 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
         for param_name in param_names:
             param_value = params[param_name]
 
-            await self._test_error_based(url, params, param_name, param_value, method, param_type, baseline, waf_prefix, db_type)
+            await self._test_error_based(
+                url, params, param_name, param_value, method, param_type, baseline, waf_prefix, db_type
+            )
 
             if is_sqli_endpoint:
                 await self._test_union_based(url, params, param_name, param_value, method, param_type, baseline)
@@ -193,7 +237,9 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
             await self._test_second_order(url, params, param_name, param_value, method, param_type, baseline)
 
             if time_candidates is not None:
-                time_candidates.append((url, params.copy(), param_name, param_value, method, param_type, baseline, db_type))
+                time_candidates.append(
+                    (url, params.copy(), param_name, param_value, method, param_type, baseline, db_type)
+                )
             else:
                 await self._test_time_based(url, params, param_name, param_value, method, param_type, baseline, db_type)
                 await self._test_stacked_query(url, params, param_name, param_value, method, param_type, baseline)
@@ -265,7 +311,7 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
             endpoints.append({"url": url, "params": target.data, "method": "POST", "param_type": "body"})
 
         if target.cookies:
-            cookie_params = {k: "1" for k in target.cookies.keys()}
+            cookie_params = dict.fromkeys(target.cookies.keys(), "1")
             endpoints.append({"url": url, "params": cookie_params, "method": "GET", "param_type": "cookie"})
 
         form_endpoints = self._extract_form_params(target)
@@ -372,12 +418,14 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
                 params[sel_name] = opt_match.group(1) if opt_match else "1"
 
             if params:
-                endpoints.append({
-                    "url": form_url,
-                    "params": params,
-                    "method": method,
-                    "param_type": "body" if method == "POST" else "query",
-                })
+                endpoints.append(
+                    {
+                        "url": form_url,
+                        "params": params,
+                        "method": method,
+                        "param_type": "body" if method == "POST" else "query",
+                    }
+                )
 
         return endpoints
 

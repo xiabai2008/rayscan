@@ -12,8 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from ..models import ScanResult, Vulnerability, Severity, Confidence
-
+from ..models import Confidence, ScanResult, Severity, Vulnerability
 
 # Severity color mapping
 SEV_COLORS = {
@@ -27,7 +26,7 @@ SEV_COLORS = {
 # Windows GBK 终端不支持 emoji，使用 ASCII 安全字符
 _SAFE_EMOJI = False
 try:
-    '\u2600'.encode(sys.stdout.encoding or 'utf-8')
+    "\u2600".encode(sys.stdout.encoding or "utf-8")
     _SAFE_EMOJI = True
 except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
     _SAFE_EMOJI = False
@@ -73,15 +72,18 @@ class ConsoleReporter:
         """Output scan phase information"""
         if self.quiet:
             return
-        self.console.print(f"\n[bold cyan][{step}/{total}][/bold cyan] [bold]{label}[/bold]" + (f" [dim]{detail}[/dim]" if detail else ""))
+        self.console.print(
+            f"\n[bold cyan][{step}/{total}][/bold cyan] [bold]{label}[/bold]"
+            + (f" [dim]{detail}[/dim]" if detail else "")
+        )
 
     def _icon(self, name: str) -> str:
         """返回安全图标（非 Windows 用 emoji，Windows 用 ASCII）"""
         icons = {
-            'info': ("[i]" if not _SAFE_EMOJI else "\u2139"),
-            'ok': ("[v]" if not _SAFE_EMOJI else "\u2713"),
-            'warn': ("[!]" if not _SAFE_EMOJI else "\u26a0"),
-            'err': ("[x]" if not _SAFE_EMOJI else "\u2717"),
+            "info": ("[i]" if not _SAFE_EMOJI else "\u2139"),
+            "ok": ("[v]" if not _SAFE_EMOJI else "\u2713"),
+            "warn": ("[!]" if not _SAFE_EMOJI else "\u26a0"),
+            "err": ("[x]" if not _SAFE_EMOJI else "\u2717"),
         }
         return icons.get(name, "[*]")
 
@@ -143,7 +145,7 @@ class ConsoleReporter:
                 f"[dim]扫描报告[/dim]\n"
                 f"{'─' * 40}\n"
                 f"[bold]目标 URL:[/bold] {result.target.url}\n"
-                f"[bold]扫描时间:[/bold] {result.scan_time.strftime('%Y-%m-%d %H:%M:%S') if result.scan_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"  # noqa: E501
+                f"[bold]扫描时间:[/bold] {result.scan_time.strftime('%Y-%m-%d %H:%M:%S') if result.scan_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
                 f"[bold]总耗时:[/bold]   {result.duration:.1f}s\n"
                 f"[bold]请求数:[/bold]   {result.requests_made}",
                 border_style=border,
@@ -167,7 +169,10 @@ class ConsoleReporter:
         counts = result.severity_count
         parts = []
         sev_labels = {
-            "critical": ("[bold red]", f"{SEV_ICONS.get(Severity.CRITICAL, '')} {counts.get('critical', 0)} 严重[/bold red]"),
+            "critical": (
+                "[bold red]",
+                f"{SEV_ICONS.get(Severity.CRITICAL, '')} {counts.get('critical', 0)} 严重[/bold red]",
+            ),
             "high": ("[red]", f"{SEV_ICONS.get(Severity.HIGH, '')} {counts.get('high', 0)} 高危[/red]"),
             "medium": ("[yellow]", f"{SEV_ICONS.get(Severity.MEDIUM, '')} {counts.get('medium', 0)} 中危[/yellow]"),
             "low": ("[blue]", f"{SEV_ICONS.get(Severity.LOW, '')} {counts.get('low', 0)} 低危[/blue]"),
@@ -179,7 +184,6 @@ class ConsoleReporter:
                 parts.append(f"{sev_labels[sev][0]}{sev_labels[sev][1]}")
 
         total = len(result.vulnerabilities)
-        warn_icon = "[!]" if not _SAFE_EMOJI else "\u26a0"
         self.console.print()
         self.console.print(
             Panel.fit(
@@ -239,7 +243,11 @@ class ConsoleReporter:
                     + (f"[bold]Payload:[/bold] [red]{v.payload or '-'}[/red]\n" if v.payload else "")
                     + (f"[bold]证据:[/bold] {v.evidence[:200]}\n" if v.evidence else "")
                     + f"[bold]描述:[/bold] {v.description[:300] if v.description else '-'}\n"
-                    + (f"[bold]修复建议:[/bold] {v.recommendation[:200] if v.recommendation else '-'}\n" if v.recommendation else ""),
+                    + (
+                        f"[bold]修复建议:[/bold] {v.recommendation[:200] if v.recommendation else '-'}\n"
+                        if v.recommendation
+                        else ""
+                    ),
                     border_style="red" if v.severity in (Severity.CRITICAL, Severity.HIGH) else "yellow",
                     padding=(1, 2),
                 )

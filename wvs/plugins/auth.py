@@ -20,7 +20,6 @@ import httpx
 from ..config import ConfigManager
 from ..models import ScanTarget
 
-
 logger = logging.getLogger("wvs.auth")
 
 
@@ -239,7 +238,9 @@ class FormLoginAuth(AuthProvider):
                 else:
                     logger.debug("[Auth:FormLogin] No CSRF token found (may not be required)")
                 if submit_buttons:
-                    logger.info(f"[Auth:FormLogin] Found {len(submit_buttons)} submit buttons: {list(submit_buttons.keys())}")
+                    logger.info(
+                        f"[Auth:FormLogin] Found {len(submit_buttons)} submit buttons: {list(submit_buttons.keys())}"
+                    )
             else:
                 logger.debug(f"[Auth:FormLogin] GET returned {get_resp.status_code}, skipping CSRF extraction")
 
@@ -328,7 +329,9 @@ class FormLoginAuth(AuthProvider):
                     # No success marker, but no failure marker either -- try checking cookies
                     cookies = _safe_cookies(session)
                     if cookies:
-                        logger.info(f"[Auth:FormLogin] No success marker but {len(cookies)} cookies present, treating as login success")
+                        logger.info(
+                            f"[Auth:FormLogin] No success marker but {len(cookies)} cookies present, treating as login success"
+                        )
                         return {"cookies": cookies, "headers": {}, "authenticated": True, "error": None}
                     return {
                         "cookies": {},

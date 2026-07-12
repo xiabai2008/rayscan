@@ -14,13 +14,11 @@ import time
 import uuid
 from typing import List
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, Severity, Confidence, ScanTarget
-
+from ...models import Confidence, ScanTarget, Severity, Vulnerability
+from ..base import DetectionModule, ModuleInfo, register_module
 from .payloads import (
-    PYTHON_CODE_INJECTION_PAYLOADS,
     JAVA_EXPRESSION_PAYLOADS,
+    PYTHON_CODE_INJECTION_PAYLOADS,
     TIME_BASED_PAYLOADS,
 )
 
@@ -116,12 +114,21 @@ class RCEDetector(DetectionModule):
                 i in server.lower()
                 or i in x_powered.lower()
                 or i in text
-                or "set-cookie" in headers
-                and "phpsessid" in headers.get("set-cookie", "").lower()
+                or ("set-cookie" in headers and "phpsessid" in headers.get("set-cookie", "").lower())
                 for i in php_indicators
             )
             # Python indicators
-            python_indicators = ["python", "django", "flask", "jinja", "werkzeug", "gunicorn", "uvicorn", "tornado", "cherrypy"]
+            python_indicators = [
+                "python",
+                "django",
+                "flask",
+                "jinja",
+                "werkzeug",
+                "gunicorn",
+                "uvicorn",
+                "tornado",
+                "cherrypy",
+            ]
             has_python = any(i in server.lower() or i in x_powered.lower() or i in text for i in python_indicators)
             # Java indicators
             java_indicators = [
@@ -143,8 +150,7 @@ class RCEDetector(DetectionModule):
                 i in server.lower()
                 or i in x_powered.lower()
                 or i in text
-                or "set-cookie" in headers
-                and "jsessionid" in headers.get("set-cookie", "").lower()
+                or ("set-cookie" in headers and "jsessionid" in headers.get("set-cookie", "").lower())
                 for i in java_indicators
             )
 
@@ -219,7 +225,9 @@ class RCEDetector(DetectionModule):
 
                     # Filter PHP error reflection: LFI endpoint include() PHP warnings != RCE
                     if self._is_php_error_reflection(resp_text, payload, test_token):
-                        logger.debug(f"[RCE] Filtering PHP error reflection: {target.url} — token only in PHP error context")
+                        logger.debug(
+                            f"[RCE] Filtering PHP error reflection: {target.url} — token only in PHP error context"
+                        )
                         continue
 
                     # Filter LFI context: token may come from PHP file executed via LFI inclusion
@@ -229,7 +237,9 @@ class RCEDetector(DetectionModule):
 
                     # P11: Filter HTML verbatim-display reflection (token appears in <pre>/<code> display areas)
                     if self._is_html_display_reflection(resp_text, test_token, payload):
-                        logger.debug("[RCE] HTML display reflection — token in verbatim/pre context, not code execution")
+                        logger.debug(
+                            "[RCE] HTML display reflection — token in verbatim/pre context, not code execution"
+                        )
                         continue
 
                     # Secondary verification: confirm with different token
@@ -347,7 +357,7 @@ class RCEDetector(DetectionModule):
                                 target=target,
                                 param=param_name,
                                 payload=payload,
-                                evidence=f"phpinfo() output detected ({phpinfo_score} indicators, baseline={baseline_score}): PHP version info exposed in response",  # noqa: E501
+                                evidence=f"phpinfo() output detected ({phpinfo_score} indicators, baseline={baseline_score}): PHP version info exposed in response",
                                 severity=Severity.CRITICAL,
                             )
                         )
@@ -385,7 +395,7 @@ class RCEDetector(DetectionModule):
                                     target=target,
                                     param=param_name,
                                     payload=payload,
-                                    evidence=f"Indirect code execution via {payload}: PHP info exposed (score={phpinfo_score}, baseline={baseline_score})",  # noqa: E501
+                                    evidence=f"Indirect code execution via {payload}: PHP info exposed (score={phpinfo_score}, baseline={baseline_score})",
                                     severity=Severity.CRITICAL,
                                 )
                             )
@@ -681,7 +691,7 @@ class RCEDetector(DetectionModule):
                                         target=target,
                                         param=param_name,
                                         payload=payload,
-                                        evidence=f"Time-based RCE ({lang}): response delayed {elapsed:.2f}s (baseline={baseline_avg:.2f}s, expected ~{expected_delay}s)",  # noqa: E501
+                                        evidence=f"Time-based RCE ({lang}): response delayed {elapsed:.2f}s (baseline={baseline_avg:.2f}s, expected ~{expected_delay}s)",
                                         severity=Severity.HIGH,
                                         confidence=Confidence.MEDIUM,
                                     )
@@ -763,9 +773,9 @@ class RCEDetector(DetectionModule):
         )
         php_stream_error = re.search(r"failed to open stream|failed opening", resp_text, re.IGNORECASE)
         # P11: Also detect when PHP error line contains the payload/token as filename
-        php_error_with_payload = re.search(r"failed to open stream:.*" + re.escape(payload[:30]), resp_text, re.IGNORECASE) or re.search(
-            r"failed to open stream:.*" + re.escape(token[:16]), resp_text, re.IGNORECASE
-        )
+        php_error_with_payload = re.search(
+            r"failed to open stream:.*" + re.escape(payload[:30]), resp_text, re.IGNORECASE
+        ) or re.search(r"failed to open stream:.*" + re.escape(token[:16]), resp_text, re.IGNORECASE)
         if not (php_func_error or php_stream_error or php_error_with_payload):
             return False
 
@@ -783,7 +793,9 @@ class RCEDetector(DetectionModule):
             r"include_path=",
         ]
         lines = resp_text.split("\n")
-        non_error_lines = [line for line in lines if not any(re.search(p, line, re.IGNORECASE) for p in error_line_patterns)]
+        non_error_lines = [
+            line for line in lines if not any(re.search(p, line, re.IGNORECASE) for p in error_line_patterns)
+        ]
         non_error_text = "\n".join(non_error_lines)
 
         if token in resp_text and token not in non_error_text:
@@ -812,7 +824,7 @@ class RCEDetector(DetectionModule):
 
         all_in_verbatim = True
         for pos in token_positions:
-            context_before = resp_text[max(0, pos - 500): pos]
+            context_before = resp_text[max(0, pos - 500) : pos]
             # Check if token is inside a verbatim tag
             in_verbatim = False
             for tag in verbatim_tags:
@@ -871,7 +883,13 @@ class RCEDetector(DetectionModule):
             quoted = _re.escape(payload)
             if _re.search(f'"[^"]*{quoted}[^"]*"', resp_text):
                 return True
-        debug_indicators = ["Request Details", "Query String Parameters", "Your Input:", "You entered:", "Debug Information"]
+        debug_indicators = [
+            "Request Details",
+            "Query String Parameters",
+            "Your Input:",
+            "You entered:",
+            "Debug Information",
+        ]
         if any(ind in resp_text for ind in debug_indicators):
             if payload in resp_text:
                 return True
@@ -890,7 +908,7 @@ class RCEDetector(DetectionModule):
         return self._create_vuln(
             url=target.url,
             param=param,
-            param_type=target.params and "query" or "body",
+            param_type=(target.params and "query") or "body",
             method="GET",
             payload=payload,
             vuln_type="token_echo" if "token" in evidence.lower() else "code_execution",

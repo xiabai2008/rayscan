@@ -22,8 +22,7 @@ import shutil
 from typing import Any, Dict, List, Optional
 
 from ..config import ConfigManager
-from ..models import Vulnerability, VulnerabilityType, Severity, Confidence
-
+from ..models import Confidence, Severity, Vulnerability, VulnerabilityType
 
 logger = logging.getLogger("wvs.integrations.ffuf")
 
@@ -192,7 +191,7 @@ class FfufIntegration:
         except FileNotFoundError:
             logger.exception(f"[ffuf] Not found: {self.ffuf_path}")
             return []
-        except Exception as e:
+        except Exception:
             logger.exception("[ffuf] Execution failed")
             return []
 

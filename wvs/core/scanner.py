@@ -1,5 +1,6 @@
 import urllib.parse
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
+
 """
 RayScan main scanner engine.
 
@@ -8,7 +9,6 @@ No hardcoded lab paths — lab-specific logic lives in core/lab_profiles.py.
 """
 
 import asyncio
-import gc
 import hashlib
 import json
 import logging
@@ -22,41 +22,42 @@ from ..models import (
     ScanTarget,
     Vulnerability,
 )
-from ..plugins.auth import FormLoginAuth, BearerTokenAuth, BasicAuth, APIKeyAuth, CookieAuth
-
-from .crawler import WebCrawler, DiscoveredEndpoint
-from .session import HTTPPool
-from .scanner_integrations import ScannerIntegrationsMixin
+from ..plugins.auth import APIKeyAuth, BasicAuth, BearerTokenAuth, CookieAuth, FormLoginAuth
+from .crawler import DiscoveredEndpoint, WebCrawler
 from .lab_profiles import detect_lab_profile, get_lab_endpoints
+from .scanner_integrations import ScannerIntegrationsMixin
+from .session import HTTPPool
 
 try:
     from .lab_profiles import detect_lab_profile_from_paths
 except ImportError:
+
     def detect_lab_profile_from_paths(url, paths):
         return detect_lab_profile(url)
+
 
 logger = logging.getLogger(__name__)
 
 # Module execution priority — faster/critical modules run first
 _MODULE_PRIORITY = [
-    "sqli",        # critical — test priority
-    "xss",         # cross-site scripting
+    "sqli",  # critical — test priority
+    "xss",  # cross-site scripting
 ]
 
 # Lite modules (loaded when --all-modules is set)
 _LITE_MODULE_PRIORITY = [
-    "sensitive",   # fast pattern-based checks
-    "waf",         # WAF detection
-    "cmdi",        # command injection
-    "lfi",         # file inclusion
-    "ssrf",        # server-side request forgery
-    "xxe",         # XML external entity
-    "rce",         # time-based (slowest)
-    "api",         # API security
-    "js_analysis", # JS sensitive info / endpoints
-    "oa",          # OA system vulnerability detection
-    "webshell",    # WebShell detection
-    "weakpass",    # Weak password detection
+    "sensitive",  # fast pattern-based checks
+    "waf",  # WAF detection
+    "cmdi",  # command injection
+    "lfi",  # file inclusion
+    "ssrf",  # server-side request forgery
+    "xxe",  # XML external entity
+    "rce",  # time-based (slowest)
+    "api",  # API security
+    "js_analysis",  # JS sensitive info / endpoints
+    "oa",  # OA system vulnerability detection
+    "webshell",  # WebShell detection
+    "weakpass",  # Weak password detection
     "subdomain",  # Subdomain enumeration
 ]
 
@@ -145,7 +146,7 @@ class WAVScanner(ScannerIntegrationsMixin):
             qs = parse_qs(parsed.query, keep_blank_values=True)
             # parse_qs 返回 {key: [val]} → 扁平化
             params = {k: v[0] if len(v) == 1 else v[0] for k, v in qs.items()}
-            param_types = {k: "query" for k in params}
+            param_types = dict.fromkeys(params, "query")
             return params, param_types
 
         return {}, {}
@@ -288,9 +289,9 @@ class WAVScanner(ScannerIntegrationsMixin):
                 # 策略1：尝试常见命名变体
                 upper = module_name.upper()
                 name_variants = [
-                    f"{module_name.title()}Detector",   # CmdiDetector, XssDetector, LfiDetector
-                    f"{upper}Detector",                  # CMDI, XSS, LFI → OK
-                    "SQLiDetector",                     # sqli 特殊：混合大小写
+                    f"{module_name.title()}Detector",  # CmdiDetector, XssDetector, LfiDetector
+                    f"{upper}Detector",  # CMDI, XSS, LFI → OK
+                    "SQLiDetector",  # sqli 特殊：混合大小写
                 ]
                 for variant in name_variants:
                     detector_cls = getattr(mod, variant, None)
@@ -317,7 +318,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         except ImportError as e:
             logger.warning(f"[Scanner] 模块 {module_name} 不可用: {e}")
             return False
-        except Exception as e:
+        except Exception:
             logger.exception(f"[Scanner] 加载模块 {module_name} 失败")
             return False
 
@@ -332,7 +333,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         例如 index.php?page=a 和 index.php?page=b 视为同一个测试目标
         """
         parsed = urllib.parse.urlparse(url)
-        path = parsed.path.rstrip('/')
+        path = parsed.path.rstrip("/")
         if params:
             param_names = sorted(params.keys())
             return f"{path}?{'&'.join(param_names)}"
@@ -559,7 +560,9 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         u = re.sub(r"/\d+$", "/:id", u)
         # Collapse static resource sub-paths — /themes/original/css/foo.css → /themes/*
-        u = re.sub(r"/(css|js|img|images|themes|theme|static|assets|fonts|locale|lang)/.+", r"/\1/*", u, flags=re.IGNORECASE)
+        u = re.sub(
+            r"/(css|js|img|images|themes|theme|static|assets|fonts|locale|lang)/.+", r"/\1/*", u, flags=re.IGNORECASE
+        )
         # P8: Collapse dynamic path segments — /user/123/profile → /user/:id/profile
         u = re.sub(r"/(\d{2,})/", "/:id/", u)
         # P8: Collapse hash-like segments — /page/a1b2c3 → /page/:hash
@@ -583,7 +586,6 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     def _deduplicate(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
         """During dedup, keep the highest severity vulnerability; if same severity, keep higher confidence."""
-        seen: Set[str] = set()
         unique: Dict[str, Vulnerability] = {}
         severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
         conf_order = {"certain": 0, "high": 1, "medium": 2, "low": 3}
@@ -625,10 +627,13 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     def _checkpoint_file(self, target_url: str) -> Path:
         import tempfile
+
         url_hash = hashlib.md5(target_url.encode()).hexdigest()[:12]
         return Path(tempfile.gettempdir()) / f"rayscan_checkpoint_{url_hash}.json"
 
-    def _save_checkpoint(self, target_url: str, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]) -> None:
+    def _save_checkpoint(
+        self, target_url: str, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]
+    ) -> None:
         """Save incremental scan results to disk for crash/timeout resilience."""
         try:
             cp = self._checkpoint_file(target_url)
@@ -668,7 +673,10 @@ class WAVScanner(ScannerIntegrationsMixin):
             if ep.method.upper() == "POST":
                 s -= 50  # POST endpoints often more interesting
             s -= min(len(ep.parameters or {}), 10)  # more params → higher priority
-            if any(k.lower() in ("id", "page", "file", "path", "url", "cmd", "exec", "query", "search") for k in (ep.parameters or {})):
+            if any(
+                k.lower() in ("id", "page", "file", "path", "url", "cmd", "exec", "query", "search")
+                for k in (ep.parameters or {})
+            ):
                 s -= 30  # interesting param names
             return s
 
@@ -676,7 +684,7 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     # ── Core scan flow ──────────────────────────────────────────
 
-    async def scan(self, target: ScanTarget) -> ScanResult:  # noqa: C901
+    async def scan(self, target: ScanTarget) -> ScanResult:
         self._stats["start_time"] = time.time()
         self._vuln_seen.clear()
         self._stats["errors"] = 0
@@ -730,9 +738,11 @@ class WAVScanner(ScannerIntegrationsMixin):
         if "oa" in self._modules and self.config.get("modules.oa.enabled", True):
             self._oa_detected = False
             try:
-                from .nuclei_template_manager import detect_oa_fingerprint
                 # 对目标主页做一次快速指纹检测
                 import httpx
+
+                from .nuclei_template_manager import detect_oa_fingerprint
+
                 async with httpx.AsyncClient(timeout=10, verify=False) as client:
                     resp = await client.get(target.url, follow_redirects=True)
                     oa_name = detect_oa_fingerprint(target.url, resp.text)
@@ -781,13 +791,15 @@ class WAVScanner(ScannerIntegrationsMixin):
                     for batch_idx in range(0, len(eps), BATCH_SIZE):
                         if self._timeout_remaining() < 30:
                             break
-                        batch = eps[batch_idx:batch_idx + BATCH_SIZE]
+                        batch = eps[batch_idx : batch_idx + BATCH_SIZE]
                         for mod_name in module_names:
                             if mod_name not in self._modules:
                                 continue
                             try:
                                 vulns = await self._run_module_concurrent(
-                                    mod_name, target, batch,
+                                    mod_name,
+                                    target,
+                                    batch,
                                     concurrency=2,
                                     global_sem=asyncio.Semaphore(2),
                                 )
@@ -797,7 +809,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                             except Exception as e:
                                 logger.debug(f"[Scanner] {mod_name} batch error: {e}")
 
-            except Exception as e:
+            except Exception:
                 logger.exception("[Scanner] 爬取失败")
 
         await _crawl_and_detect()
@@ -900,9 +912,7 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         # 按严重程度排序（严重的在前面）
         severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-        unique_vulns.sort(
-            key=lambda v: severity_order.get(v.severity.value, 5)
-        )
+        unique_vulns.sort(key=lambda v: severity_order.get(v.severity.value, 5))
 
         result.vulnerabilities = unique_vulns
 

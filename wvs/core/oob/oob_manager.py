@@ -140,7 +140,7 @@ class OOBManager:
                 logger.info(f"[OOB] Using custom OOB server: {self._domain}")
                 return True
 
-        except Exception as e:
+        except Exception:
             logger.exception("[OOB] Initialization failed")
             return False
 

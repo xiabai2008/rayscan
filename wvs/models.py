@@ -5,7 +5,7 @@ Consolidates Vulnerability, ScanTarget, ScanResult, and configuration models
 that were duplicated across v18.x versions.
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional

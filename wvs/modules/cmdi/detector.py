@@ -16,17 +16,15 @@ import string
 import time
 from typing import Dict, List, Optional
 
-from ..base import DetectionModule, ModuleInfo
-from ..base import register_module
-from ...models import Vulnerability, VulnerabilityType, Severity, Confidence, ScanTarget
-from ...core.session import HTTPPool
 from ...core.oob import OOBManager
+from ...core.session import HTTPPool
+from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
+from ..base import DetectionModule, ModuleInfo, register_module
 from .payloads import (
     build_echo_payloads,
-    build_time_payloads,
     build_oob_payloads,
+    build_time_payloads,
 )
-
 
 logger = logging.getLogger("wvs.module.cmdi")
 
@@ -142,7 +140,7 @@ class CMDInjectionDetector(DetectionModule):
         # v18 pain point: if baseline already has "whoami" result, it would return without actual detection
         # v19 solution: use random token detection — baseline absolutely cannot have random token
 
-        for param_name in params.keys():
+        for param_name in params:
             await self._test_echo_based(url, params, param_name, method, param_type, baseline, baseline_text)
 
             await self._test_time_based(url, params, param_name, method, param_type, baseline)
