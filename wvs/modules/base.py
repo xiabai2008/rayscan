@@ -93,7 +93,10 @@ class DetectionModule(ABC):
         self._active_session = session
 
         # P18: serializes scan() calls to prevent _found_vulns concurrency race
-        self._scan_lock = asyncio.Lock()
+        # py<3.10 无 event loop 上下文构造 asyncio.Lock() 会抛 RuntimeError
+        # （CI 3.9 矩阵暴露：无 loop 时 Lock.__init__ 调 get_event_loop），
+        # 改为惰性创建，首次进入 scan() 时初始化
+        self._scan_lock: Optional[asyncio.Lock] = None
 
         # OOB manager (optional, injected by scanner)
         self._oob_manager: Optional[OOBManager] = None
@@ -167,6 +170,9 @@ class DetectionModule(ABC):
         self.logger.info(f"Starting scan of {target.url} with module {self.info.name}")
 
         # P18: serialize scan() — _found_vulns is instance-scoped, not concurrent-safe
+        # 惰性创建锁（py<3.10 无 loop 上下文构造 Lock 会抛 RuntimeError）
+        if self._scan_lock is None:
+            self._scan_lock = asyncio.Lock()
         async with self._scan_lock:
             try:
                 vulnerabilities = await self._scan_impl(target)

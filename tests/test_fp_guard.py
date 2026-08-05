@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 from wvs.models import Vulnerability
 
-
 # =====================================================================
 # XXE baseline 排除
 # =====================================================================
