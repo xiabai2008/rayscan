@@ -15,6 +15,7 @@ import random
 import secrets
 import statistics
 import time
+from typing import Optional
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
@@ -71,7 +72,9 @@ class RateLimiter:
         self.request_timestamps: Deque[float] = deque()
         self.metrics = RateLimitMetrics()
         self.metrics.window_start_time = time.time()
-        self._lock = asyncio.Lock()
+        # py<3.10 无当前 event loop 时构造 asyncio.Lock() 抛 RuntimeError
+        # （CLI 在 asyncio.run 前构造 HTTPPool → RateLimiter 即触发），惰性创建
+        self._lock: Optional[asyncio.Lock] = None
         self._last_request_time = 0.0
 
     async def acquire(self, n: int = 1) -> float:
@@ -79,6 +82,8 @@ class RateLimiter:
         if self.max_rps <= 0:
             return 0.0
 
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         async with self._lock:
             if self.mode == RateLimitMode.BURST:
                 return await self._acquire_burst(n)
