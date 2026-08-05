@@ -15,11 +15,10 @@ import random
 import secrets
 import statistics
 import time
-from typing import Optional
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Deque, Dict, List
+from typing import Deque, Dict, List, Optional
 
 
 class RateLimitMode(Enum):
