@@ -202,7 +202,7 @@ class NucleiIntegration:
         for sev in severities:
             cmd.extend(["-severity", sev])
 
-        # Template directory - use smart selection when available
+        # Template selection - use smart selection when available
         templates_used = False
         if self.use_template_manager and self.template_manager and self.template_manager.is_ready:
             selected = self.template_manager.get_templates_for_target(
@@ -210,12 +210,15 @@ class NucleiIntegration:
                 max_templates=500,
             )
             if selected:
-                parent_dirs = set(os.path.dirname(t) for t in selected)
-                for pd in sorted(parent_dirs):
-                    if os.path.isdir(pd):
-                        cmd.extend(["-t", pd])
-                        templates_used = True
-                logger.info(f"[Nuclei] Smart-selected {len(selected)} templates from {len(parent_dirs)} dirs")
+                # S2 修复：直接传模板文件列表（nuclei -t 接受逗号分隔），
+                # 不再折叠成父目录 —— 原实现等于递归扫描整个目录（数千模板），
+                # 精筛形同虚设且实战时长/噪声不可控。
+                # 上限 200 个：避免命令行长度超 Windows 32KB 限制。
+                picked = [t for t in selected if os.path.isfile(t)][:200]
+                if picked:
+                    cmd.extend(["-t", ",".join(picked)])
+                    templates_used = True
+                    logger.info(f"[Nuclei] Smart-selected {len(picked)} templates (of {len(selected)} selected)")
         if not templates_used and self.templates_dir and os.path.exists(self.templates_dir):
             cmd.extend(["-t", self.templates_dir])
 
@@ -394,7 +397,8 @@ class NucleiIntegration:
                 "type": VulnerabilityType.INFO_DISCLOSURE,
                 "title": "Git Repository Exposed",
                 "severity": Severity.LOW,
-                "evidence_pattern": "remote origin",
+                # 真实 .git/config 格式为 `[remote "origin"]`（"remote origin" 连写不存在）
+                "evidence_pattern": "[remote",
             },
             {
                 "path": "/.git/HEAD",
@@ -572,6 +576,9 @@ class NucleiIntegration:
                 "evidence_pattern": "Disallow",
             },
             # ── Admin / Management Panels (10+) ──
+            # 注意：admin 面板类检查项一律不设 evidence_pattern（"可达即报"已被移除，
+            # 见下方 match 逻辑）——路径返回 200 不能证明面板真实存在（SPA/自定义 404 页
+            # 普遍返回 200），面板存在性且无法验证时宁可漏报，避免实战误报洪水。
             {
                 "path": "/wp-admin",
                 "type": VulnerabilityType.INFO_DISCLOSURE,
@@ -661,7 +668,7 @@ class NucleiIntegration:
                 "type": VulnerabilityType.INFO_DISCLOSURE,
                 "title": "GraphQL Endpoint Exposed",
                 "severity": Severity.LOW,
-                "evidence_pattern": None,
+                "evidence_pattern": "graphql",
             },
             # ── Debug & Dev Endpoints (8+) ──
             {
@@ -678,13 +685,8 @@ class NucleiIntegration:
                 "severity": Severity.MEDIUM,
                 "evidence_pattern": "debug",
             },
-            {
-                "path": "/dev",
-                "type": VulnerabilityType.INFO_DISCLOSURE,
-                "title": "Dev Environment Exposed",
-                "severity": Severity.MEDIUM,
-                "evidence_pattern": None,
-            },
+            # /dev 检查项已移除：无可靠内容特征，且任何站点都可能对 /dev 返回 200
+            # （SPA fallback / 自定义 404），"可达即报"被移除后该检查项无法产出可信结果。
             {
                 "path": "/api/swagger.json",
                 "type": VulnerabilityType.INFO_DISCLOSURE,
@@ -697,7 +699,8 @@ class NucleiIntegration:
                 "type": VulnerabilityType.INFO_DISCLOSURE,
                 "title": "security.txt Present",
                 "severity": Severity.INFO,
-                "evidence_pattern": None,
+                # RFC 8615：security.txt 标准内容必含 "Contact:"（邮件/URL 联系字段）
+                "evidence_pattern": "Contact",
             },
             # ── Technology Fingerprints (8+) ──
             {
@@ -722,7 +725,7 @@ class NucleiIntegration:
                 ) as client:
                     resp = await client.get(base_url + path)
                     if resp.status_code not in (404, 400, 403):
-                        return {"status": resp.status_code, "body": resp.text[:200]}
+                        return {"status": resp.status_code, "body": resp.text[:2000]}
             except Exception:
                 logger.debug(f"[Nuclei] Builtin path check failed for {path}", exc_info=True)
             return None
@@ -746,9 +749,12 @@ class NucleiIntegration:
                 # 指纹检测：记录服务器信息
                 found = True  # 根路径总是有响应的
             elif pattern is None:
-                found = status not in (404, 400, 403, 0)
+                # 无内容特征 → 不报（修复"可达即报"误报：SPA/自定义 404 页普遍返回 200，
+                # 路径可达不能证明漏洞/面板存在，宁可漏报）
+                found = False
             else:
-                found = pattern in body
+                # 大小写不敏感匹配：响应内容大小写不可控（如 GraphQL vs graphql）
+                found = pattern.lower() in body.lower()
 
             if not found:
                 continue

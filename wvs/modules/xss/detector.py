@@ -147,9 +147,6 @@ class XSSDetector(DetectionModule):
             # SSTI (template injection) test
             await self._test_ssti(url, params, param_name, method, param_type, baseline_text)
 
-            # DOM-based XSS test
-            await self._test_dom(url, params, param_name, param_type, baseline_text)
-
             # Stored XSS test — skip POST forms to avoid data pollution
             # (add-to-your-blog, register, comment forms)
             if method == "GET":
@@ -544,50 +541,6 @@ class XSSDetector(DetectionModule):
                     self._found_vulns.append(vuln)
                     logger.warning(f"[XSS] Reflected detected: {url} [{param_name}]")
                     return
-
-    async def _test_dom(
-        self,
-        url: str,
-        params: Dict[str, str],
-        param_name: str,
-        param_type: str,
-        baseline_text: str,
-    ) -> None:
-        """
-        Detect DOM-based XSS
-        By injecting special markers, observe controllable points in the URL
-        """
-        dom_markers = [
-            "#<script>alert(1)</script>",
-            "#<img src=x onerror=alert(1)>",
-            "#'><script>alert(document.domain)</script>",
-        ]
-
-        # Inject DOM payload into URL fragment
-        for payload in dom_markers[:2]:
-            test_url = url + payload
-
-            resp = await self._send_request("GET", test_url, {}, param_type)
-            if resp is None:
-                continue
-
-            resp_text = resp.get("text", "")[:20000]
-
-            # DOM XSS characteristic: payload appears in response (possibly encoded)
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
-            if reflected:
-                vuln = self._create_vuln(
-                    url=url,
-                    param=param_name,
-                    param_type=param_type,
-                    method="GET",
-                    payload=payload,
-                    vuln_type="dom-based",
-                    evidence=evidence or f"DOM-based XSS: fragment payload '{payload}' reflected in response",
-                )
-                self._found_vulns.append(vuln)
-                logger.warning(f"[XSS] DOM-based detected: {url}")
-                return
 
     def _check_reflection(self, resp_text: str, payload: str, baseline_text: str) -> Tuple[bool, str]:
         """

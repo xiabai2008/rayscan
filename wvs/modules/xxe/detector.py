@@ -111,6 +111,15 @@ class XXEDetector(DetectionModule):
         if not params:
             return
 
+        # S1 误报治理：先取未注入 payload 的 baseline 响应，排除页面本身已有的特征字样
+        baseline_text = ""
+        try:
+            baseline_resp = await self._send_request(method, url, params, param_type)
+            if baseline_resp:
+                baseline_text = baseline_resp.get("text", "")
+        except Exception:
+            baseline_text = ""
+
         # P10: merged payloads — limit to most effective ones
         all_payloads = CLASSIC_PAYLOADS[:4] + PARAM_ENTITY_PAYLOADS[:3] + SOAP_PAYLOADS[:2] + WAF_BYPASS_PAYLOADS[:2]
 
@@ -125,7 +134,7 @@ class XXEDetector(DetectionModule):
                 if response is None:
                     continue
 
-                if self._check_xxe_success(response.get("text", "")):
+                if self._check_xxe_success(response.get("text", ""), baseline_text):
                     vuln = Vulnerability(
                         type=VulnerabilityType.XXE,
                         severity=Severity.HIGH,
@@ -152,12 +161,21 @@ class XXEDetector(DetectionModule):
         # P7: For POST endpoints, also send XML as the full request body
         # (many XXE endpoints expect XML in body, not as form params)
         if method.upper() == "POST":
+            # S1 误报治理：良性 XML（无 DTD/实体）响应作为 baseline
+            xml_baseline = ""
+            try:
+                benign_resp = await self._send_xml_body(url, "<root><data>test</data></root>")
+                if benign_resp:
+                    xml_baseline = benign_resp.get("text", "")
+            except Exception:
+                xml_baseline = ""
+
             for payload in all_payloads[:6]:  # test first 6 payloads as full body
                 try:
                     response = await self._send_xml_body(url, payload)
                     if response is None:
                         continue
-                    if self._check_xxe_success(response.get("text", "")):
+                    if self._check_xxe_success(response.get("text", ""), xml_baseline):
                         vuln = Vulnerability(
                             type=VulnerabilityType.XXE,
                             severity=Severity.HIGH,
@@ -384,7 +402,7 @@ class XXEDetector(DetectionModule):
         except Exception:
             return None
 
-    def _check_xxe_success(self, response_text: str) -> bool:
+    def _check_xxe_success(self, response_text: str, baseline_text: str = "") -> bool:
         """
         Check if XXE payload succeeded.
 
@@ -392,12 +410,20 @@ class XXEDetector(DetectionModule):
         1. File content: response contains known file content patterns (e.g., /etc/passwd)
         2. Error-based: response shows XML parser processing our entity
         3. P7: OS file content markers (direct file read evidence)
+
+        S1 误报治理：`baseline_text` 为未注入 payload 的正常响应。所有特征命中
+        必须排除 baseline 中已存在的字样——页面本身含 "root:x:0:0:"、"external entity"
+        （如安全说明页/WAF 拦截页）时不得误报为 XXE。
         """
         text_lower = response_text.lower()
+        baseline_lower = baseline_text.lower()
+
+        def not_in_baseline(pattern: str) -> bool:
+            return not baseline_lower or pattern not in baseline_lower
 
         # 1. File content disclosure (strongest signal)
         for pattern in XXE_SUCCESS_PATTERNS:
-            if pattern.lower() in text_lower:
+            if pattern.lower() in text_lower and not_in_baseline(pattern.lower()):
                 return True
 
         # P10: OS file content markers — must be specific enough to avoid
@@ -426,7 +452,9 @@ class XXEDetector(DetectionModule):
             "processor\t:",
             "vendor_id\t:",
         ]
-        file_score = sum(1 for ind in file_content_indicators if ind.lower() in text_lower)
+        file_score = sum(
+            1 for ind in file_content_indicators if ind.lower() in text_lower and not_in_baseline(ind.lower())
+        )
         if file_score >= 2:
             return True
 
@@ -447,7 +475,7 @@ class XXEDetector(DetectionModule):
             "xml_parser_create",
         ]
         for pattern in entity_error_patterns:
-            if pattern in text_lower:
+            if pattern in text_lower and not_in_baseline(pattern):
                 return True
 
         return False
@@ -456,11 +484,23 @@ class XXEDetector(DetectionModule):
         """Check for XXE in file upload"""
         vulnerabilities = []
 
+        # S1 误报治理：良性 SVG（无外部实体）上传响应作为 baseline
+        upload_baseline = ""
+        try:
+            benign_files = {
+                "file": ("benign.svg", '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>', "image/svg+xml")
+            }
+            benign_resp = await self.session.post(upload_url, files=benign_files, timeout=10)
+            if benign_resp:
+                upload_baseline = benign_resp.text
+        except Exception:
+            upload_baseline = ""
+
         for svg_payload in SVG_PAYLOADS:
             try:
                 files = {"file": ("test.svg", svg_payload, "image/svg+xml")}
                 resp = await self.session.post(upload_url, files=files, timeout=10)
-                if resp and self._check_xxe_success(resp.text):
+                if resp and self._check_xxe_success(resp.text, upload_baseline):
                     vuln = Vulnerability(
                         type=VulnerabilityType.XXE,
                         severity=Severity.HIGH,

@@ -150,7 +150,7 @@ class SSRFDetector(DetectionModule):
 
                     resp_text = response.get("text", "")
 
-                    if self._check_ssrf_success(resp_text, payload):
+                    if self._check_ssrf_success(resp_text, payload, baseline_text):
                         # P16: Filter input reflection false positives
                         if self._is_input_reflection_ssrf(resp_text, baseline_text, payload):
                             logger.debug(
@@ -399,7 +399,7 @@ class SSRFDetector(DetectionModule):
         overlap = len(cleaned_words & baseline_words) / len(baseline_words)
         return overlap > 0.92
 
-    def _check_ssrf_success(self, response_text: str, payload: str = None) -> bool:
+    def _check_ssrf_success(self, response_text: str, payload: str = None, baseline_text: str = "") -> bool:
         """
         Check if SSRF payload succeeded.
 
@@ -408,12 +408,20 @@ class SSRFDetector(DetectionModule):
         2. Internal service fingerprint: /etc/passwd, win.ini, SSH banner, FTP header
         3. Connection error from SSRF attempt (weaker signal, must be specific to SSRF)
         4. Payload URL echoed verbatim in response (weakest, secondary verification needed)
+
+        S1 误报治理：`baseline_text` 为未注入 payload 的正常响应。特征命中必须
+        排除 baseline 中已存在的字样——页面本身含 "root:x:0:0:"、连接错误文案
+        （如系统状态页）时不得误报为 SSRF。
         """
         text_lower = response_text.lower()
+        baseline_lower = baseline_text.lower()
+
+        def not_in_baseline(pattern: str) -> bool:
+            return not baseline_lower or pattern not in baseline_lower
 
         # 1. Cloud metadata / internal service patterns (high confidence)
         for pattern in SSRF_SUCCESS_PATTERNS:
-            if pattern.lower() in text_lower:
+            if pattern.lower() in text_lower and not_in_baseline(pattern.lower()):
                 return True
 
         # 2. Internal service file content (direct evidence of file read via SSRF)
@@ -425,7 +433,9 @@ class SSRFDetector(DetectionModule):
             "[extensions]",
             "[Mail]",  # win.ini
         ]
-        file_score = sum(1 for ind in internal_file_indicators if ind.lower() in text_lower)
+        file_score = sum(
+            1 for ind in internal_file_indicators if ind.lower() in text_lower and not_in_baseline(ind.lower())
+        )
         if file_score >= 1:
             return True
 
@@ -441,7 +451,8 @@ class SSRFDetector(DetectionModule):
                 "name or service not known",
                 "php_network_getaddresses",
             ]
-            if any(kw in text_lower for kw in ssrf_error_keywords):
+            # S1 误报治理：连接错误文案同样排除 baseline（系统状态页可能本身就含此类字样）
+            if any(kw in text_lower and not_in_baseline(kw) for kw in ssrf_error_keywords):
                 return True
 
             # 4. Internal service banners (strong fingerprint)
@@ -535,13 +546,22 @@ class SSRFDetector(DetectionModule):
         vulnerabilities = []
         url = urljoin(target.url, endpoint)
 
+        # S1 误报治理：无参基线响应，排除页面本身已有的云元数据/连接错误字样
+        baseline_text = ""
+        try:
+            baseline_resp = await self.session.get(url, timeout=10)
+            if baseline_resp:
+                baseline_text = baseline_resp.text
+        except Exception:
+            baseline_text = ""
+
         for param in self.SSRF_PARAM_PATTERNS[:5]:
             for metadata_url in CLOUD_METADATA_PAYLOADS:
                 try:
                     test_url = f"{url}?{param}={metadata_url}"
                     resp = await self.session.get(test_url, timeout=10)
 
-                    if resp and self._check_ssrf_success(resp.text):
+                    if resp and self._check_ssrf_success(resp.text, metadata_url, baseline_text):
                         vuln = Vulnerability(
                             type=VulnerabilityType.SSRF,
                             severity=Severity.CRITICAL,

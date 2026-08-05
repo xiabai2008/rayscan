@@ -150,6 +150,10 @@ def cmd_scan(args):
     if args.rate_mode:
         config.set("rate_mode", args.rate_mode)
 
+    # 处理 --no-nuclei（S2：默认开启 Nuclei 阶段）
+    if hasattr(args, "no_nuclei") and args.no_nuclei:
+        config.set("nuclei.enabled", False)
+
     # 处理 --insecure 参数（禁用 SSL 验证）
     if hasattr(args, "insecure") and args.insecure:
         config.set("verify_ssl", False)
@@ -163,7 +167,7 @@ def cmd_scan(args):
     if max_time <= 0:
         max_time = 0  # 0 = unlimited
 
-    # 若启用 --resume，则加载上次 checkpoint
+    # 若启用 --resume，则加载上次 checkpoint（S2：注入 scanner 供 scan() 实际恢复）
     if hasattr(args, "resume") and args.resume:
         checkpoint = scanner.load_checkpoint(target_url)
         if checkpoint:
@@ -171,6 +175,7 @@ def cmd_scan(args):
                 f"[cyan][*] 从 checkpoint 恢复: {len(checkpoint.get('vulnerabilities', []))} 个已有漏洞, "
                 f"{len(checkpoint.get('modules_done', []))} 个已完成模块[/cyan]"
             )
+            scanner._resume_checkpoint = checkpoint
 
     # 初始化 OOB 管理器（如果指定了 OOB 服务器）
     oob_manager = None
@@ -871,6 +876,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-time", type=int, default=7200, help="全局扫描超时（秒），默认 7200（2小时），0 表示无限制"
     )
     control_group.add_argument("--resume", action="store_true", help="从上次 checkpoint 恢复扫描")
+    control_group.add_argument(
+        "--no-nuclei",
+        action="store_true",
+        dest="no_nuclei",
+        help="禁用 Nuclei 模板扫描阶段（默认开启：CLI 可用走模板扫描，不可用走内置回退）",
+    )
     control_group.add_argument("--rate", type=int, default=10, help="每秒最大请求数（默认 10）")
     control_group.add_argument(
         "--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)"

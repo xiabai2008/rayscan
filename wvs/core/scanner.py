@@ -98,6 +98,12 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._modules_completed: List[str] = []
         self._scan_max_time: int = 0  # CLI 设置，用于超时判断
 
+        # S2 checkpoint 复活：初始化防 AttributeError（_save_checkpoint 引用）
+        self._modules_done: List[str] = []  # 已完成模块（按批）
+        self._last_checkpoint_time: float = 0.0
+        self._checkpoint_interval: float = 30.0  # 落盘间隔（秒）
+        self._resume_checkpoint: Optional[Dict[str, Any]] = None  # CLI --resume 注入
+
         # 是否加载全部模块（包括 lite 模块——必须在 _resolve_enabled_modules 之前初始化）
         self._load_all_modules = False
 
@@ -110,6 +116,9 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         # 集成开关（默认关闭，避免未导入的集成模块导致崩溃）
         self._integrations_enabled = False
+
+        # Nuclei 集成实例（懒加载；config nuclei.enabled 默认 True，S2 起接入主流程）
+        self._nuclei_integration = None
 
     @staticmethod
     def _ensure_params(ep: DiscoveredEndpoint) -> tuple:
@@ -613,6 +622,14 @@ class WAVScanner(ScannerIntegrationsMixin):
         url_hash = hashlib.md5(target_url.encode()).hexdigest()[:12]
         return Path(tempfile.gettempdir()) / f"rayscan_checkpoint_{url_hash}.json"
 
+    def _try_save_checkpoint(
+        self, target: ScanTarget, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]
+    ) -> None:
+        """S2 checkpoint：按 _checkpoint_interval 间隔限流落盘，避免每批都写盘。"""
+        now = time.time()
+        if now - self._last_checkpoint_time >= self._checkpoint_interval:
+            self._save_checkpoint(target.url, vulns, endpoints)
+
     def _save_checkpoint(
         self, target_url: str, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]
     ) -> None:
@@ -672,6 +689,19 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._stats["errors"] = 0
 
         result = ScanResult(target=target)
+
+        # ── S2 checkpoint 恢复：--resume 注入的已发现漏洞与已完成模块 ──
+        resume_vulns: List[Vulnerability] = []
+        skip_modules: Set[str] = set()
+        if self._resume_checkpoint:
+            for vdict in self._resume_checkpoint.get("vulnerabilities", []):
+                try:
+                    resume_vulns.append(Vulnerability.from_dict(vdict))
+                except Exception:
+                    continue
+            skip_modules = set(self._resume_checkpoint.get("modules_done", []))
+            if resume_vulns or skip_modules:
+                logger.info(f"[*] Resume: 合并 {len(resume_vulns)} 个已发现漏洞, 跳过 {len(skip_modules)} 个已完成模块")
 
         # ── Step 1: 加载模块（必须在 _print_header 之前，以便显示加载的模块）──
         # 如果 CLI 已手动加载了指定模块（--modules），跳过自动加载
@@ -780,6 +810,9 @@ class WAVScanner(ScannerIntegrationsMixin):
                         for mod_name in module_names:
                             if mod_name not in self._modules:
                                 continue
+                            # S2 checkpoint：跳过 --resume 已完成模块
+                            if mod_name in skip_modules:
+                                continue
                             try:
                                 vulns = await self._run_module_concurrent(
                                     mod_name,
@@ -793,6 +826,10 @@ class WAVScanner(ScannerIntegrationsMixin):
                                     logger.info(f"[+] {mod_name}: found {len(vulns)} in batch")
                             except Exception as e:
                                 logger.debug(f"[Scanner] {mod_name} batch error: {e}")
+                            # S2 checkpoint：模块完成记录 + 定期落盘（防崩溃/超时丢失）
+                            if mod_name not in self._modules_done:
+                                self._modules_done.append(mod_name)
+                                self._try_save_checkpoint(target, all_vulns_before_dedup, eps)
 
             except Exception:
                 logger.exception("[Scanner] 爬取失败")
@@ -881,6 +918,10 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         all_vulns = all_vulns_before_dedup
 
+        # ── Merge resume vulnerabilities (--resume) ──
+        if resume_vulns:
+            all_vulns.extend(resume_vulns)
+
         # ── Merge JSPathfinder findings (disabled by default) ──
         if getattr(self, "_jspathfinder_vulns", None):
             all_vulns.extend(self._jspathfinder_vulns)
@@ -888,6 +929,16 @@ class WAVScanner(ScannerIntegrationsMixin):
         # ── Dedup ──
         logger.info("[*] Phase 3/4: Deduplication & confidence...")
         unique_vulns = self._deduplicate(all_vulns)
+
+        # ── Phase 3.5: Nuclei 外部引擎（S2 接入主流程，默认开） ──
+        if self.config.get("nuclei.enabled", True):
+            try:
+                nuclei_vulns = await self._run_nuclei(target)
+                if nuclei_vulns:
+                    logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings（已合并）")
+                    unique_vulns = self._deduplicate(unique_vulns + nuclei_vulns)
+            except Exception as e:
+                logger.debug(f"[Scanner] Nuclei phase failed: {e}")
 
         # 更新每个漏洞的扫描统计
         for v in unique_vulns:
@@ -901,6 +952,12 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         result.vulnerabilities = unique_vulns
 
+        # ── S2 checkpoint：扫描完成落盘最终 checkpoint（供 --resume 合并） ──
+        try:
+            self._save_checkpoint(target.url, unique_vulns, endpoints)
+        except Exception as e:
+            logger.debug(f"[Scanner] Final checkpoint save failed: {e}")
+
         # ── Report ──
         logger.info("[*] Phase 4/4: Generating report...")
         self._stats["end_time"] = time.time()
@@ -912,6 +969,27 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._print_summary(result)
 
         return result
+
+    async def _run_nuclei(self, target: ScanTarget) -> List[Vulnerability]:
+        """
+        S2 接入：运行 Nuclei 外部引擎（模板扫描），结果由主流程去重合并。
+
+        nuclei CLI 可用 → 智能模板扫描（S2 修复后直接传模板文件）；
+        CLI 不可用 → 内置回退模板（S1 内容特征验证版，无"可达即报"）。
+        """
+        from ..integrations.nuclei_integration import NucleiIntegration
+
+        if self._nuclei_integration is None:
+            self._nuclei_integration = NucleiIntegration(config=self.config, use_template_manager=True)
+
+        if not self._nuclei_integration.is_available:
+            logger.info("[Nuclei] nuclei CLI 不可用，使用内置回退模板（内容特征验证）")
+
+        return await self._nuclei_integration.scan(
+            target.url,
+            cookies=target.cookies or None,
+            severities=None,  # 默认全部严重级，由结果合并后统一去重/排序
+        )
 
     # Integrations moved to ScannerIntegrationsMixin (scanner_integrations.py)
     # Progress helpers moved to ScannerIntegrationsMixin (scanner_integrations.py)

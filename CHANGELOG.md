@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.0] - 2026-08-05
+
+### Added
+- **OA 三级检测链路**：内容指纹识别（title/正文/响应头/Set-Cookie，12 种 OA）→ 版本识别（Jenkins X-Jenkins 头、Nacos/Spring/泛微/禅道）→ 规则级响应证据验证 + 版本过滤
+- **Nuclei 接入主扫描流程**（默认启用，`--no-nuclei` 关闭）：CLI 可用走智能模板扫描（直接传模板文件），不可用走内置内容特征回退
+- **扫描断点恢复**：30 秒间隔 checkpoint 落盘，`--resume` 合并已发现漏洞并跳过已完成模块
+- OA/WebShell/弱口令/子域名枚举专项检测（v2.0 功能基线）
+- 190 个自动化测试（含 54 个 S1-S3 误报治理与恢复回归测试）
+
+### Fixed（S1 误报治理）
+- Nuclei 内置回退移除"可达即报"：无内容特征的检查项（admin 面板等）不再直接报漏洞，需响应特征匹配
+- OA 检测移除"状态码即漏洞"：401/403/500/302 不再视为漏洞，仅 HTTP 200 + 响应证据验证
+- XXE/SSRF 检测增加 baseline 排除：页面本身含 `/etc/passwd` 特征或解析器错误字样不再误报
+- 移除伪 DOM XSS 检测（URL fragment 反射误判，待 headless 浏览器验证后恢复）
+- `.git/config` 检测特征修正（`remote origin` → `[remote`，原特征匹配不到真实文件）
+
+### Changed
+- README 撤下未兑现卖点：多引擎聚合（AWVS/Nessus）与 MSF 验证链标注为 Roadmap
+- 规划文档更新至 v1.2：战略修正为"OA 专项 + 工作流闭环"（详见 `docs/audit/rayscan-evolution-plan-2026-07-12.md` §11）
+
 ## [1.0.2] - 2026-05-24
 
 ### Added

@@ -7,17 +7,18 @@
 ![Version](https://img.shields.io/badge/Version-2.0.0-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-79%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-190%20passing-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2004/RayScan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
 
-**🚀 全栈 Web 漏洞扫描器 + 多引擎聚合平台 | SQLi·XSS·OA·WebShell·弱口令·12.5w PoC | AWVS·Nessus·Nuclei·Metasploit 集成**
+**🚀 全栈 Web 漏洞扫描器 | SQLi·XSS·OA·WebShell·弱口令·子域名 | Nuclei PoC 集成（12.5w 模板）**
 
-**已通过 79 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 10 真实目标实战认证 · 12种OA系统专项检测**
+**已通过 190 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 12种OA系统专项检测**
 
-> 📈 **测试覆盖路线图**：当前 79 个测试集中在 SQLi/XSS/RCE/SSRF 等核心检测器。
-> v2.0 新特性：OA专项检测 / 多引擎聚合 / Nuclei 12.5w PoC / 漏洞验证链 / WebShell / 弱口令 / 子域名枚举
+> 📈 **测试覆盖路线图**：当前 190 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
+> v2.0 新特性：OA专项检测 / WebShell / 弱口令 / 子域名枚举 / Nuclei 模板集成
+> 规划中（roadmap）：多引擎聚合（AWVS/Nessus 集成层已实现，待接入主流程）、Metasploit 验证链、DOM XSS（需 headless 验证）
 > v1.2.0 目标：核心模块行覆盖 ≥ 80%。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ```
@@ -54,7 +55,7 @@ python web_ui/app.py
 | 模块 | 检测维度 | 层级 |
 |------|---------|:----:|
 | **SQL 注入** | 8种: error/union/boolean-blind/time-based/stacked/**二阶**/**宽字节**/**OOB** | 🟢 核心 |
-| **XSS** | 6种: reflected/stored/DOM/**Polyglot**/**mXSS**/**SSTI** | 🟢 核心 |
+| **XSS** | 5种: reflected/stored/**Polyglot**/**mXSS**/**SSTI**（DOM XSS 待 headless 验证，见 Roadmap）| 🟢 核心 |
 | **OA 专项** | 12种: 泛微/通达/金蝶/蓝凌/致远/用友/禅道/万户/Nacos/Spring/Jenkins/Confluence | 🟡 Lite |
 | **WebShell** | 路径扫描 + 内容特征 + 启发式检测 | 🟡 Lite |
 | **弱口令** | 表单登录 + phpMyAdmin + Tomcat Manager | 🟡 Lite |
@@ -73,13 +74,14 @@ python web_ui/app.py
 
 ### ⚡ 架构亮点
 
-- **多引擎聚合** — RayScan + AWVS + Nessus + Nuclei + sqlmap 一键调度，结果自动去重合并
-- **Nuclei 12.5w PoC 引擎** — 智能模板选择 + SQLite 缓存 + 按技术栈分类
-- **OA 自动识别** — 检测到 OA 系统指纹后自动加载专项检测规则
-- **漏洞验证链** — Metasploit RPC 自动匹配 exploit 模块验证漏洞真实性
+- **Nuclei 12.5w PoC 引擎** — 扫描主流程默认启用（`--no-nuclei` 关闭）：CLI 可用走智能模板扫描，不可用走内置内容特征回退（无"可达即报"）
+- **OA 三级检测链路** — 内容指纹识别（title/正文/响应头）→ 版本识别（Jenkins/Nacos/Spring…）→ 规则级响应证据验证 + 版本过滤（如 Nacos 1.x 用户列表未授权）
+- **扫描断点恢复** — 30 秒间隔落盘 checkpoint，`--resume` 合并已发现漏洞并跳过已完成模块
+- **误报治理基线** — 全部检测判定基于响应证据（baseline 排除/内容特征），仅路径可达不再视为漏洞
 - **流式检测** — 爬取即检测，不等全部爬完（30页实战 / 150页靶机）
 - **双路径自动分流** — 检测到靶机IP/路径则走靶机流程，否则走实战流程
 - **三层降噪** — 内容特征 + 尺寸聚类 + 校准匹配
+- **规划中** — 多引擎聚合（AWVS/Nessus/sqlmap 一键调度）、Metasploit 漏洞验证链
 
 ## 🎯 新功能速览
 
@@ -91,32 +93,33 @@ RayScan 能自动识别并检测以下 OA/中间件系统：
 Nacos · Spring Boot · Jenkins · Confluence
 ```
 检测类型：SQL注入 / RCE / 文件上传 / 认证绕过 / 配置泄露 / 未授权访问
-
-### 🔗 多引擎聚合
-配置 AWVS / Nessus 实例后，一键运行多引擎扫描：
-```python
-from wvs.integrations import AWVSIntegration, NessusIntegration
-from wvs.core.result_merger import ResultMerger
-
-# 多引擎扫描 + 结果合并
-merged = await scanner.run_multi_engine_scan("https://target.com")
-```
+> 检测链路：内容指纹识别 → 版本识别 → 规则级响应证据验证 + 版本过滤。
+> 仅路径可达不再视为漏洞（S1 误报治理）。详见 [OA 检测规则](docs/OA_RULES.md)。
 
 ### 📦 Nuclei 12.5w PoC 管理
 ```bash
 # 一键部署 Nuclei 模板
 ./scripts/deploy_nuclei_templates.sh
 
-# 扫描时自动使用模板管理器选择最匹配的 PoC
+# 扫描默认自动运行 Nuclei 阶段（智能模板选择；无 CLI 时走内置回退）
 python -m wvs scan https://target.com
+
+# 禁用 Nuclei 阶段
+python -m wvs scan https://target.com --no-nuclei
 ```
 
-### 🔐 漏洞验证链
-扫描到漏洞后自动调用 Metasploit 验证：
+### 💾 扫描断点恢复
 ```bash
-# 配置 MSF RPC（默认连接 127.0.0.1:55552）
-python -m wvs scan https://target.com --verify
+# 长任务中断后，从上次 checkpoint 恢复（合并已发现漏洞 + 跳过已完成模块）
+python -m wvs scan https://target.com --resume
 ```
+
+### 🧭 规划中（Roadmap）
+以下能力已在 `wvs/integrations/` 实现集成层，但**尚未接入主扫描流程**，当前版本不生效：
+- **多引擎聚合** — AWVS / Nessus / sqlmap 一键调度 + 结果去重合并
+- **Metasploit 漏洞验证链** — MSF RPC 自动匹配 exploit 模块验证漏洞真实性
+
+接入完成后将随版本发布启用，详见 [技术演进规划](docs/audit/rayscan-evolution-plan-2026-07-12.md)。
 
 ## 🎯 实战验证
 
@@ -381,19 +384,24 @@ asyncio.run(my_scan())
 ```
 RayScan/
 ├── wvs/                       # 核心扫描库
-├── scripts/                   # 扫描脚本
+│   ├── core/                  # 扫描引擎（爬虫/scanner/会话/限速）
+│   ├── modules/               # 检测模块（sqli/xss/oa/webshell/weakpass…）
+│   ├── integrations/          # 第三方集成（Nuclei/sqlmap/ffuf/AWVS…）
+│   ├── reporting/             # 报告（HTML/JSON/CSV/Markdown/Console）
+│   ├── profiles/              # 扫描配置 Profile
+│   └── plugins/               # 认证插件
+├── web_ui/                    # Web UI（Flask）
+├── scripts/                   # 脚本
 ├── scan_reports/              # 扫描报告
 ├── examples/                  # 示例代码
-├── docs/                      # 技术文档
-├── shared_components/         # 共享组件
+├── docs/                      # 技术文档（含审计/规划）
 ├── tools/                     # 工具脚本
+├── tests/                     # 测试
 ├── full_scan.py               # 全量扫描入口
 ├── quick_scan.py              # 快速扫描入口
-├── wvs_gui.py                 # GUI 界面
 ├── pyproject.toml             # 项目配置
 ├── LICENSE                    # MIT 许可证
-├── RENAMED_TO_RAYSCAN.md      # 更名记
-└── .gitignore
+└── RENAMED_TO_RAYSCAN.md      # 更名记
 ```
 
 ## 📊 检测能力
@@ -416,7 +424,7 @@ RayScan/
 
 | 版本 | 说明 |
 |------|------|
-| **RayScan 2.0** | **全域升级版 — OA / 多引擎 / Nuclei PoC / 验证链 / WebShell / 弱口令 / 子域名** |
+| **RayScan 2.0** | **全域升级版 — OA 专项 / WebShell / 弱口令 / 子域名 / Nuclei PoC**（多引擎聚合与 MSF 验证链规划中，见 Roadmap）|
 | **RayScan 1.0** | **正式开源版（基于 WVS v19.2）** |
 | WVS v19 / v19.2 | 扫描引擎重构，集成框架升级 |
 | WVS v18 / v18.4 | 高级检测模块 + 企业级扫描能力 |

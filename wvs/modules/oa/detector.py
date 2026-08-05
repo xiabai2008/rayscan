@@ -17,6 +17,7 @@ RayScan OA (办公自动化) 专项检测模块
 """
 
 import logging
+import re
 from typing import Dict, List, Optional
 
 from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
@@ -127,7 +128,15 @@ OA_RULES: Dict[str, dict] = {
         "paths": ["/nacos/"],
         "keywords": ["nacos"],
         "checks": [
-            {"path": "/nacos/v1/auth/users?pageNo=1&pageSize=10", "type": "unauth", "severity": "critical"},
+            {
+                "path": "/nacos/v1/auth/users?pageNo=1&pageSize=10",
+                "type": "unauth",
+                "severity": "critical",
+                # S3 规则级证据 + 版本过滤：CVE-2021-29441（用户列表未授权访问，
+                # 1.4.1 修复）。响应特征 = 用户列表 JSON 的 pageItems 字段。
+                "evidence": "pageItems",
+                "max_version": "1.4.1",
+            },
             {
                 "path": "/nacos/v1/cs/configs?dataId=&group=&appName=&config_tags=&pageNo=1&pageSize=10",
                 "type": "unauth",
@@ -182,6 +191,78 @@ VULN_TYPE_MAP = {
     "info": VulnerabilityType.INFO_DISCLOSURE,
 }
 
+# ── 响应内容指纹（S3 三级链路第 1 级） ─────────────────────────
+# 从首页 HTML/响应头识别 OA 类型（URL 匹配之外的第二通道）。
+# match 类型:
+#   html   — 响应正文小写子串
+#   title  — <title> 标签内容
+#   header — 响应头（name 必填；value 为 None 表示头存在即命中）
+OA_CONTENT_FINGERPRINTS: Dict[str, List[Dict[str, str]]] = {
+    "泛微-Ecology": [
+        {"match": "html", "value": "ecology"},
+        {"match": "html", "value": "e-cology"},
+        {"match": "html", "value": "weaver"},
+        {"match": "html", "value": "eoffice"},
+    ],
+    "通达OA": [
+        {"match": "title", "value": "通达oa"},
+        {"match": "html", "value": "tongda"},
+        {"match": "html", "value": "ispirit"},
+        {"match": "html", "value": "td_"},
+    ],
+    "金蝶-Kingdee": [
+        {"match": "title", "value": "金蝶"},
+        {"match": "html", "value": "kingdee"},
+        {"match": "html", "value": "k3cloud"},
+    ],
+    "蓝凌-Landray": [
+        {"match": "html", "value": "landray"},
+        {"match": "html", "value": "ekp"},
+        {"match": "html", "value": "lms"},
+    ],
+    "致远-Seeyon": [
+        {"match": "title", "value": "致远"},
+        {"match": "html", "value": "seeyon"},
+        {"match": "html", "value": "yyoa"},
+    ],
+    "用友-Yonyou": [
+        {"match": "title", "value": "用友"},
+        {"match": "html", "value": "yonyou"},
+        {"match": "html", "value": "ufida"},
+        {"match": "html", "value": "nc cloud"},
+    ],
+    "禅道-Zentao": [
+        {"match": "title", "value": "禅道"},
+        {"match": "html", "value": "zentao"},
+        {"match": "html", "value": "zentaopms"},
+        {"match": "cookie", "value": "zentaosid"},
+    ],
+    "万户-Whir": [
+        {"match": "title", "value": "万户"},
+        {"match": "html", "value": "whir"},
+    ],
+    "Nacos": [
+        {"match": "title", "value": "nacos"},
+        {"match": "html", "value": "nacos"},
+        {"match": "html", "value": "console.nacos"},
+    ],
+    "Spring": [
+        {"match": "title", "value": "whitelabel error page"},
+        {"match": "html", "value": "whitelabel error page"},
+        {"match": "html", "value": "spring boot"},
+    ],
+    "Jenkins": [
+        {"match": "header", "name": "x-jenkins", "value": None},
+        {"match": "title", "value": "jenkins"},
+        {"match": "html", "value": "jenkins"},
+    ],
+    "Confluence": [
+        {"match": "title", "value": "confluence"},
+        {"match": "html", "value": "atlassian"},
+        {"match": "html", "value": "confluence"},
+    ],
+}
+
 
 @register_module
 class OADetector(DetectionModule):
@@ -209,8 +290,22 @@ class OADetector(DetectionModule):
 
         self.logger.info(f"[OA] 开始 OA 专项检测: {url}")
 
-        # Step 1: 识别 OA 类型
-        detected_oa = self._detect_oa_type(url)
+        # Step 1: 识别 OA 类型（S3 三级链路第 1 级）
+        #   优先使用 scanner Step 1.9 内容指纹注入值；否则抓首页做内容指纹 + URL 双通道
+        detected_oa = getattr(self, "_detected_oa", None)
+        html = ""
+        headers: Dict[str, str] = {}
+        if not detected_oa:
+            try:
+                resp = await self._send_request("GET", url, {})
+                if resp:
+                    html = resp.get("text", "") or ""
+                    headers = resp.get("headers", {}) or {}
+                    detected_oa = self._detect_oa_type(url, html, headers)
+            except Exception:
+                detected_oa = None
+        if not detected_oa:
+            detected_oa = self._detect_oa_type(url, html, headers)  # URL 兜底
 
         if not detected_oa:
             self.logger.info("[OA] 未识别到已知 OA 系统，执行通用 OA 检测")
@@ -218,6 +313,11 @@ class OADetector(DetectionModule):
             return await self._check_common_oa_paths(url, target)
 
         self.logger.info(f"[OA] 识别到: {detected_oa}")
+
+        # Step 1.5: 版本识别（S3 三级链路第 2 级，供检查项版本过滤）
+        self._detected_version = self._detect_oa_version(detected_oa, html, headers)
+        if self._detected_version:
+            self.logger.info(f"[OA] 版本识别: {detected_oa} {self._detected_version}")
 
         # Step 2: 加载对应 OA 的 Nuclei 模板（通过全局 template_manager）
         oa_templates = await self._load_oa_templates(detected_oa)
@@ -238,27 +338,136 @@ class OADetector(DetectionModule):
 
         return vulnerabilities
 
-    def _detect_oa_type(self, url: str) -> Optional[str]:
-        """
-        从 URL 中识别 OA 系统类型
+    @staticmethod
+    def _match_content_fingerprint(oa_name: str, html: str, headers: Optional[Dict[str, str]]) -> bool:
+        """S3 三级链路第 1 级：按 OA_CONTENT_FINGERPRINTS 匹配响应内容/头。"""
+        rules = OA_CONTENT_FINGERPRINTS.get(oa_name, [])
+        if not rules:
+            return False
 
-        优先路径匹配，其次关键词匹配
+        text_lower = html.lower()
+        title = ""
+        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        if m:
+            title = m.group(1).strip().lower()
+
+        headers_lower = {k.lower(): str(v).lower() for k, v in (headers or {}).items()}
+
+        for rule in rules:
+            match = rule["match"]
+            value = rule["value"]
+            if match == "header":
+                name = rule.get("name", "").lower()
+                if name in headers_lower:
+                    if value is None or value in headers_lower[name]:
+                        return True
+            elif match == "title":
+                if value in title:
+                    return True
+            elif match == "cookie":
+                if value in headers_lower.get("set-cookie", ""):
+                    return True
+            else:  # html
+                if value in text_lower:
+                    return True
+        return False
+
+    def _detect_oa_type(self, url: str, html: str = "", headers: Optional[Dict[str, str]] = None) -> Optional[str]:
         """
+        识别 OA 系统类型（S3 三级链路第 1 级：内容指纹优先，URL 回退）
+
+        通道 1: 响应内容指纹（title/正文/响应头/Set-Cookie，强信号）
+        通道 2: URL 路径/关键词匹配（回退）
+        """
+        # 通道 1: 内容指纹
+        if html or headers:
+            for oa_name in OA_RULES:
+                if self._match_content_fingerprint(oa_name, html, headers):
+                    self.logger.debug(f"[OA] 内容指纹匹配 → {oa_name}")
+                    return oa_name
+
+        # 通道 2: URL 路径/关键词
         url_lower = url.lower()
-
         for oa_name, rule in OA_RULES.items():
-            # 路径匹配
             for path in rule["paths"]:
                 if path.rstrip("/") in url_lower:
                     self.logger.debug(f"[OA] 路径匹配 → {oa_name}: {path}")
                     return oa_name
-            # 关键词匹配
             for kw in rule["keywords"]:
                 if kw.lower() in url_lower:
                     self.logger.debug(f"[OA] 关键词匹配 → {oa_name}: {kw}")
                     return oa_name
 
         return None
+
+    def _detect_oa_version(self, oa_name: str, html: str, headers: Optional[Dict[str, str]]) -> Optional[str]:
+        """
+        S3 三级链路第 2 级：从响应/头提取 OA 版本。
+
+        未识别到版本返回 None（不阻塞检测——版本过滤仅在识别到版本时生效）。
+        各 OA 版本特征：
+          - Jenkins:  X-Jenkins 响应头
+          - Nacos:    页面 JS 中 nacos_version / nacos.version 变量
+          - Spring:   页面含 spring-boot 版本字样
+          - 泛微:     页面中 ecology 版本变量
+          - 禅道:     页面中 zentao 版本变量
+        """
+        headers_lower = {k.lower(): str(v) for k, v in (headers or {}).items()}
+
+        if oa_name == "Jenkins":
+            v = headers_lower.get("x-jenkins")
+            if v:
+                return str(v).strip()
+
+        if oa_name == "Nacos":
+            m = re.search(r"nacos[-_]version[\"']?\s*[:=]\s*[\"']?([0-9]+\.[0-9]+\.[0-9]+)", html, re.I)
+            if m:
+                return m.group(1)
+            m = re.search(r"nacos\.version[\"']?\s*[:=]\s*[\"']?([0-9.]+)", html, re.I)
+            if m:
+                return m.group(1)
+
+        if oa_name == "Spring":
+            m = re.search(r"spring-?boot\s+v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)", html, re.I)
+            if m:
+                return m.group(1)
+
+        if oa_name in ("泛微-Ecology", "禅道-Zentao"):
+            name = "ecology" if oa_name == "泛微-Ecology" else "zentao"
+            m = re.search(rf"{name}[\"']?\s*[:=]\s*[\"']?v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)", html, re.I)
+            if m:
+                return m.group(1)
+
+        return None
+
+    @staticmethod
+    def _version_in_range(check: dict, version: Optional[str]) -> bool:
+        """
+        S3 版本过滤：检查项 min_version/max_version 约束（[min, max) 语义）。
+
+        无版本信息时不阻塞（返回 True）；版本解析失败时不阻塞（保守放行）。
+        注意：版本范围来自 CVE 描述，实际环境需校准，误判版本宁可放行检测。
+        """
+        if not version:
+            return True
+        min_v = check.get("min_version")
+        max_v = check.get("max_version")
+        if not min_v and not max_v:
+            return True
+
+        try:
+            v = tuple(int(x) for x in re.findall(r"\d+", version)[:3])
+            if min_v:
+                m = tuple(int(x) for x in re.findall(r"\d+", min_v)[:3])
+                if v < m:
+                    return False
+            if max_v:
+                m = tuple(int(x) for x in re.findall(r"\d+", max_v)[:3])
+                if v >= m:  # [min, max) 语义
+                    return False
+            return True
+        except Exception:
+            return True
 
     async def _run_check(self, base_url: str, check: dict, target: ScanTarget) -> Optional[Vulnerability]:
         """执行单条 OA 检测规则"""
@@ -272,31 +481,26 @@ class OADetector(DetectionModule):
         vuln_type = VULN_TYPE_MAP.get(vuln_type_str, VulnerabilityType.OTHER)
         severity = SEVERITY_MAP.get(severity_str, Severity.INFO)
 
+        # S3 版本过滤：检查项 min_version/max_version 约束（如 Nacos < 1.4.1 的 unauth）
+        if not self._version_in_range(check, getattr(self, "_detected_version", None)):
+            self.logger.debug(
+                f"[OA] 版本过滤跳过 {check_url}: 版本 {getattr(self, '_detected_version', None)} 不在约束内"
+            )
+            return None
+
         try:
             resp = await self._send_request(method, check_url, params)
 
-            if resp and resp.get("status_code") and resp["status_code"] not in (404, 400, 0):
+            # S1 误报治理：仅 HTTP 200 + 响应证据验证通过才算漏洞。
+            # 移除历史"状态码即漏洞"判定（401/403 被正确拦截 ≠ 未授权访问；
+            # 500/302 是错误页/重定向，非漏洞证据）。
+            if resp and resp.get("status_code") == 200:
                 status = resp["status_code"]
                 body = resp.get("text", "")
+                content_type = resp.get("headers", {}).get("content-type", "")
 
-                # 不同类型有不同的判断逻辑
-                found = False
-                if status == 200:
-                    # 对于信息泄露类，检查响应内容是否合理
-                    if vuln_type_str == "info_disclosure":
-                        if len(body) > 50 and "error" not in body[:200].lower():
-                            found = True
-                    elif vuln_type_str == "unauth":
-                        if status == 200:
-                            found = True
-                    else:
-                        found = True
-                elif status in (401, 403):
-                    # 需要认证但暴露了路径
-                    if vuln_type_str == "unauth":
-                        found = True
-                elif status in (500, 302):
-                    found = True
+                # S3：检查项规则级 evidence（响应特征）优先于通用类型验证
+                found = self._verify_evidence(vuln_type_str, body, content_type, check.get("evidence"))
 
                 if found:
                     return self._create_vuln(
@@ -318,31 +522,105 @@ class OADetector(DetectionModule):
 
         return None
 
+    @staticmethod
+    def _is_html(body: str) -> bool:
+        """判断响应是否为 HTML 页面（登录页/错误页/Spa fallback 的特征）"""
+        stripped = body.strip().lower()
+        return stripped.startswith(("<html", "<!doctype html", "<head", "<!doctype"))
+
+    def _verify_evidence(
+        self, vuln_type_str: str, body: str, content_type: str, rule_evidence: Optional[str] = None
+    ) -> bool:
+        """
+        S1 误报治理：按漏洞类型验证响应证据，只有真实漏洞特征才算命中。
+
+        判定原则：宁可漏报，不可把"路径可达/页面存在"报成漏洞。
+        S3 增强：`rule_evidence`（检查项级响应特征）优先于通用类型验证——
+        规则明确了漏洞响应特征（如特定 JSON 字段）时，直接按特征匹配。
+        """
+        body_lower = body.lower()
+
+        # S3：规则级证据优先（大小写不敏感子串匹配）
+        if rule_evidence:
+            return rule_evidence.lower() in body_lower
+
+        if vuln_type_str in ("unauth", "auth_bypass"):
+            # 未授权访问：证据 = 返回 JSON 数据（Nacos 用户列表/配置接口、泛微接口），
+            # 而非登录页/错误页 HTML。JSON 响应通常较短（如 Nacos 空结果列表），
+            # 阈值放宽至 10 以排除空 JSON（{}）即可
+            return body.strip().startswith("{") and not self._is_html(body) and len(body) > 10
+
+        if vuln_type_str == "info_disclosure":
+            # actuator/env: Spring 配置 JSON 强特征
+            if "propertysources" in body_lower or "activeprofiles" in body_lower:
+                return True
+            # heapdump 等二进制大文件：非 HTML 且体量较大、无错误页特征
+            if not self._is_html(body) and len(body) > 1000 and "error" not in body_lower[:200]:
+                return True
+            return False
+
+        if vuln_type_str == "sqli":
+            # 注入成功证据：SQL 报错特征，或（禅道 API）JSON 结果中带 success
+            sql_error_signs = (
+                "syntax error",
+                "sqlstate",
+                "sql syntax",
+                "mysql server",
+                "sqlite3",
+                "warning: mysql",
+                "database error",
+                "ora-",
+            )
+            if any(s in body_lower for s in sql_error_signs):
+                return True
+            return body.strip().startswith("{") and '"success"' in body_lower
+
+        if vuln_type_str == "rce":
+            # 序列化/二进制载荷回显（致远 htmlofficeservlet GWT、金蝶 BOS）：octet-stream
+            # 或 gzip/二进制 magic；Jenkins 脚本控制台：Groovy/Script Console 特征
+            if "octet-stream" in content_type.lower():
+                return True
+            if body[:2] in ("\x1f\x8b", "\x00\x00") or body_lower.startswith("salted"):
+                return True
+            if "groovy" in body_lower or "script console" in body_lower:
+                return True
+            return False
+
+        if vuln_type_str == "file_read":
+            # 文件读取：证据 = 响应含 JSP 源码特征（蓝凌 custom_pf.jsp 读源码）
+            return "<%" in body or "java.io" in body_lower or "import java" in body_lower
+
+        # file_upload / info / 其他：GET 探测无法验证漏洞，保守不报（S3 深化）
+        return False
+
     async def _check_common_oa_paths(self, base_url: str, target: ScanTarget) -> List[Vulnerability]:
-        """通用 OA 路径检查 — 对所有 OA 都执行的基础检测"""
+        """通用 OA 路径检查 — 仅检查有可靠内容特征的文件泄露路径"""
         vulns = []
+        # S1 误报治理：移除 /admin/、/login/、/system/、/api/、/webservice/、/backup/
+        # 等"可达即报"泛路径（路径存在/返回 200 不是漏洞证据）。
+        # 仅保留可验证内容特征的文件泄露路径。
         common_paths = [
-            # 常见 OA 入口
-            "/admin/",
-            "/login/",
-            "/system/",
-            "/api/",
-            "/webservice/",
-            # 常见泄露路径
-            "/WEB-INF/web.xml",
-            "/META-INF/MANIFEST.MF",
-            "/.git/HEAD",
-            "/.env",
-            "/backup/",
+            ("/WEB-INF/web.xml", "<web-app"),  # Java 部署描述符特征
+            ("/META-INF/MANIFEST.MF", "manifest-version"),
+            ("/.git/HEAD", "ref: "),  # Git HEAD 内容特征
+            ("/.env", None),  # 环境变量键值对启发式
         ]
 
-        for path in common_paths:
+        for path, pattern in common_paths:
             check_url = base_url.rstrip("/") + path
             try:
                 resp = await self._send_request("GET", check_url, {})
-                if resp and resp.get("status_code") in (200, 401, 403):
-                    status = resp["status_code"]
-                    severity = Severity.INFO if status in (401, 403) else Severity.LOW
+                if not (resp and resp.get("status_code") == 200):
+                    continue
+                body = resp.get("text", "")
+
+                if pattern is not None:
+                    found = pattern.lower() in body.lower()
+                else:
+                    # /.env：环境变量常见格式 KEY=value（键为大写下划线）
+                    found = bool(re.search(r"^[A-Z][A-Z0-9_]{2,}\s*=\s*\S+", body, re.M))
+
+                if found:
                     vulns.append(
                         self._create_vuln(
                             url=check_url,
@@ -351,10 +629,10 @@ class OADetector(DetectionModule):
                             method="GET",
                             payload="",
                             vuln_type="info_disclosure",
-                            severity=severity,
+                            severity=Severity.LOW,
                             confidence=Confidence.LOW,
-                            evidence=f"HTTP {status}",
-                            description=f"发现 OA 路径: {check_url}",
+                            evidence=pattern or "KEY=value pairs",
+                            description=f"发现敏感文件泄露: {check_url}",
                             recommendation="限制敏感路径的外部访问",
                         )
                     )
