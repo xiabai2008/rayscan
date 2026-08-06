@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.1] - 2026-08-06
+
+### Fixed
+- 统一仓库账号引用至 `xiabai2008`：修正 README/CONTRIBUTING/CHANGELOG/LICENSE 及代码内旧账号 `xiabai2004` 链接（badge、clone、Release、版权、Docker 镜像名）
+- CI 质量门禁严格化：Lint 与 Format 移除 `continue-on-error`，成为阻断性检查（与 Test 一致）
+
+### Changed
+- 移除误提交的本地产物（`.workbuddy/`、`delivery/` 加入 `.gitignore`，保持仓库纯净）
+- `SECURITY.md` 支持版本表更新至 2.0.x；新增 `CODE_OF_CONDUCT.md`
+
+---
+
 ## [2.0.0] - 2026-08-05
 
 ### Added
@@ -148,5 +160,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 早期版本开发迭代，构建核心扫描能力。
 
-[1.0.1]: https://github.com/xiabai2004/RayScan/releases/tag/v1.0.1
-[1.0.0]: https://github.com/xiabai2004/RayScan/releases/tag/v1.0.0
+[1.0.1]: https://github.com/xiabai2008/rayscan/releases/tag/v1.0.1
+[1.0.0]: https://github.com/xiabai2008/rayscan/releases/tag/v1.0.0

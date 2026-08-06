@@ -4,7 +4,7 @@
 
 ```bash
 # Clone and install with dev deps
-git clone https://github.com/xiabai2004/RayScan
+git clone https://github.com/xiabai2008/rayscan
 cd RayScan
 pip install -e ".[dev]"
 
