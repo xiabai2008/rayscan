@@ -1,16 +1,16 @@
-# 🔬 RayScan 2.0.0
+# 🔬 RayScan 2.0.1
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-2.0.0-blue)
+![Version](https://img.shields.io/badge/Version-2.0.1-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
-[![CI](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2004/RayScan/actions/workflows/ci.yml)
+[![CI](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/Tests-190%20passing-brightgreen)
-![GitHub stars](https://img.shields.io/github/stars/xiabai2004/RayScan?style=social)
-![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2004/RayScan)
-[![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2004/RayScan)
+![GitHub stars](https://img.shields.io/github/stars/xiabai2008/rayscan?style=social)
+![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2008/rayscan)
+[![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2008/rayscan)
 
 **🚀 全栈 Web 漏洞扫描器 | SQLi·XSS·OA·WebShell·弱口令·子域名 | Nuclei PoC 集成（12.5w 模板）**
 
@@ -44,7 +44,7 @@ python web_ui/app.py
   <br><em>一条命令扫描靶机，实时查看检测过程</em>
 </p>
 
-[一分钟开始](#-快速开始) · [Web UI 演示](#-web-ui-模式推荐) · [实战报告](#-实战验证) · [功能列表](#-功能特性) · [Star 支持](https://github.com/xiabai2004/RayScan/stargazers)
+[一分钟开始](#-快速开始) · [Web UI 演示](#-web-ui-模式推荐) · [实战报告](#-实战验证) · [功能列表](#-功能特性) · [Star 支持](https://github.com/xiabai2008/rayscan/stargazers)
 
 </div>
 
@@ -191,7 +191,7 @@ smithy:5f4dcc3b5aa765d61d8327deb882cf99  →  password
 ### Install from source
 
 ```bash
-git clone https://github.com/xiabai2004/RayScan
+git clone https://github.com/xiabai2008/rayscan
 cd RayScan
 pip install -e ".[dev]"
 ```
@@ -444,4 +444,4 @@ RayScan/
 
 ## 📄 License
 
-MIT License — Copyright (c) 2026 xiabai2004
+MIT License — Copyright (c) 2026 xiabai2008

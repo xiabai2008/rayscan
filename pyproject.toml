@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rayscan"
-version = "2.0.0"
+version = "2.0.1"
 description = "RayScan — 开箱即用的 Web 漏洞扫描器 | SQLi/XSS/命令注入/LFI/SSRF/XXE/RCE/API安全 | 多引擎聚合(Nuclei/sqlmap/ffuf)+MSF验证链+Profile扫描配置 | CLI+Web UI双模式"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "xiabai2004"}
+    {name = "xiabai2008"}
 ]
 keywords = ["web-security", "vulnerability-scanner", "penetration-testing", "sql-injection", "xss", "security", "bug-bounty", "metasploitable", "dvwa"]
 classifiers = [
@@ -50,7 +50,7 @@ dev = [
     "pre-commit>=3.0.0",
     "types-requests",
     "types-PyYAML",
-    "tomli; python_version < \"3.11\"",
+    "tomli; python_version < "3.11"",
 ]
 speedup = [
     "orjson>=3.8.0",
@@ -75,9 +75,9 @@ wvs = "wvs.cli:main"
 rayscan = "wvs.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/xiabai2004/RayScan"
-Repository = "https://github.com/xiabai2004/RayScan"
-Issues = "https://github.com/xiabai2004/RayScan/issues"
+Homepage = "https://github.com/xiabai2008/rayscan"
+Repository = "https://github.com/xiabai2008/rayscan"
+Issues = "https://github.com/xiabai2008/rayscan/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
