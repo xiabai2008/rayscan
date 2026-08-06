@@ -112,3 +112,7 @@ template_cache.db
 # Local templates (user-specific)
 .rayscan/
 .nuclei/
+
+# Personal / local-only working files (kept out of the public repo)
+.workbuddy/
+delivery/
