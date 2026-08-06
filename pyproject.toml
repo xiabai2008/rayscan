@@ -50,7 +50,7 @@ dev = [
     "pre-commit>=3.0.0",
     "types-requests",
     "types-PyYAML",
-    "tomli; python_version < "3.11"",
+    "tomli; python_version < '3.11'",
 ]
 speedup = [
     "orjson>=3.8.0",
