@@ -45,7 +45,7 @@ pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 python-discovery==1.4.4
 PyYAML==6.0.3
--e git+https://github.com/xiabai2004/RayScan@821913749a3998c2ec7620c12d9ff8e31e2b2025#egg=rayscan
+-e git+https://github.com/xiabai2008/rayscan@821913749a3998c2ec7620c12d9ff8e31e2b2025#egg=rayscan
 requests==2.34.2
 rich==15.0.0
 ruff==0.15.21

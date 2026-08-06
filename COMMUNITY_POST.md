@@ -71,7 +71,7 @@ Crawler → 参数发现 → 并发检测 → 去重 → 报告
 
 ## 🔗 开源地址
 
-**GitHub：** https://github.com/xiabai2004/RayScan
+**GitHub：** https://github.com/xiabai2008/rayscan
 
 **License：** MIT —— 随便用，随便改，保留版权声明就行。
 
@@ -84,4 +84,4 @@ Crawler → 参数发现 → 并发检测 → 去重 → 报告
 
 ---
 
-*—— xiabai2004, 2026*
+*—— xiabai2008, 2026*

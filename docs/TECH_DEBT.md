@@ -14,11 +14,11 @@
 
 | 编号 | 区域 | 问题 | 严重度 | 状态 | 负责人 | 关联 |
 |------|------|------|--------|------|--------|------|
-| TD-001 | 工程配置 | 行宽标准冲突（black=88 / isort=88 / ruff=120 / flake8=150） | 🟡 | ✅ 已解决 | @xiabai2004 | — |
-| TD-002 | 工程配置 | `pyproject.toml` 版本漂移（写 1.1.0，实际 v2.0.0） | 🟡 | ✅ 已解决 | @xiabai2004 | — |
+| TD-001 | 工程配置 | 行宽标准冲突（black=88 / isort=88 / ruff=120 / flake8=150） | 🟡 | ✅ 已解决 | @xiabai2008 | — |
+| TD-002 | 工程配置 | `pyproject.toml` 版本漂移（写 1.1.0，实际 v2.0.0） | 🟡 | ✅ 已解决 | @xiabai2008 | — |
 | TD-003 | 类型安全 | `mypy` 配置宽松：`disallow_untyped_defs=false` 且大片模块 `ignore_errors`，无类型保障 | 🟡 | 📋 待办 | — | — |
 | TD-004 | Lint 覆盖 | `sqli/payloads.py`、`sqli/techniques_mixins.py`、`rce/payloads.py` 被整体排除出 ruff | 🟢 | 📋 待办 | — | — |
-| TD-005 | 流程/知识 | 历史 65 次提交几乎单人直推，无评审记录，知识单点集中 | 🔴 | 🚧 进行中 | @xiabai2004 | PR 流程已启用 |
+| TD-005 | 流程/知识 | 历史 65 次提交几乎单人直推，无评审记录，知识单点集中 | 🔴 | 🚧 进行中 | @xiabai2008 | PR 流程已启用 |
 | TD-006 | 测试 | CI 未接入 `pytest-cov`，无覆盖率基线/门禁 | 🟡 | 📋 待办 | — | 待 CI 强化 |
 | TD-007 | 可维护性 | 核心模块类型注解缺失，IDE 跳转/重构困难 | 🟡 | 📋 待办 | — | 关联 TD-003 |
 | TD-008 | 测试覆盖 | `wvs/core`（scanner/session/cache/rate_limiter）单元测试薄弱 | 🟡 | 📋 待办 | — | 见 CODE_AUDIT.md |

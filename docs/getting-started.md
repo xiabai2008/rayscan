@@ -5,7 +5,7 @@
 ### 从源码安装
 
 ```bash
-git clone https://github.com/xiabai2004/RayScan
+git clone https://github.com/xiabai2008/rayscan
 cd RayScan
 pip install -e ".[dev]"
 ```
@@ -23,7 +23,7 @@ TARGET_URL=http://example.com docker-compose up
 ### 使用 pip
 
 ```bash
-pip install git+https://github.com/xiabai2004/RayScan.git
+pip install git+https://github.com/xiabai2008/rayscan.git
 ```
 
 ## 基本使用

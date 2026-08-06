@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-GitHub Issues via the `gh` CLI (repo: `xiabai2004/RayScan`). See `docs/agents/issue-tracker.md`.
+GitHub Issues via the `gh` CLI (repo: `xiabai2008/rayscan`). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

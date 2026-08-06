@@ -30,4 +30,4 @@ WVS（Web Vulnerability Scanner）陪伴我走过了 **19 个大版本**的迭�
 
 **WVS 不会消失，它以 RayScan 的名义继续进化。**
 
-*—— xiabai2004, 2026*
+*—— xiabai2008, 2026*

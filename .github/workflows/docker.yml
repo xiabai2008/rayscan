@@ -28,6 +28,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: xiabai2004/rayscan:ci
+          tags: xiabai2008/rayscan:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
