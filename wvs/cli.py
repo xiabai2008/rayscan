@@ -542,7 +542,7 @@ def cmd_version(args):
     """显示版本信息"""
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2004",
+            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2008",
             border_style="cyan",
         )
     )

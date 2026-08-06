@@ -262,7 +262,7 @@ class RayScanGUI:
         ver_f.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
         ttk.Label(ver_f, text="RayScan 1.0.2").pack(anchor=tk.W)
         ttk.Label(ver_f, text="MIT License", foreground="gray").pack(anchor=tk.W)
-        ttk.Label(ver_f, text="github.com/xiabai2004",
+        ttk.Label(ver_f, text="github.com/xiabai2008",
                   foreground="gray", font=("", 7)).pack(anchor=tk.W)
 
     # ── 右侧主内容区 ──
@@ -381,7 +381,7 @@ class RayScanGUI:
         bar.grid(row=3, column=0, sticky="ew")
         ttk.Label(bar, text="RayScan 1.0.2 | MIT License",
                   font=("", 7), foreground="gray").pack(side=tk.LEFT)
-        ttk.Label(bar, text="github.com/xiabai2004/RayScan",
+        ttk.Label(bar, text="github.com/xiabai2008/rayscan",
                   font=("", 7), foreground="gray").pack(side=tk.RIGHT)
 
     # ==================== 扫描控制 ====================
