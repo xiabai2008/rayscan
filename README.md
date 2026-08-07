@@ -1,10 +1,10 @@
-# 🔬 RayScan 2.0.1
+# 🔬 RayScan 2.1.0
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-2.0.1-blue)
+![Version](https://img.shields.io/badge/Version-2.1.0-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/Tests-190%20passing-brightgreen)
@@ -137,7 +137,7 @@ RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ RayScan 2.0.0 扫描目标: http://192.168.18.131                    │
+│ RayScan 2.1.0 扫描目标: http://192.168.18.131                    │
 │ 模块: sqli, xss (核心专精)                          │
 │ 速率: 10 req/s                                             │
 └────────────────────────────────────────────────────────────┘
@@ -425,6 +425,7 @@ RayScan/
 | 版本 | 说明 |
 |------|------|
 | **RayScan 2.0** | **全域升级版 — OA 专项 / WebShell / 弱口令 / 子域名 / Nuclei PoC**（多引擎聚合与 MSF 验证链规划中，见 Roadmap）|
+| **RayScan 2.1** | **可解释检测 --explain / 被动扫描 passive / 一键演示 demo / 规则管理 rules / IDOR·越权·认证绕过 / gentle 合规预设 / ScanOrchestrator 编排层** |
 | **RayScan 1.0** | **正式开源版（基于 WVS v19.2）** |
 | WVS v19 / v19.2 | 扫描引擎重构，集成框架升级 |
 | WVS v18 / v18.4 | 高级检测模块 + 企业级扫描能力 |

@@ -18,7 +18,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 from .api import APIDetector
+from .authbypass import AuthBypassDetector
 from .cmdi import CMDInjectionDetector
+from .idor import IDORDetector
 from .js_analysis import JSAnalysisDetector
 from .jspathfinder import JSPathfinderDetector
 from .lfi import LFIDetector
@@ -36,7 +38,9 @@ from .xxe import XXEDetector
 
 __all__ = [
     "APIDetector",
+    "AuthBypassDetector",
     "CMDInjectionDetector",
+    "IDORDetector",
     "JSAnalysisDetector",
     "JSPathfinderDetector",
     "LFIDetector",
@@ -60,7 +64,9 @@ __all__ = [
 # points can guarantee a fully populated ModuleFactory registry.
 _ALL_DETECTOR_MODULES = [
     "api",
+    "authbypass",
     "cmdi",
+    "idor",
     "js_analysis",
     "jspathfinder",
     "lfi",

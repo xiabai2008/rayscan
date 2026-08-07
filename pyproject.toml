@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rayscan"
-version = "2.0.1"
+version = "2.1.0"
 description = "RayScan — 开箱即用的 Web 漏洞扫描器 | SQLi/XSS/命令注入/LFI/SSRF/XXE/RCE/API安全 | 多引擎聚合(Nuclei/sqlmap/ffuf)+MSF验证链+Profile扫描配置 | CLI+Web UI双模式"
 readme = "README.md"
 license = {text = "MIT"}

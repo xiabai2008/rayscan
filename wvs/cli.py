@@ -28,6 +28,69 @@ if sys.platform == "win32":
     except Exception:  # noqa: S110
         pass  # not available on older Windows or already reconfigured
 
+# ── P0 security: URL validation (scheme whitelist + SSRF blocking) ──
+import ipaddress
+import socket
+
+_SSRF_BLOCKED_NETS = [
+    ipaddress.ip_network('127.0.0.0/8'),
+    ipaddress.ip_network('10.0.0.0/8'),
+    ipaddress.ip_network('172.16.0.0/12'),
+    ipaddress.ip_network('192.168.0.0/16'),
+    ipaddress.ip_network('169.254.0.0/16'),  # includes 169.254.169.254 (cloud metadata)
+    ipaddress.ip_network('::1/128'),
+    ipaddress.ip_network('fc00::/7'),
+    ipaddress.ip_network('fe80::/10'),
+]
+
+_SSRF_ALLOWED_SCHEMES = {'http', 'https'}
+
+
+def _validate_target_url(url: str, allow_loopback: bool = False) -> None:
+    """Validate target URL: scheme whitelist + SSRF blocking (P0 security).
+
+    Args:
+        allow_loopback: 是否放行本地回环地址(仅供 `rayscan demo` 内置靶场使用)。
+            默认 False,保持 SSRF 防护严格性。
+
+    Raises:
+        ValueError: if URL uses disallowed scheme or resolves to blocked IP.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in _SSRF_ALLOWED_SCHEMES:
+        raise ValueError(
+            f"Disallowed URL scheme: {parsed.scheme!r}. Only http/https are permitted."
+        )
+
+    hostname = parsed.hostname
+    if not hostname:
+        return  # allow raw IPs to be caught below
+
+    # Resolve hostname to check against blocked ranges
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Not an IP literal — resolve DNS
+        try:
+            addr = ipaddress.ip_address(socket.gethostbyname(hostname))
+        except (socket.gaierror, ValueError):
+            return  # unresolvable, let the scanner handle it
+
+    # demo 场景:放行本地回环(内置靶场仅监听 127.0.0.1)
+    if allow_loopback and addr.is_loopback:
+        return
+
+    for net in _SSRF_BLOCKED_NETS:
+        if addr in net:
+            raise ValueError(
+                f"SSRF blocked: {hostname} resolves to {addr} which is in blocked range {net}"
+            )
+
+
+
+
 logger = logging.getLogger(__name__)
 
 from rich.console import Console
@@ -129,6 +192,15 @@ def cmd_scan(args):
     """执行单目标扫描"""
     target_url = args.url
 
+    # P0 security: validate URL before any network access
+    # (demo 场景通过 args.allow_loopback 放行本地内置靶场)
+    allow_loopback = bool(getattr(args, "allow_loopback", False))
+    try:
+        _validate_target_url(target_url, allow_loopback=allow_loopback)
+    except ValueError as e:
+        console.print(f"[red]URL validation failed: {e}[/red]")
+        return 1
+
     # 初始化配置
     if args.config:
         config = ConfigManager(config_file=args.config)
@@ -149,15 +221,41 @@ def cmd_scan(args):
         config.set("delay", args.delay)
     if args.rate_mode:
         config.set("rate_mode", args.rate_mode)
+    if hasattr(args, "concurrency") and args.concurrency:
+        config.set("concurrent_endpoints", max(1, args.concurrency))
+    if hasattr(args, "explain") and args.explain:
+        config.set("explain", True)
+        console.print("[cyan][*] 可解释模式已启用（--explain）[/cyan]")
 
-    # 处理 --no-nuclei（S2：默认开启 Nuclei 阶段）
-    if hasattr(args, "no_nuclei") and args.no_nuclei:
-        config.set("nuclei.enabled", False)
+    # 处理 --preset 合规预设
+    if hasattr(args, "preset") and args.preset:
+        from .profiles import ProfileManager
+
+        manager = ProfileManager()
+        profile = manager.load_profile(args.preset)
+        if profile is None:
+            console.print(f"[red]预设 '{args.preset}' 不存在（可用: default/gentle/src-quick/pentest-full/sqli-only）[/red]")
+            return 1
+        manager.apply_to_config(config, args.preset)
+        console.print(f"[cyan][*] 已应用预设 '{args.preset}': 速率 {config.get('rate', '?')} req/s, 深度 {config.get('crawl_depth', '?')}[/cyan]")
+        if args.preset == "gentle":
+            console.print(
+                Panel.fit(
+                    "[bold green]✅ 合规轻扫预设已启用[/bold green]\n"
+                    "仅只读检测，不进行利用/暴力破解/大流量探测。\n"
+                    "请确认你对目标拥有授权后再执行扫描。",
+                    border_style="green",
+                )
+            )
 
     # 处理 --insecure 参数（禁用 SSL 验证）
     if hasattr(args, "insecure") and args.insecure:
         config.set("verify_ssl", False)
         console.print("[yellow][!] 警告: SSL 证书验证已禁用，存在 MITM 攻击风险[/yellow]")
+
+    # 处理 --no-nuclei（默认启用 Nuclei 阶段）
+    if hasattr(args, "no_nuclei") and args.no_nuclei:
+        config.set("nuclei.enabled", False)
 
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
@@ -167,7 +265,7 @@ def cmd_scan(args):
     if max_time <= 0:
         max_time = 0  # 0 = unlimited
 
-    # 若启用 --resume，则加载上次 checkpoint（S2：注入 scanner 供 scan() 实际恢复）
+    # 若启用 --resume，则加载上次 checkpoint
     if hasattr(args, "resume") and args.resume:
         checkpoint = scanner.load_checkpoint(target_url)
         if checkpoint:
@@ -175,7 +273,6 @@ def cmd_scan(args):
                 f"[cyan][*] 从 checkpoint 恢复: {len(checkpoint.get('vulnerabilities', []))} 个已有漏洞, "
                 f"{len(checkpoint.get('modules_done', []))} 个已完成模块[/cyan]"
             )
-            scanner._resume_checkpoint = checkpoint
 
     # 初始化 OOB 管理器（如果指定了 OOB 服务器）
     oob_manager = None
@@ -295,6 +392,7 @@ def cmd_scan(args):
         console.print(f"[cyan]  已同步 {len(target.cookies)} 个 cookie 到扫描 session[/cyan]")
 
     # ── 利用引擎开关校验（默认禁用） ──
+    exploit_enabled = False
     if hasattr(args, "i_have_permission") and args.i_have_permission:
         if os.environ.get("RAYSCAN_ENABLE_EXPLOIT") != "1":
             console.print(
@@ -319,6 +417,7 @@ def cmd_scan(args):
             console.print("[yellow]已取消。[/yellow]")
             return 0
         logger.warning("[EXPLOIT] 用户已确认授权 — 启用自动利用模块，目标: %s", target_url)
+        exploit_enabled = True
 
     # 执行扫描
     console.print(
@@ -401,6 +500,53 @@ def cmd_scan(args):
             console.print(f"[green]📄 报告已兜底保存: {fallback_path.resolve()}[/green]")
         except Exception as e2:
             console.print(f"[red]报告兜底保存也失败: {e2}[/red]")
+
+    # ── 利用阶段（仅授权确认后执行） ──
+    if exploit_enabled and result is not None and result.vulnerabilities:
+        console.print(
+            Panel.fit(
+                "[bold red]⚠ 自动利用阶段 ⚠[/bold red]\n"
+                "已确认授权，对扫描发现的漏洞执行自动利用验证。\n"
+                "支持: SQLi(SQLMap/手工提取)、CMDi、RCE。",
+                border_style="red",
+            )
+        )
+        try:
+            from .exploit.engine import ExploitEngine
+
+            async def run_exploits():
+                engine = ExploitEngine()
+                from rich.table import Table as ExploitTable
+
+                et = ExploitTable(title="利用结果")
+                et.add_column("类型", style="cyan")
+                et.add_column("URL")
+                et.add_column("方法")
+                et.add_column("结果", style="green")
+                for v in result.vulnerabilities:
+                    try:
+                        er = await engine.exploit(v)
+                        status = "成功" if er.success else "未利用"
+                        et.add_row(
+                            v.type.value,
+                            v.url or "-",
+                            er.method or "-",
+                            f"[{'green' if er.success else 'yellow'}]{status}[/{'green' if er.success else 'yellow'}]",
+                        )
+                        logger.info("[EXPLOIT] %s @ %s → %s", v.type.value, v.url, status)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning("[EXPLOIT] %s 利用失败: %s", v.type.value, e)
+                        et.add_row(v.type.value, v.url or "-", "-", "[yellow]失败[/yellow]")
+                return et
+
+            try:
+                exploit_table = asyncio.run(run_exploits())
+                console.print(exploit_table)
+            except Exception as e:  # noqa: BLE001
+                console.print(f"[red]利用阶段异常: {e}[/red]")
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[red]利用模块加载失败（请检查 RAYSCAN_ENABLE_EXPLOIT=1）: {e}[/red]")
+
     return 0
 
 
@@ -542,7 +688,7 @@ def cmd_version(args):
     """显示版本信息"""
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2008",
+            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2004",
             border_style="cyan",
         )
     )
@@ -685,6 +831,9 @@ def cmd_use(args):
         config.set("verify_ssl", False)
     if args.max_time:
         config.set("max_time", args.max_time)
+    if hasattr(args, "explain") and args.explain:
+        config.set("explain", True)
+        console.print("[cyan][*] 可解释模式已启用（--explain）[/cyan]")
 
     # Set up scanner
     session = HTTPPool(config)
@@ -702,6 +851,12 @@ def cmd_use(args):
         scanner.load_all_modules()
 
     # Apply CLI module overrides
+    if hasattr(args, "modules") and args.modules:
+        for mod in args.modules:
+            if mod in scanner._modules:
+                console.print(f"[dim]模块 {mod} 已在 Profile 中启用[/dim]")
+            else:
+                scanner.load_module(mod)
     if hasattr(args, "disabled_modules") and args.disabled_modules:
         for mod_name in list(scanner._modules.keys()):
             if mod_name in args.disabled_modules:
@@ -807,6 +962,22 @@ def display_result(result: ScanResult, elapsed: float, args):
     # 控制台报告
     reporter.report(result)
 
+    # --explain: 输出每个漏洞的信号证据链
+    if hasattr(args, "explain") and args.explain:
+        from rich.panel import Panel as ExplainPanel
+
+        for v in result.vulnerabilities:
+            chain = getattr(v, "evidence_chain", None) or []
+            if not chain:
+                continue
+            lines = [f"[bold]{v.title}[/bold] @ [cyan]{v.url}[/cyan]"]
+            lines.append(f"[dim]confidence={v.confidence.value} severity={v.severity.value}[/dim]")
+            for i, ev in enumerate(chain, 1):
+                detail = ev.get("detail", "")
+                kind = ev.get("kind", "")
+                lines.append(f"  {i}. [yellow]{kind}[/yellow]: {detail}")
+            console.print(ExplainPanel("\n".join(lines), border_style="cyan", title=f"Evidence #{v.id[:8]}"))
+
     # 确定输出路径和格式
     if args.output:
         output_file = Path(args.output)
@@ -827,7 +998,7 @@ def display_result(result: ScanResult, elapsed: float, args):
     if fmt == "html":
         html_reporter.generate(result, output_file)
     elif fmt == "json":
-        html_reporter.generate_json(result, output_file)
+        json_reporter.generate(result, output_file)
     elif fmt == "markdown":
         md_reporter.generate(result, output_file)
     elif fmt == "sarif":
@@ -850,9 +1021,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # passive 命令
+    passive_parser = sub.add_parser("passive", help="被动扫描模式：启动代理捕获真实流量并检测")
+    passive_parser.add_argument(
+        "--listen",
+        default="127.0.0.1",
+        help="代理监听地址（默认 127.0.0.1）",
+    )
+    passive_parser.add_argument("--port", type=int, default=8081, help="代理监听端口（默认 8081）")
+    passive_parser.add_argument(
+        "--target",
+        help="目标域名/IP（仅检测该域的流量，其余透明转发；建议指定以避免误扫）",
+    )
+    passive_parser.add_argument("-o", "--output", help="输出报告文件路径（JSON）")
+    passive_parser.add_argument(
+        "--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块）"
+    )
+    passive_parser.add_argument("--modules", nargs="+", help="指定启用的模块（如 sqli xss）")
+    passive_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
+    passive_parser.add_argument("--explain", action="store_true", help="可解释模式：输出证据链")
+
     # scan 命令
     scan_parser = sub.add_parser("scan", help="扫描单个目标")
     scan_parser.add_argument("url", help="目标 URL（支持 http/https）")
+    scan_parser.add_argument(
+        "--preset",
+        choices=["default", "gentle", "src-quick", "pentest-full", "sqli-only"],
+        help="扫描预设（gentle=合规轻扫，低速率有限模块）",
+    )
     scan_parser.add_argument("-o", "--output", help="输出报告文件路径")
     scan_parser.add_argument(
         "-f",
@@ -869,6 +1065,11 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--modules", nargs="+", help="指定启用的模块（如 sqli xss）")
     scan_parser.add_argument("--no-modules", nargs="+", dest="disabled_modules", help="禁用的模块")
     scan_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
+    scan_parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="深度检测可解释模式：输出每个漏洞判定的信号证据链（baseline 差异/命中特征/置信度依据）",
+    )
 
     # 扫描控制选项
     control_group = scan_parser.add_argument_group("扫描控制")
@@ -876,19 +1077,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-time", type=int, default=7200, help="全局扫描超时（秒），默认 7200（2小时），0 表示无限制"
     )
     control_group.add_argument("--resume", action="store_true", help="从上次 checkpoint 恢复扫描")
-    control_group.add_argument(
-        "--no-nuclei",
-        action="store_true",
-        dest="no_nuclei",
-        help="禁用 Nuclei 模板扫描阶段（默认开启：CLI 可用走模板扫描，不可用走内置回退）",
-    )
     control_group.add_argument("--rate", type=int, default=10, help="每秒最大请求数（默认 10）")
+    control_group.add_argument(
+        "--concurrency", type=int, help="全局端点扫描并发数（默认 10，跨模块共享）"
+    )
     control_group.add_argument(
         "--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)"
     )
     control_group.add_argument("--delay", type=float, default=0.0, help="请求间延迟（秒）")
     control_group.add_argument("-c", "--config", type=str, help="配置文件路径（YAML/JSON）")
     control_group.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证（不推荐，存在安全风险）")
+
+    # Nuclei 选项（默认启用）
+    nuclei_group = scan_parser.add_argument_group("Nuclei 模板扫描")
+    nuclei_group.add_argument(
+        "--no-nuclei",
+        action="store_true",
+        dest="no_nuclei",
+        help="禁用 Nuclei 模板扫描阶段（默认启用：CLI 可用走模板扫描，不可用走内置回退）",
+    )
 
     # 利用引擎选项（默认关闭）
     exploit_group = scan_parser.add_argument_group("利用引擎（默认禁用）")
@@ -934,6 +1141,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     # batch 命令
     batch_parser = sub.add_parser("batch", help="批量扫描")
+
+    # multi 命令 — 多引擎聚合扫描
+    multi_parser = sub.add_parser("multi", help="多引擎聚合扫描 (RayScan + Nuclei + AWVS + Nessus)")
+    multi_parser.add_argument("url", help="目标 URL")
+    multi_parser.add_argument("-o", "--output", help="输出报告文件路径")
+    multi_parser.add_argument("-f", "--format", choices=["json", "html", "markdown"], default="json", help="报告格式")
+    multi_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
+    multi_parser.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证")
     batch_parser.add_argument("file", help="目标列表文件（每行一个 URL）")
     batch_parser.add_argument("-o", "--output", help="汇总报告输出路径")
     batch_parser.add_argument("--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块）")
@@ -945,6 +1160,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     # version 命令
     sub.add_parser("version", help="显示版本信息")
+
+    # check-engines 命令
+    sub.add_parser("check-engines", help="检查外部引擎可用性（Nuclei/sqlmap/ffuf/AWVS/Nessus/MSF）")
+
+    # demo 命令
+    demo_parser = sub.add_parser("demo", help="一键演示：启动内置靶场并自动扫描")
+    demo_parser.add_argument("--port", type=int, default=18923, help="演示靶场端口（默认 18923）")
+    demo_parser.add_argument("-o", "--output", help="输出报告文件路径")
+    demo_parser.add_argument(
+        "-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式"
+    )
+    demo_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
+
+    # rules 命令
+    rules_parser = sub.add_parser("rules", help="规则管理（status/init/update）")
+    rules_sub = rules_parser.add_subparsers(dest="rules_action", required=True)
+    rules_sub.add_parser("status", help="查看规则来源状态")
+    rules_sub.add_parser("init", help="初始化规则目录与示例")
+    rules_update = rules_sub.add_parser("update", help="增量更新规则（git pull）")
+    rules_update.add_argument("sources", nargs="*", help="指定来源（nuclei/xray/beebeeto/bugscan），默认全部")
+    rules_update.add_argument("--timeout", type=int, default=120, help="git pull 超时秒数（默认 120）")
 
     # profile 命令
     profile_parser = sub.add_parser("profile", help="Profile 管理")
@@ -990,6 +1226,11 @@ def build_parser() -> argparse.ArgumentParser:
         "-f", "--format", choices=["json", "html", "markdown", "sarif", "csv"], default="json", help="报告格式"
     )
     use_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
+    use_parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="深度检测可解释模式：输出每个漏洞判定的信号证据链",
+    )
     use_parser.add_argument("--auth", help="认证文件路径（JSON）")
     use_parser.add_argument("--max-time", type=int, default=7200, help="扫描超时（秒）")
     use_parser.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证")
@@ -999,6 +1240,424 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+
+
+def cmd_multi(args):
+    """多引擎聚合扫描"""
+    from .config import ConfigManager
+    from .core import HTTPPool, WAVScanner
+    from .models import ScanTarget
+
+    target_url = args.url
+    try:
+        _validate_target_url(target_url)
+    except ValueError as e:
+        console.print(f"[red]URL validation failed: {e}[/red]")
+        return 1
+
+    config = ConfigManager()
+    if args.insecure:
+        config.set("verify_ssl", False)
+
+    session = HTTPPool(config)
+    scanner = WAVScanner(config, session)
+    scanner.load_all_modules()
+
+    console.print(Panel.fit(
+        f"[bold cyan]RayScan Multi-Engine Scan[/bold cyan]\n"
+        f"目标: [bold]{target_url}[/bold]\n"
+        f"引擎: RayScan + Nuclei + AWVS + Nessus",
+        border_style="cyan",
+    ))
+
+    import asyncio
+    import time
+
+    target = ScanTarget(url=target_url)
+    start = time.perf_counter()
+
+    async def run():
+        try:
+            return await scanner.run_multi_engine_scan(target_url)
+        finally:
+            await session.close()
+
+    try:
+        vulns = asyncio.run(run())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]扫描被中断[/yellow]")
+        return 130
+    except Exception as e:
+        console.print(f"\n[red]扫描异常: {e}[/red]")
+        return 1
+
+    elapsed = time.perf_counter() - start
+
+    from rich.table import Table
+    table = Table(title=f"Multi-Engine Scan Results ({elapsed:.1f}s)")
+    table.add_column("Severity", style="red")
+    table.add_column("Type", style="cyan")
+    table.add_column("URL")
+    table.add_column("置信度", style="yellow")
+    table.add_column("来源引擎")
+
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    vulns.sort(key=lambda v: severity_order.get(v.severity.value, 5))
+
+    multi_count = 0
+    for v in vulns:
+        engines = (v.context or {}).get("merged_from_engines") or [v.module or "rayscan"]
+        is_multi = len(engines) >= 2
+        if is_multi:
+            multi_count += 1
+        engines_str = ", ".join(sorted(engines))
+        # 多引擎高可信:星标 + 高亮
+        marker = "[bold green]★[/bold green] " if is_multi else ""
+        sev_text = f"[{'bold red' if is_multi else 'red'}]{v.severity.value.upper()}[/{'bold red' if is_multi else 'red'}]"
+        table.add_row(f"{marker}{sev_text}", v.type.value, v.url or "-", v.confidence.value.upper(), engines_str)
+
+    console.print(table)
+    console.print(f"[green]共发现 {len(vulns)} 个漏洞[/green]")
+    if multi_count:
+        console.print(f"[bold green]★ {multi_count} 个为多引擎确认的高可信漏洞（可优先提交 SRC）[/bold green]")
+
+    # Save report
+    import json
+    import re
+    from datetime import datetime
+    from pathlib import Path
+
+    result = ScanResult(target=target)
+    result.vulnerabilities = vulns
+    result.duration = elapsed
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
+    reports_dir = Path("scan_reports")
+    reports_dir.mkdir(exist_ok=True)
+    output_file = args.output or (reports_dir / f"multi_report_{safe_name}_{timestamp}.json")
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(
+        json.dumps(result.to_dict(), indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+    console.print(f"[green]报告已保存: {output_file.resolve()}[/green]")
+
+    return 0
+
+def cmd_check_engines(args):
+    """检查外部引擎可用性"""
+    from .config import ConfigManager
+    from .integrations import (
+        AWVSIntegration,
+        FfufIntegration,
+        MetasploitIntegration,
+        NessusIntegration,
+        NucleiIntegration,
+        SqlmapIntegration,
+        WappalyzerIntegration,
+    )
+
+    config = ConfigManager()
+    engines = {
+        "AWVS":        AWVSIntegration(config),
+        "Nessus":      NessusIntegration(config),
+        "Nuclei":      NucleiIntegration(config),
+        "sqlmap":      SqlmapIntegration(config),
+        "ffuf":        FfufIntegration(config),
+        "Wappalyzer":  WappalyzerIntegration(config),
+        "Metasploit":  MetasploitIntegration(config),
+    }
+
+    from rich.table import Table
+    table = Table(title="External Engine Health Check")
+    table.add_column("Engine", style="cyan")
+    table.add_column("Status", style="green")
+    table.add_column("Details")
+
+    for name, engine in engines.items():
+        available = engine.is_available
+        status = "[green]AVAILABLE[/green]" if available else "[yellow]NOT AVAILABLE[/yellow]"
+        detail = "-" if available else "未安装或未配置"
+        table.add_row(name, status, detail)
+
+    console.print(table)
+    return 0
+
+
+def cmd_passive(args):
+    """被动扫描模式:启动 MITM 代理,捕获真实流量并检测"""
+    from .config import ConfigManager
+    from .core import HTTPPool, WAVScanner
+    from .core.crawler import DiscoveredEndpoint
+    from .models import ScanTarget
+
+    config = ConfigManager()
+    if hasattr(args, "explain") and args.explain:
+        config.set("explain", True)
+    session = HTTPPool(config)
+    scanner = WAVScanner(config, session)
+
+    # 模块加载
+    if hasattr(args, "all_modules") and args.all_modules:
+        scanner._load_all_modules = True
+        scanner.load_all_modules()
+        console.print(f"[cyan][*] 被动扫描加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
+    elif hasattr(args, "modules") and args.modules:
+        for mod in args.modules:
+            scanner.load_module(mod)
+        console.print(f"[cyan][*] 被动扫描模块: {', '.join(scanner._modules.keys())}[/cyan]")
+    else:
+        scanner.load_all_modules()
+
+    target_filter = args.target or None
+    if target_filter:
+        target_filter = target_filter.rstrip("/")
+        if target_filter.startswith("http://") or target_filter.startswith("https://"):
+            from urllib.parse import urlparse as _up
+
+            target_filter = _up(target_filter).netloc or target_filter
+        console.print(f"[cyan][*] 目标过滤: {target_filter} (仅检测该域的流量)[/cyan]")
+    else:
+        console.print(
+            Panel.fit(
+                "[bold yellow]⚠ 未指定 --target,将检测所有经过代理的 HTTP 流量。[/bold yellow]\n"
+                "建议在共享网络环境指定 --target 限定检测范围,避免误扫他人流量。",
+                border_style="yellow",
+            )
+        )
+
+    base_target = ScanTarget(url=f"http://{target_filter or '127.0.0.1'}")
+
+    async def scan_callback(endpoint: DiscoveredEndpoint) -> list:
+        """对捕获端点执行全部已加载模块的检测。"""
+        if not endpoint.parameters:
+            return []
+        ep_target = ScanTarget(
+            url=endpoint.url,
+            methods=[endpoint.method],
+            params=endpoint.parameters if endpoint.method.upper() == "GET" else None,
+            data=endpoint.parameters if endpoint.method.upper() == "POST" else None,
+        )
+        found: list = []
+        for mod_name, module in scanner._modules.items():
+            try:
+                vulns = await module.scan(ep_target)
+                for v in vulns:
+                    v.module = mod_name
+                    v.parameter = list(endpoint.parameters.keys())[0] if endpoint.parameters else None
+                    v.parameter_type = endpoint.param_types.get(v.parameter or "", "query")
+                    if hasattr(v, "context") and isinstance(v.context, dict):
+                        v.context["source"] = "passive"
+                    found.append(v)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[Passive] 模块 %s 检测失败: %s", mod_name, e)
+        return found
+
+    from .core.passive import PassiveProxy
+
+    proxy = PassiveProxy(
+        scan_callback=scan_callback,
+        target_filter=target_filter,
+        listen_host=args.listen,
+        listen_port=args.port,
+    )
+
+    try:
+        asyncio.run(proxy.serve_forever())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]被动扫描已停止[/yellow]")
+    finally:
+        asyncio.run(proxy.close())
+
+    result = proxy.result
+    console.print(
+        Panel.fit(
+            f"[bold cyan]被动扫描统计[/bold cyan]\n"
+            f"捕获请求: {result.requests_captured}\n"
+            f"发现端点: {result.endpoints_discovered}\n"
+            f"检测请求: {result.requests_scanned}\n"
+            f"发现漏洞: [bold red]{len(result.vulnerabilities)}[/bold red]",
+            border_style="cyan",
+        )
+    )
+    for v in result.vulnerabilities:
+        console.print(f"  [red][{v.severity.value.upper()}][/red] {v.type.value} @ {v.url}")
+
+    # 保存报告
+    if result.vulnerabilities and (hasattr(args, "output") and args.output):
+        from .models import ScanResult as _SR
+        from .reporting import JSONReporter
+
+        fake_result = _SR(target=base_target)
+        fake_result.vulnerabilities = result.vulnerabilities
+        JSONReporter().generate_json(fake_result, Path(args.output))
+        console.print(f"[green]📄 报告已保存: {Path(args.output).resolve()}[/green]")
+    return 0
+
+
+def cmd_demo(args):
+    """一键演示:启动内置靶场并自动扫描"""
+
+    from .demo_lab import DemoLab
+
+    console.print(
+        Panel.fit(
+            "[bold cyan]RayScan 一键演示[/bold cyan]\n"
+            "将启动内置演示靶场(仅 127.0.0.1),自动扫描 SQLi + XSS。\n"
+            "[yellow]⚠ 仅限本地功能验证,不对外暴露。[/yellow]",
+            border_style="cyan",
+        )
+    )
+
+    lab = DemoLab(port=args.port)
+    try:
+        base = lab.start()
+        console.print(f"[green]✓ 演示靶场已启动: {base}[/green]")
+
+        # 直接对带参端点调用检测模块(Demo 聚焦展示检测能力与证据链;
+        # 完整 crawler 链路见 `rayscan scan` 对真实目标的扫描)
+        from .config import ConfigManager
+        from .core import HTTPPool, WAVScanner
+        from .models import ScanResult, ScanTarget
+
+        config = ConfigManager()
+        config.set("verify_ssl", False)
+        config.set("explain", True)  # 演示证据链
+        config.set("enable_waf_detection", False)
+        session = HTTPPool(config)
+        scanner = WAVScanner(config, session)
+        scanner.load_module("sqli")
+        scanner.load_module("xss")
+
+        async def run():
+            try:
+                result = ScanResult(target=ScanTarget(url=base + "/"))
+                # SQLi 端点:id 参数
+                sqli_target = ScanTarget(url=base + "/user", params={"id": "1"})
+                sqli_vulns = await scanner._modules["sqli"].scan(sqli_target)
+                result.vulnerabilities.extend(sqli_vulns)
+                # XSS 端点:name 参数
+                xss_target = ScanTarget(url=base + "/", params={"name": "world"})
+                xss_vulns = await scanner._modules["xss"].scan(xss_target)
+                result.vulnerabilities.extend(xss_vulns)
+                return result
+            finally:
+                await session.close()
+
+        try:
+            result = asyncio.run(run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]扫描被中断[/yellow]")
+            return 130
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[red]扫描异常: {e}[/red]")
+            return 1
+
+        # 展示结果
+        from .reporting import ConsoleReporter, CSVReporter, HTMLReporter, JSONReporter, MarkdownReporter
+
+        reporter = ConsoleReporter()
+        reporter.report(result)
+
+        # --explain 证据链展示
+        for v in result.vulnerabilities:
+            chain = getattr(v, "evidence_chain", None) or []
+            if not chain:
+                continue
+            lines = [f"[bold]{v.title}[/bold] @ [cyan]{v.url}[/cyan]"]
+            for i, ev in enumerate(chain, 1):
+                lines.append(f"  {i}. [yellow]{ev.get('kind', '')}[/yellow]: {ev.get('detail', '')}")
+            console.print(Panel.fit("\n".join(lines), border_style="cyan", title=f"Evidence {v.id[:8]}"))
+
+        # 保存报告
+        if args.output:
+            output_file = Path(args.output)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            fmt = args.format or "json"
+            if fmt == "html":
+                HTMLReporter().generate(result, output_file)
+            elif fmt == "json":
+                JSONReporter().generate(result, output_file)
+            elif fmt == "markdown":
+                MarkdownReporter().generate(result, output_file)
+            elif fmt == "csv":
+                CSVReporter().generate(result, output_file)
+            elif fmt == "sarif":
+                JSONReporter().generate_sarif(result, output_file)
+            console.print(f"[green]📄 {fmt.upper()} 报告已保存: {output_file.resolve()}[/green]")
+        else:
+            console.print(
+                f"[green]✓ Demo 完成: 发现 {len(result.vulnerabilities)} 个漏洞"
+                f"（可用 -o report.json 保存报告）[/green]"
+            )
+        return 0
+    finally:
+        lab.stop()
+        console.print("[dim]演示靶场已停止[/dim]")
+
+
+def cmd_rules(args):
+    """规则管理:status / init / update"""
+    from .core.rule_updater import BUILTIN_RULES_DIR, RuleUpdater
+
+    updater = RuleUpdater()
+
+    if args.rules_action == "status":
+        console.print(Panel.fit("[bold cyan]RayScan 规则状态[/bold cyan]", border_style="cyan"))
+        from rich.table import Table as RulesTable
+
+        table = RulesTable(title="规则来源")
+        table.add_column("来源", style="cyan")
+        table.add_column("启用", style="green")
+        table.add_column("模板数", style="yellow")
+        table.add_column("路径")
+        table.add_column("Git 仓库")
+        for row in updater.status():
+            table.add_row(
+                row["name"],
+                "[green]✓[/green]" if row["enabled"] else "[dim]✗[/dim]",
+                str(row["templates"]),
+                row["path"],
+                "[green]是[/green]" if row["is_git"] else "[dim]否[/dim]",
+            )
+        console.print(table)
+        if BUILTIN_RULES_DIR.exists():
+            console.print(f"[dim]内置规则目录: {BUILTIN_RULES_DIR}[/dim]")
+
+    elif args.rules_action == "init":
+        console.print("[cyan][*] 初始化规则目录...[/cyan]")
+        created = updater.init()
+        for path, msg in created.items():
+            console.print(f"  [green]✓[/green] {path} ({msg})")
+        console.print("[green]规则目录初始化完成。运行 `rayscan rules update` 拉取外部规则。[/green]")
+
+    elif args.rules_action == "update":
+        console.print("[cyan][*] 更新规则(增量 git pull)...[/cyan]")
+        results = updater.update(sources=args.sources, timeout=args.timeout)
+        from rich.table import Table as UpdTable
+
+        table = UpdTable(title="规则更新结果")
+        table.add_column("来源", style="cyan")
+        table.add_column("Git", style="green")
+        table.add_column("更新", style="yellow")
+        table.add_column("模板数")
+        table.add_column("说明")
+        for r in results:
+            table.add_row(
+                r.name,
+                "[green]✓[/green]" if r.is_git else "[dim]—[/dim]",
+                "[green]✓[/green]" if r.updated else "[dim]—[/dim]",
+                f"{r.templates_before} → {r.templates_after}",
+                r.message[:80],
+            )
+        console.print(table)
+        console.print("[dim]提示:非 git 仓库的来源可用 `rules init` 建目录后手动放置规则。[/dim]")
+
+    return 0
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -1006,6 +1665,9 @@ def main():
     if args.command == "scan":
         setup_logging(args.verbose)
         return cmd_scan(args)
+    elif args.command == "passive":
+        setup_logging(args.verbose)
+        return cmd_passive(args)
     elif args.command == "batch":
         setup_logging(args.verbose)
         return cmd_batch(args)
@@ -1013,6 +1675,15 @@ def main():
         return cmd_list_modules(args)
     elif args.command == "version":
         return cmd_version(args)
+    elif args.command == "check-engines":
+        return cmd_check_engines(args)
+    elif args.command == "multi":
+        return cmd_multi(args)
+    elif args.command == "demo":
+        setup_logging(args.verbose)
+        return cmd_demo(args)
+    elif args.command == "rules":
+        return cmd_rules(args)
     elif args.command == "profile":
         return cmd_profile(args)
     elif args.command == "use":

@@ -6,13 +6,12 @@ No hardcoded lab paths — lab-specific logic lives in core/lab_profiles.py.
 """
 
 import asyncio
-import hashlib
 import json
 import logging
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 from ..config import ConfigManager
@@ -23,6 +22,7 @@ from ..models import (
 )
 from ..plugins.auth import APIKeyAuth, BasicAuth, BearerTokenAuth, CookieAuth, FormLoginAuth
 from .crawler import DiscoveredEndpoint, WebCrawler
+from .dedup import ResultDeduplicator, prioritize_endpoints
 from .lab_profiles import detect_lab_profile, get_lab_endpoints
 from .scanner_integrations import ScannerIntegrationsMixin
 from .session import HTTPPool
@@ -75,11 +75,11 @@ class WAVScanner(ScannerIntegrationsMixin):
         # 已加载的检测模块 {module_name -> module_instance}
         self._modules: Dict[str, Any] = {}
         self._loaded_module_names: List[str] = []
-        self._vuln_seen: Set[str] = set()
+        # dedup handled by self.dedup
         self._global_baseline_cache: Dict[str, Dict[str, Any]] = {}  # Cross-module baseline cache
 
         # 去重集合（存储 Vulnerability 的去重签名）
-        self._vuln_seen: Set[str] = set()
+        # dedup handled by self.dedup
 
         # 运行时统计
         self._stats: Dict[str, Any] = {
@@ -98,12 +98,6 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._modules_completed: List[str] = []
         self._scan_max_time: int = 0  # CLI 设置，用于超时判断
 
-        # S2 checkpoint 复活：初始化防 AttributeError（_save_checkpoint 引用）
-        self._modules_done: List[str] = []  # 已完成模块（按批）
-        self._last_checkpoint_time: float = 0.0
-        self._checkpoint_interval: float = 30.0  # 落盘间隔（秒）
-        self._resume_checkpoint: Optional[Dict[str, Any]] = None  # CLI --resume 注入
-
         # 是否加载全部模块（包括 lite 模块——必须在 _resolve_enabled_modules 之前初始化）
         self._load_all_modules = False
 
@@ -117,8 +111,35 @@ class WAVScanner(ScannerIntegrationsMixin):
         # 集成开关（默认关闭，避免未导入的集成模块导致崩溃）
         self._integrations_enabled = False
 
-        # Nuclei 集成实例（懒加载；config nuclei.enabled 默认 True，S2 起接入主流程）
+        # 漏洞去重缓存(dedup 依赖,scan() 会 clear 它)
+        self._vuln_seen: set = set()
+
+        # Nuclei 集成实例(懒加载;config nuclei.enabled 默认 True,接入主流程)
         self._nuclei_integration = None
+
+        # S2 checkpoint 复活:初始化防 AttributeError(save_checkpoint 引用)
+        self._modules_done: List[str] = []  # 已完成模块(按批)
+        self._last_checkpoint_time: float = 0.0
+        self._checkpoint_interval: float = 30.0  # 落盘间隔(秒)
+        self._resume_checkpoint: Optional[Dict[str, Any]] = None  # CLI --resume 注入
+
+        # 扫描编排器 (Phase 2: P2-1) — 默认装配预置 stages,WAVScanner.scan() 作为 facade
+        self._orchestrator = self._build_orchestrator()
+
+    def _build_orchestrator(self):
+        """装配默认扫描编排器(可被子类覆盖以替换/增删 stage)。"""
+        from .orchestrator import ScanOrchestrator
+        from .stages import DedupStage, LabAuthStage, OADetectionStage, WAFDetectionStage
+
+        return ScanOrchestrator(
+            self,
+            stages=[
+                WAFDetectionStage(self),
+                LabAuthStage(self),
+                OADetectionStage(self),
+                DedupStage(self),
+            ],
+        )
 
     @staticmethod
     def _ensure_params(ep: DiscoveredEndpoint) -> tuple:
@@ -545,56 +566,32 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     @staticmethod
     def _normalize_vuln_url(url: str) -> str:
-        """Strip query string AND fragment for dedup — /get?name=test#x and /get are the same endpoint."""
-        u = url.split("?")[0].split("#")[0].rstrip("/")
-        import re
-
-        u = re.sub(r"/\d+$", "/:id", u)
-        # Collapse static resource sub-paths — /themes/original/css/foo.css → /themes/*
-        u = re.sub(
-            r"/(css|js|img|images|themes|theme|static|assets|fonts|locale|lang)/.+", r"/\1/*", u, flags=re.IGNORECASE
-        )
-        # P8: Collapse dynamic path segments — /user/123/profile → /user/:id/profile
-        u = re.sub(r"/(\d{2,})/", "/:id/", u)
-        # P8: Collapse hash-like segments — /page/a1b2c3 → /page/:hash
-        u = re.sub(r"/[/]?[a-f0-9]{16,}", "/:hash", u)
-        return u
+        return ResultDeduplicator.normalize_vuln_url(url)
 
     def _vuln_signature(self, v: Vulnerability) -> str:
-        """
-        计算漏洞去重签名
-
-        基于 (type, url, parameter, payload) 的组合。
-        同一漏洞只报告一次。URL 经过归一化（去掉查询参数和锚点）。
-        """
-        parts = [
-            v.type.value,
-            self._normalize_vuln_url(v.url or ""),
-            v.parameter or "",
-            v.payload or "",
-        ]
-        return "|".join(parts).lower()
+        return self.dedup.signature(v)
 
     def _deduplicate(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
-        """During dedup, keep the highest severity vulnerability; if same severity, keep higher confidence."""
-        unique: Dict[str, Vulnerability] = {}
-        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-        conf_order = {"certain": 0, "high": 1, "medium": 2, "low": 3}
+        return self.dedup.deduplicate(vulns)
 
-        for v in vulns:
-            sig = self._vuln_signature(v)
-            if sig not in unique:
-                unique[sig] = v
-            else:
-                existing = unique[sig]
-                # Keep higher severity
-                if severity_order.get(v.severity.value, 5) < severity_order.get(existing.severity.value, 5):
-                    unique[sig] = v
-                # Same severity: keep higher confidence
-                elif severity_order.get(v.severity.value, 5) == severity_order.get(existing.severity.value, 5):
-                    if conf_order.get(v.confidence.value, 5) < conf_order.get(existing.confidence.value, 5):
-                        unique[sig] = v
-        return list(unique.values())
+    async def _run_nuclei(self, target: ScanTarget) -> List[Vulnerability]:
+        """S2 接入:运行 Nuclei 外部引擎(模板扫描),结果由主流程去重合并。
+
+        nuclei CLI 可用 → 智能模板扫描;CLI 不可用 → 内置回退模板(S1 内容特征验证)。
+        """
+        from ..integrations.nuclei_integration import NucleiIntegration
+
+        if self._nuclei_integration is None:
+            self._nuclei_integration = NucleiIntegration(config=self.config, use_template_manager=True)
+
+        if not self._nuclei_integration.is_available:
+            logger.info("[Nuclei] nuclei CLI 不可用，使用内置回退模板（内容特征验证）")
+
+        return await self._nuclei_integration.scan(
+            target.url,
+            cookies=target.cookies or None,
+            severities=None,  # 默认全部严重级，由结果合并后统一去重/排序
+        )
 
     def _call_progress(self, module_name: str, done: int, total: int, pct: int = 0):
         """向 GUI 发送进度回调（如果有注册回调的话）"""
@@ -616,16 +613,15 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     # ── Checkpoint save/load ─────────────────────────────────────
 
-    def _checkpoint_file(self, target_url: str) -> Path:
-        import tempfile
+    # -- Checkpoint (原生文件实现,与 ResultDeduplicator 路径一致) --
 
-        url_hash = hashlib.md5(target_url.encode()).hexdigest()[:12]
-        return Path(tempfile.gettempdir()) / f"rayscan_checkpoint_{url_hash}.json"
+    def _checkpoint_file(self, target_url: str) -> Path:
+        return ResultDeduplicator._checkpoint_path(target_url)
 
     def _try_save_checkpoint(
         self, target: ScanTarget, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]
     ) -> None:
-        """S2 checkpoint：按 _checkpoint_interval 间隔限流落盘，避免每批都写盘。"""
+        """S2 checkpoint:按 _checkpoint_interval 间隔限流落盘,避免每批都写盘。"""
         now = time.time()
         if now - self._last_checkpoint_time >= self._checkpoint_interval:
             self._save_checkpoint(target.url, vulns, endpoints)
@@ -639,14 +635,14 @@ class WAVScanner(ScannerIntegrationsMixin):
             data = {
                 "target": target_url,
                 "vulnerabilities": [v.to_dict() for v in vulns],
-                "modules_done": list(self._modules_done),
+                "modules_done": list(getattr(self, "_modules_done", [])),
                 "endpoints_found": len(endpoints),
                 "requests_made": self.session.get_stats().get("total_requests", 0),
                 "timestamp": time.time(),
             }
             cp.write_text(json.dumps(data, ensure_ascii=False, default=str), encoding="utf-8")
             self._last_checkpoint_time = time.time()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.debug(f"Checkpoint save failed: {e}")
 
     def load_checkpoint(self, target_url: str) -> Optional[Dict[str, Any]]:
@@ -655,7 +651,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         if cp.exists():
             try:
                 return json.loads(cp.read_text(encoding="utf-8"))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Checkpoint load failed: {e}")
         return None
 
@@ -663,45 +659,35 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     @staticmethod
     def _prioritize_endpoints(endpoints: List[DiscoveredEndpoint]) -> List[DiscoveredEndpoint]:
-        """Sort endpoints so most promising (dynamic, parameterised) ones are scanned first."""
-
-        def score(ep: DiscoveredEndpoint) -> int:
-            s = 0
-            if ep.parameters:
-                s -= 100  # has params → highest priority
-            if ep.method.upper() == "POST":
-                s -= 50  # POST endpoints often more interesting
-            s -= min(len(ep.parameters or {}), 10)  # more params → higher priority
-            if any(
-                k.lower() in ("id", "page", "file", "path", "url", "cmd", "exec", "query", "search")
-                for k in (ep.parameters or {})
-            ):
-                s -= 30  # interesting param names
-            return s
-
-        return sorted(endpoints, key=score)
+        """Sort endpoints (delegated to prioritize_endpoints)."""
+        return prioritize_endpoints(endpoints)
 
     # ── Core scan flow ──────────────────────────────────────────
 
     async def scan(self, target: ScanTarget) -> ScanResult:
+        """
+        执行完整扫描流程。
+
+        流程分为四个阶段:
+        1. 加载检测模块并做 WAF 检测
+        2. 靶机识别与自动认证（DVWA/Metasploitable2 等）
+        3. 爬取 + 流式检测（边爬边测，不等全部爬完）
+        4. 外部集成扫描 + 结果去重合并
+
+        Args:
+            target: 扫描目标（URL + 认证信息 + 自定义参数）
+
+        Returns:
+            ScanResult: 扫描结果（含漏洞列表、请求统计、耗时）
+
+        Raises:
+            不会抛出异常，所有错误被捕获并记录到 result.errors
+        """
         self._stats["start_time"] = time.time()
         self._vuln_seen.clear()
         self._stats["errors"] = 0
 
         result = ScanResult(target=target)
-
-        # ── S2 checkpoint 恢复：--resume 注入的已发现漏洞与已完成模块 ──
-        resume_vulns: List[Vulnerability] = []
-        skip_modules: Set[str] = set()
-        if self._resume_checkpoint:
-            for vdict in self._resume_checkpoint.get("vulnerabilities", []):
-                try:
-                    resume_vulns.append(Vulnerability.from_dict(vdict))
-                except Exception:
-                    continue
-            skip_modules = set(self._resume_checkpoint.get("modules_done", []))
-            if resume_vulns or skip_modules:
-                logger.info(f"[*] Resume: 合并 {len(resume_vulns)} 个已发现漏洞, 跳过 {len(skip_modules)} 个已完成模块")
 
         # ── Step 1: 加载模块（必须在 _print_header 之前，以便显示加载的模块）──
         # 如果 CLI 已手动加载了指定模块（--modules），跳过自动加载
@@ -716,19 +702,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._print_header(target)
 
         # ── Step 0: WAF detection (run first, broadcast results to all modules) ──
-        if self.config.get("enable_waf_detection", True) and "waf" in self._modules:
-            try:
-                waf_module = self._modules["waf"]
-                waf_target = ScanTarget(url=target.url)
-                await waf_module.scan(waf_target)
-                waf_result = waf_module.get_result() if hasattr(waf_module, "get_result") else None
-                if waf_result and waf_result.detected:
-                    logger.info(f"\n[!] WAF Detected: {waf_result.vendor} (confidence: {waf_result.confidence:.0%})")
-                    for mod in self._modules.values():
-                        if hasattr(mod, "set_waf_detected"):
-                            mod.set_waf_detected(True)
-            except Exception as e:
-                logger.debug(f"[Scanner] WAF detection skipped: {e}")
+        # (已抽取为 WAFDetectionStage,由编排器执行)
 
         # ── Inject manual cookies ──
         if target.cookies:
@@ -737,39 +711,14 @@ class WAVScanner(ScannerIntegrationsMixin):
             print(f"[+] 注入 {len(target.cookies)} 个 session cookie")
 
         # ══════════════════════════════════════════════════════════════
-        # Step 1.8: 探测靶机并认证（统一入口，只执行一次）
+        # Step 0 + 1.8 + 1.9: 编排器执行 WAF 检测 / 靶机认证 / OA 检测
         # ══════════════════════════════════════════════════════════════
-        # 设置 lab 模式标记（爬虫据此决定是否探测靶场路径/SPA检测）
-        if not target.cookies and not self._lab_profile:
-            self._lab_profile = detect_lab_profile(target.url)
-            if self._lab_profile:
-                self._lab_base_url = target.url
-                logger.info(f"[*] Detected lab profile from URL: {self._lab_profile.name}")
-                if self._lab_profile.login_path:
-                    await self._do_lab_auth()
-        self.session._lab_mode = self._lab_profile is not None
+        if self._orchestrator is not None:
+            from .orchestrator import ScanContext
 
-        # ── Step 1.9: OA 自动检测（轻量路径探测） ──
-        if "oa" in self._modules and self.config.get("modules.oa.enabled", True):
-            self._oa_detected = False
-            try:
-                # 对目标主页做一次快速指纹检测
-                import httpx
-
-                from .nuclei_template_manager import detect_oa_fingerprint
-
-                async with httpx.AsyncClient(timeout=10, verify=False) as client:
-                    resp = await client.get(target.url, follow_redirects=True)
-                    oa_name = detect_oa_fingerprint(target.url, resp.text)
-                    if oa_name:
-                        logger.info(f"[OA] 检测到 OA 系统: {oa_name} — 激活 OA 专项检测")
-                        self._oa_detected = True
-                        # 通知 OA 模块设置上下文
-                        oa_mod = self._modules.get("oa")
-                        if oa_mod and hasattr(oa_mod, "_detected_oa"):
-                            oa_mod._detected_oa = oa_name
-            except Exception:
-                self._oa_detected = False
+            ctx = ScanContext(self)
+            ctx.target = target
+            await self._orchestrator.run(ctx)
 
         # ── Crawl + 流式检测 ──
         logger.info("\n[*] Phase 1/4: Crawling + streaming detection...")
@@ -787,9 +736,30 @@ class WAVScanner(ScannerIntegrationsMixin):
         all_endpoints: List[DiscoveredEndpoint] = []
         all_vulns_before_dedup: List[Vulnerability] = []
 
+        # S2 resume:合并上次 checkpoint 已发现漏洞 + 跳过已完成模块
+        self._modules_done = []
+        if getattr(self, "_resume_checkpoint", None):
+            cp = self._resume_checkpoint
+            for vdict in cp.get("vulnerabilities", []):
+                try:
+                    v = Vulnerability.from_dict(vdict)
+                    all_vulns_before_dedup.append(v)
+                    logger.info(f"[resume] 复用已发现漏洞: {v.url} ({v.type.value})")
+                except Exception:  # noqa: BLE001
+                    logger.debug("[resume] 反序列化漏洞失败,跳过")
+            skip_modules = set(cp.get("modules_done", []))
+            if skip_modules:
+                logger.info(f"[resume] 跳过已完成模块: {sorted(skip_modules)}")
+                for m in list(self._modules.keys()):
+                    if m in skip_modules:
+                        self._modules.pop(m)
+
         async def _crawl_and_detect():
             """爬取+检测循环：爬一批，测一批"""
             module_names = list(self._modules.keys())
+            # 全局并发信号量:一次创建,跨模块共享,真正限制总并发(P2-4)
+            concurrency = max(1, int(self.config.get("concurrent_endpoints", 10)))
+            global_sem = asyncio.Semaphore(concurrency)
             try:
                 # 第一次爬取
                 eps = await self.crawler.crawl(target.url, self.session)
@@ -810,26 +780,24 @@ class WAVScanner(ScannerIntegrationsMixin):
                         for mod_name in module_names:
                             if mod_name not in self._modules:
                                 continue
-                            # S2 checkpoint：跳过 --resume 已完成模块
-                            if mod_name in skip_modules:
-                                continue
                             try:
                                 vulns = await self._run_module_concurrent(
                                     mod_name,
                                     target,
                                     batch,
-                                    concurrency=2,
-                                    global_sem=asyncio.Semaphore(2),
+                                    concurrency=concurrency,
+                                    global_sem=global_sem,
                                 )
                                 all_vulns_before_dedup.extend(vulns)
                                 if vulns:
                                     logger.info(f"[+] {mod_name}: found {len(vulns)} in batch")
                             except Exception as e:
                                 logger.debug(f"[Scanner] {mod_name} batch error: {e}")
-                            # S2 checkpoint：模块完成记录 + 定期落盘（防崩溃/超时丢失）
-                            if mod_name not in self._modules_done:
-                                self._modules_done.append(mod_name)
-                                self._try_save_checkpoint(target, all_vulns_before_dedup, eps)
+                        # S2 checkpoint: 每批流式检测后按间隔限流落盘(崩溃/超时恢复)
+                        try:
+                            self._try_save_checkpoint(target, all_vulns_before_dedup, eps)
+                        except Exception as e:  # noqa: BLE001
+                            logger.debug(f"[Scanner] checkpoint save failed: {e}")
 
             except Exception:
                 logger.exception("[Scanner] 爬取失败")
@@ -918,27 +886,37 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         all_vulns = all_vulns_before_dedup
 
-        # ── Merge resume vulnerabilities (--resume) ──
-        if resume_vulns:
-            all_vulns.extend(resume_vulns)
-
         # ── Merge JSPathfinder findings (disabled by default) ──
         if getattr(self, "_jspathfinder_vulns", None):
             all_vulns.extend(self._jspathfinder_vulns)
 
-        # ── Dedup ──
+        # ── Dedup (通过编排器 DedupStage 执行) ──
         logger.info("[*] Phase 3/4: Deduplication & confidence...")
-        unique_vulns = self._deduplicate(all_vulns)
+        if self._orchestrator is not None:
+            from .orchestrator import ScanContext
 
-        # ── Phase 3.5: Nuclei 外部引擎（S2 接入主流程，默认开） ──
+            ctx = ScanContext(self)
+            ctx.raw_vulns = all_vulns
+            await self._orchestrator.run(ctx)
+            unique_vulns = ctx.unique_vulns
+        else:
+            unique_vulns = self._deduplicate(all_vulns)
+
+        # ── Phase 3.5: Nuclei 外部引擎(默认启用;CLI 可用走模板扫描,不可用走内置回退) ──
         if self.config.get("nuclei.enabled", True):
             try:
                 nuclei_vulns = await self._run_nuclei(target)
                 if nuclei_vulns:
-                    logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings（已合并）")
+                    logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings(已合并)")
                     unique_vulns = self._deduplicate(unique_vulns + nuclei_vulns)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.debug(f"[Scanner] Nuclei phase failed: {e}")
+
+        # S2 checkpoint: 扫描结束保存最终 checkpoint(供 --resume 合并)
+        try:
+            self._save_checkpoint(target.url, unique_vulns, endpoints)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[Scanner] final checkpoint save failed: {e}")
 
         # 更新每个漏洞的扫描统计
         for v in unique_vulns:
@@ -952,12 +930,6 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         result.vulnerabilities = unique_vulns
 
-        # ── S2 checkpoint：扫描完成落盘最终 checkpoint（供 --resume 合并） ──
-        try:
-            self._save_checkpoint(target.url, unique_vulns, endpoints)
-        except Exception as e:
-            logger.debug(f"[Scanner] Final checkpoint save failed: {e}")
-
         # ── Report ──
         logger.info("[*] Phase 4/4: Generating report...")
         self._stats["end_time"] = time.time()
@@ -969,27 +941,6 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._print_summary(result)
 
         return result
-
-    async def _run_nuclei(self, target: ScanTarget) -> List[Vulnerability]:
-        """
-        S2 接入：运行 Nuclei 外部引擎（模板扫描），结果由主流程去重合并。
-
-        nuclei CLI 可用 → 智能模板扫描（S2 修复后直接传模板文件）；
-        CLI 不可用 → 内置回退模板（S1 内容特征验证版，无"可达即报"）。
-        """
-        from ..integrations.nuclei_integration import NucleiIntegration
-
-        if self._nuclei_integration is None:
-            self._nuclei_integration = NucleiIntegration(config=self.config, use_template_manager=True)
-
-        if not self._nuclei_integration.is_available:
-            logger.info("[Nuclei] nuclei CLI 不可用，使用内置回退模板（内容特征验证）")
-
-        return await self._nuclei_integration.scan(
-            target.url,
-            cookies=target.cookies or None,
-            severities=None,  # 默认全部严重级，由结果合并后统一去重/排序
-        )
 
     # Integrations moved to ScannerIntegrationsMixin (scanner_integrations.py)
     # Progress helpers moved to ScannerIntegrationsMixin (scanner_integrations.py)

@@ -1,0 +1,32 @@
+name: gentle
+description: 合规轻扫预设 — 低速率、有限模块、非侵入(面向授权验证/合规检查)
+modules:
+  enabled:
+    - sqli
+    - xss
+    - sensitive
+    - api
+  disabled:
+    - waf
+    - subdomain
+    - webshell
+    - weakpass
+    - rce
+    - cmdi
+    - lfi
+    - xxe
+    - ssrf
+    - oa
+params:
+  rate: 3
+  threads: 2
+  timeout: 30
+  crawl_depth: 1
+  crawl_max_urls: 20
+  verify_ssl: true
+  enable_waf_detection: false
+compliance:
+  # gentle 预设强制:仅只读检测,禁止一切利用与主动探测
+  exploit_enabled: false
+  ssrf_metadata_block: true
+  scan_authorization_required: true

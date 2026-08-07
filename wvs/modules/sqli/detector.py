@@ -446,6 +446,9 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
         evidence: str,
     ) -> Vulnerability:
         """Create a vulnerability object"""
+        chain = self._build_evidence_chain()
+        if not chain:
+            chain = [{"kind": "evidence", "detail": evidence[:500], "data": {}}]
         return Vulnerability(
             type=VulnerabilityType.SQL_INJECTION,
             title=f"SQL Injection ({vuln_type}) — {db_type}",
@@ -462,4 +465,5 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
             module="sqli",
             tags=["sql-injection", vuln_type, db_type],
             context={"vuln_type": vuln_type, "db_type": db_type},
+            evidence_chain=chain,
         )

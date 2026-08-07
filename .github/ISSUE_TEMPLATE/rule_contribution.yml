@@ -1,0 +1,80 @@
+name: 📦 检测规则贡献
+description: 提交一条新的检测规则 / PoC(可检测的漏洞模式),走 detect → exploit → regression 三阶段。
+labels: ["rule-contribution", "good-first-issue"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 规则贡献流程
+        请遵循 detect → exploit → regression 三阶段：
+        1. **detect**：描述漏洞的检测信号(响应特征/状态码/长度差异等)
+        2. **exploit**：(可选)描述可复现的验证请求(curl 格式)
+        3. **regression**：说明如何避免误报(基线对比策略)
+
+  - type: input
+    id: rule-name
+    attributes:
+      label: 规则名称
+      description: 简短、可检索的名称,如 `nacos-default-credential`
+    validations:
+      required: true
+
+  - type: dropdown
+    id: rule-type
+    attributes:
+      label: 规则类型
+      options:
+        - 漏洞检测(响应特征)
+        - 指纹识别
+        - 敏感路径/信息泄露
+        - 弱口令/默认凭据
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: affected-software
+    attributes:
+      label: 受影响组件
+      description: 如 泛微Ecology / Spring Boot / Nacos / 通用
+    validations:
+      required: true
+
+  - type: textarea
+    id: detect-signal
+    attributes:
+      label: 检测信号 (detect)
+      description: 命中该漏洞的响应特征。可引用 URL、请求方法、参数、响应片段。
+      placeholder: |
+        例:GET /actuator/env 返回 200 且 body 含 "spring.application.name"
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 验证与误报控制 (regression)
+      description: 如何验证是真漏洞、如何避免对无关站点误报。
+    validations:
+      required: true
+
+  - type: textarea
+    id: poc-request
+    attributes:
+      label: 复现请求 (可选, exploit)
+      description: curl 或 HTTP 报文格式,便于维护者直接验证。
+      placeholder: |
+        curl -s 'http://target/actuator/env' -H 'Accept: application/json'
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 已在测试环境/靶场验证,不依赖真实未授权目标
+          required: true
+        - label: 规则遵循 detect → exploit → regression 三阶段描述
+          required: true

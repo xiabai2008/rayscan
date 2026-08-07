@@ -102,6 +102,10 @@ class Vulnerability:
     # Context info
     context: Dict[str, Any] = field(default_factory=dict)
 
+    # Explain mode: ordered list of detection signals (Phase 1: --explain)
+    # Each entry: {"kind": str, "detail": str, "data": dict|None}
+    evidence_chain: List[Dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format (None-safe)"""
         data = asdict(self)

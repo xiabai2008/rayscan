@@ -93,9 +93,8 @@ class DetectionModule(ABC):
         self._active_session = session
 
         # P18: serializes scan() calls to prevent _found_vulns concurrency race
-        # py<3.10 无 event loop 上下文构造 asyncio.Lock() 会抛 RuntimeError
-        # （CI 3.9 矩阵暴露：无 loop 时 Lock.__init__ 调 get_event_loop），
-        # 改为惰性创建，首次进入 scan() 时初始化
+        # py<3.10 时无 event loop 上下文构造 asyncio.Lock() 会抛 RuntimeError,
+        # 改为懒加载,首次进入 scan() 时初始化(远程 v2.0 修复)
         self._scan_lock: Optional[asyncio.Lock] = None
 
         # OOB manager (optional, injected by scanner)
@@ -111,6 +110,10 @@ class DetectionModule(ABC):
         self._baseline_cache: Dict[str, Dict[str, Any]] = {}
         self._global_baseline_cache: Optional[Dict[str, Dict[str, Any]]] = None  # cross-module shared cache
         self._echo_server_checked: Dict[str, bool] = {}
+
+        # Explain mode (Phase 1): when enabled, collect ordered detection signals
+        self.explain_enabled: bool = bool(config.get("explain", False)) if config else False
+        self._explain_notes: List[Dict[str, Any]] = []
 
     def _get_module_config(self) -> ModuleConfig:
         """Get this module's configuration."""
@@ -166,11 +169,11 @@ class DetectionModule(ABC):
         # Prefer the passed-in session, fall back to self.session
         self._active_session = session if session is not None else self.session
 
-        self._stats["start_time"] = asyncio.get_event_loop().time()
+        self._stats["start_time"] = time.monotonic()
         self.logger.info(f"Starting scan of {target.url} with module {self.info.name}")
+        self._reset_explain_notes()
 
         # P18: serialize scan() — _found_vulns is instance-scoped, not concurrent-safe
-        # 惰性创建锁（py<3.10 无 loop 上下文构造 Lock 会抛 RuntimeError）
         if self._scan_lock is None:
             self._scan_lock = asyncio.Lock()
         async with self._scan_lock:
@@ -188,7 +191,7 @@ class DetectionModule(ABC):
                 self.logger.error(f"Module {self.info.name} scan failed: {e}")
                 vulnerabilities = []
 
-        self._stats["end_time"] = asyncio.get_event_loop().time()
+        self._stats["end_time"] = time.monotonic()
         return vulnerabilities
 
     @abstractmethod
@@ -453,6 +456,7 @@ class DetectionModule(ABC):
         recommendation: str = "",
         context: Optional[Dict[str, Any]] = None,
         explicit_vuln_type: Optional[VulnerabilityType] = None,
+        evidence_chain: Optional[List[Dict[str, Any]]] = None,
     ) -> Vulnerability:
         """
         Unified vulnerability object factory.
@@ -491,6 +495,8 @@ class DetectionModule(ABC):
             "api": VulnerabilityType.API_SECURITY,
             "sensitive": VulnerabilityType.INFO_DISCLOSURE,
             "waf": VulnerabilityType.INSECURE_CONFIG,
+            "idor": VulnerabilityType.BROKEN_ACCESS,
+            "authbypass": VulnerabilityType.BROKEN_ACCESS,
         }
 
         module_name = self.info.name.lower()
@@ -500,6 +506,11 @@ class DetectionModule(ABC):
                 f"[{module_name}] module name not in vuln_type_map — falling back to OTHER. Add '{module_name}' to base.py:vuln_type_map to fix."
             )
             vuln_enum_type = VulnerabilityType.OTHER
+
+        chain = evidence_chain if evidence_chain is not None else self._build_evidence_chain()
+        if not chain and evidence:
+            # Fallback: derive a minimal chain from the evidence string
+            chain = [{"kind": "evidence", "detail": evidence[:500], "data": {}}]
 
         return Vulnerability(
             type=vuln_enum_type,
@@ -517,7 +528,36 @@ class DetectionModule(ABC):
             module=self.info.name,
             tags=[self.info.name, vuln_type],
             context=context or {},
+            evidence_chain=chain,
         )
+
+    # ==================== Explain mode (Phase 1) ====================
+
+    def _explain(
+        self,
+        kind: str,
+        detail: str,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Record a detection signal for --explain mode.
+
+        Args:
+            kind: Signal kind (baseline / test / evidence / decision).
+            detail: Human-readable description of the signal.
+            data: Optional structured data (response length, timing, etc.).
+        """
+        if not self.explain_enabled:
+            return
+        self._explain_notes.append({"kind": kind, "detail": detail, "data": data or {}})
+
+    def _reset_explain_notes(self) -> None:
+        """Clear collected explain notes (called at start of each scan)."""
+        self._explain_notes = []
+
+    def _build_evidence_chain(self) -> List[Dict[str, Any]]:
+        """Return collected explain notes as the vulnerability evidence chain."""
+        return list(self._explain_notes)
 
     # ==================== Baseline comparison ====================
 
