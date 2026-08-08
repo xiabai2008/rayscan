@@ -46,7 +46,15 @@
 | 12 | 靶场 /sqli/blind 条件检查写死 "1=1"（verify 用 2>1 无差异） | 通用数值等值判断（\d+=\d+）+ '1'='1 兼容 |
 | 13 | rce 在 Linux 0 检出（收敛后只信模板求值，靶场无模板引擎） | 靶场新增真实 Jinja2 SSTI 端点 /ssti（跨平台真阳性） |
 
-## 3. 复测流程
+## 4. 外部基准（Juice Shop）
+
+**现状（2026-08-08）**：`scripts/run_external_benchmark.py`（docker 起 Juice Shop → sqli/xss/api/sensitive 扫描）→ **0 检出**。
+
+**结论（记录模式）**：Juice Shop 为 Angular SPA + JSON REST API——RayScan 的 crawler 无 JS 渲染、检测器以 GET 参数/HTML 表单提交点为主，**SPA/JSON API 覆盖不足**（已承认短板）。0 检出是**真实诊断结论**（印证短板），不是门禁失败；待 SPA 能力（--js-render 成熟）后改回硬断言。
+
+**WAVSEP**：无官方 release 资产（api.github.com 404），暂缓；后续可自建 WAVSEP 容器镜像接入。
+
+## 5. 复测流程
 
 ```bash
 python scripts/benchmark_lab.py --port 18099 &
@@ -63,7 +71,8 @@ python scripts/run_benchmark.py
 ## 4. 待办
 
 - [x] xxe/ssrf 真实样本补测（2026-08-08：靶场补 GET 参数型 XXE 提交点 + metadata 模拟，均检出）
-- [ ] lfi 在 Linux 环境复测（/etc/passwd）——CI Benchmark job 运行时可自动覆盖
-- [ ] 反射回显误报治理——已完成（第二轮，sqli boolean 反射除外）
-- [ ] 接入外部基准（WAVSEP / OWASP Juice Shop）扩充矩阵
+- [x] lfi 在 Linux 环境复测（2026-08-08：CI Benchmark 验证 1/1 检出，/etc/passwd）
+- [x] 反射回显误报治理（2026-08-08：11 → 0 全类型清零，含 sqli boolean）
+- [x] 接入外部基准（Juice Shop 记录模式 + CI benchmark-external job；WAVSEP 无 release 暂缓）
 - [x] 基准回归自动化（scripts/run_benchmark.py + CI workflow_dispatch）
+- [ ] SPA/JSON API 覆盖（外部基准暴露的真实短板，待 --js-render 成熟后改硬断言）

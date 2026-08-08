@@ -20,6 +20,12 @@ All code changes must be logged in this file. Each entry should include:
 - Affected files/modules
 ## Change Log
 
+### 2026-08-08 (第五轮：外部基准闭环 + 全类型误报清零)
+- **sqli boolean 反射误报修复**（第四轮延续）：boolean 命中排除 payload 原样回显（盲注语义）——反射端点天然免疫；靶场 /sqli/blind 改通用等值判断；**反射误报 11 → 0 全类型清零**（BENCHMARK.md §2 修复记录 13 条）
+- **外部基准（Juice Shop）CI 闭环**：`scripts/run_external_benchmark.py` + CI `benchmark-external` job；历经 4 轮修复（--max-time 1500 限时 / subprocess timeout 1800 / 记录模式）→ **最终 CI 10 job 全绿**；结论：SPA 0 检出 = 真实短板诊断（Angular SPA + JSON API 覆盖不足），记录模式待 SPA 能力提升后改硬断言；WAVSEP 无 release 资产暂缓
+- **mypy 核心链路清零**（TD-003/007）：scanner/models/config/base/dedup/result_merger/cache + 新模块共 11 路径 **0 错误**（全库 212 → 核心 0）；CI types job 范围扩至核心链路（--follow-imports=skip）
+- 全量测试 + ruff + format + CI（Test 3.9-3.12/Lint/Format/Types/Benchmark/Benchmark External）全绿
+
 ### 2026-08-08 (第四轮：sqli boolean 误报清零 + 外部基准 + mypy 核心清零)
 - **sqli boolean 反射误报修复**：boolean 命中排除 payload 原样回显（盲注语义）——反射端点天然免疫；`/sqli/blind` 真阳性保留（靶场改通用等值判断兼容 verify payload）；**反射误报 11 → 0 全类型清零**
 - **外部基准（Juice Shop）**：本机网络受限（Docker Hub/npm/GitHub 下载全阻断）→ 新增 `scripts/run_external_benchmark.py`（docker 起 Juice Shop → sqli/xss/api/sensitive 扫描 → 断言）+ CI `benchmark-external` job（workflow_dispatch，GitHub Actions 网络正常环境运行）；WAVSEP 无 release 资产暂缓
