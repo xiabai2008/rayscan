@@ -1,0 +1,229 @@
+"""
+RayScan 基准靶场（benchmark lab）— 建立检测基线用的本地漏洞样本。
+
+- 仅绑定 127.0.0.1，随机端口，禁止外网访问（内置 403 拦截非本机来源）
+- 覆盖：sqli（error/union/blind/time）/ xss / cmdi / lfi / rce / xxe / ssrf / sensitive
+- 用法：python scripts/benchmark_lab.py --port 18099
+- 基准记录见 docs/BENCHMARK.md
+
+安全注意：本靶场故意包含可利用漏洞，仅供本地检测基准测试，严禁部署到公网。
+"""
+
+import argparse
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+
+from flask import Flask, Response, request
+
+app = Flask(__name__)
+
+# 简单访问控制：仅允许本机来源
+_ALLOWED = {"127.0.0.1", "::1", "localhost"}
+
+
+@app.before_request
+def _guard():
+    if request.remote_addr not in _ALLOWED:
+        return Response("forbidden", status=403)
+
+
+def _hint(default_type="text/html; charset=utf-8"):
+    def deco(fn):
+        def wrapper(*a, **kw):
+            resp = fn(*a, **kw)
+            if isinstance(resp, tuple):
+                body, code = resp
+            else:
+                body, code = resp, 200
+            ctype = default_type
+            if isinstance(body, (dict, list)):
+                body = json.dumps(body)
+                ctype = "application/json"
+            return Response(body, status=code, content_type=ctype)
+
+        wrapper.__name__ = fn.__name__
+        return wrapper
+
+    return deco
+
+
+# ── SQLi ──────────────────────────────────────────────────────────
+
+@app.route("/sqli/error")
+@_hint()
+def sqli_error():
+    v = request.args.get("id", "")
+    if "'" in v or "or" in v.lower():
+        return (
+            "<html><body>SQLSTATE[42000]: Syntax error or access violation: "
+            "1064 You have an error in your SQL syntax near '"
+            + v[:40]
+            + "' at line 1</body></html>"
+        )
+    return "<html><body>user id=%s not found</body></html>" % v
+
+
+@app.route("/sqli/union")
+@_hint()
+def sqli_union():
+    v = request.args.get("id", "")
+    if "union" in v.lower():
+        return "<html><body>1|admin|5f4dcc3b5aa765d61d8327deb882cf99</body></html>"
+    return "<html><body>user 1</body></html>"
+
+
+@app.route("/sqli/blind")
+@_hint()
+def sqli_blind():
+    v = request.args.get("id", "")
+    # boolean 差异：payload 含真条件时返回 "admin"，否则空
+    if "1=1" in v or "'a'='a" in v:
+        return "<html><body>Hello admin</body></html>"
+    return "<html><body>Hello guest</body></html>"
+
+
+@app.route("/sqli/time")
+@_hint()
+def sqli_time():
+    v = request.args.get("id", "")
+    if "sleep" in v.lower():
+        time.sleep(2)
+        return "<html><body>slow response</body></html>"
+    return "<html><body>fast</body></html>"
+
+
+# ── XSS ───────────────────────────────────────────────────────────
+
+@app.route("/xss/reflected")
+@_hint()
+def xss_reflected():
+    q = request.args.get("q", "")
+    return "<html><body>search result: %s</body></html>" % q
+
+
+# ── CMDi ──────────────────────────────────────────────────────────
+
+@app.route("/cmdi")
+@_hint()
+def cmdi():
+    host = request.args.get("host", "127.0.0.1")
+    # 命令拼接注入点（本地靶场专用）
+    out = subprocess.run(
+        "ping -n 1 " + host if os.name == "nt" else "ping -c 1 " + host,
+        shell=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    return "<html><body><pre>%s</pre></body></html>" % (out.stdout + out.stderr)
+
+
+# ── LFI ───────────────────────────────────────────────────────────
+
+@app.route("/lfi")
+@_hint()
+def lfi():
+    f = request.args.get("file", "index.html")
+    try:
+        with open(f, "r", errors="replace") as fh:
+            content = fh.read(2000)
+        return "<html><body><pre>%s</pre></body></html>" % content
+    except OSError:
+        return "<html><body>file not found</body></html>"
+
+
+# ── RCE ───────────────────────────────────────────────────────────
+
+@app.route("/rce")
+@_hint()
+def rce():
+    cmd = request.args.get("cmd", "echo hi")
+    out = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+    return "<html><body><pre>%s</pre></body></html>" % (out.stdout + out.stderr)
+
+
+# ── XXE ───────────────────────────────────────────────────────────
+
+@app.route("/xxe", methods=["POST"])
+@_hint()
+def xxe():
+    import xml.etree.ElementTree as ET
+
+    body = request.get_data(as_text=True)
+    try:
+        root = ET.fromstring(body)
+        return "<html><body>parsed: %s</body></html>" % (root.findtext("name") or "")
+    except ET.ParseError as e:
+        # 外部实体展开失败的解析器错误特征
+        return "<html><body>failed to load external entity: %s</body></html>" % e, 200
+
+
+@app.route("/")
+def index():
+    links = [
+        "/sqli/error?id=1",
+        "/sqli/union?id=1",
+        "/sqli/blind?id=1",
+        "/sqli/time?id=1",
+        "/xss/reflected?q=test",
+        "/cmdi?host=127.0.0.1",
+        "/lfi?file=index.html",
+        "/rce?cmd=echo%20hi",
+        "/ssrf?url=http://127.0.0.1/",
+        "/xxe",
+        "/.env",
+        "/backup/backup.sql",
+    ]
+    body = "<html><head><title>Benchmark Lab</title></head><body><h1>Benchmark Lab</h1><ul>"
+    for link in links:
+        body += f'<li><a href="{link}">{link}</a></li>'
+    body += "</ul></body></html>"
+    return Response(body, content_type="text/html; charset=utf-8")
+
+
+# ── SSRF ──────────────────────────────────────────────────────────
+
+@app.route("/ssrf")
+@_hint()
+def ssrf():
+    import urllib.request
+
+    url = request.args.get("url", "")
+    if not url.startswith(("http://", "https://")):
+        return "<html><body>bad url</body></html>"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = resp.read(500).decode("utf-8", "replace")
+        return "<html><body><pre>%s</pre></body></html>" % data
+    except Exception as e:
+        return "<html><body>fetch error: %s</body></html>" % e
+
+
+# ── Sensitive ─────────────────────────────────────────────────────
+
+@app.route("/.env")
+@_hint()
+def env_leak():
+    return "DB_PASSWORD=secret123\nAPI_KEY=sk-benchmark-abc\n", 200
+
+
+@app.route("/backup/backup.sql")
+@_hint()
+def backup_leak():
+    return "INSERT INTO users VALUES (1,'admin','5f4dcc3b5aa765d61d8327deb882cf99');\n", 200
+
+
+def main():
+    parser = argparse.ArgumentParser(description="RayScan benchmark lab")
+    parser.add_argument("--port", type=int, default=18099)
+    args = parser.parse_args()
+    print(f"[BenchmarkLab] http://127.0.0.1:{args.port}/  (仅本机访问)")
+    app.run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False)
+
+
+if __name__ == "__main__":
+    main()

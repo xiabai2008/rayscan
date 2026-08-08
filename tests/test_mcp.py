@@ -282,6 +282,7 @@ class TestMCPServer:
 
     @pytest.mark.asyncio
     async def test_get_report_empty(self):
+        pytest.importorskip("mcp")
         import wvs.mcp_server as mcp_mod
 
         mcp_mod._LAST_RESULT = None

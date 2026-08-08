@@ -1218,6 +1218,12 @@ def build_parser() -> argparse.ArgumentParser:
     control_group.add_argument("--delay", type=float, default=0.0, help="请求间延迟（秒）")
     control_group.add_argument("-c", "--config", type=str, help="配置文件路径（YAML/JSON）")
     control_group.add_argument("--insecure", action="store_true", help="禁用 SSL 证书验证（不推荐，存在安全风险）")
+    control_group.add_argument(
+        "--allow-loopback",
+        action="store_true",
+        dest="allow_loopback",
+        help="放行本地回环/内网目标（仅供本地靶场/基准测试；默认拦截防止误扫内网）",
+    )
 
     # Nuclei 选项（默认启用）
     nuclei_group = scan_parser.add_argument_group("Nuclei 模板扫描")
