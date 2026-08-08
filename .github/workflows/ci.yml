@@ -121,4 +121,5 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
       - name: Run external benchmark (Juice Shop)
+        timeout-minutes: 45
         run: python scripts/run_external_benchmark.py --port 3000
