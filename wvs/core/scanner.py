@@ -71,6 +71,8 @@ class WAVScanner(ScannerIntegrationsMixin):
             max_urls_per_prefix=prefix_max,
             user_agent=self.config.get("user_agent", "WVS/19.0"),
         )
+        # T3.2: --js-render 实验性开关（对实战目标启用 SPA 检测 + Playwright 渲染爬取）
+        self.crawler._js_render = bool(self.config.get("crawler.js_render", False))
 
         # 已加载的检测模块 {module_name -> module_instance}
         self._modules: Dict[str, Any] = {}
@@ -795,6 +797,12 @@ class WAVScanner(ScannerIntegrationsMixin):
                 eps = await self.crawler.crawl(target.url, self.session)
                 all_endpoints.extend(eps)
 
+                # T0 修复：crawler 未产出端点（单页无链接且 seed 全 404）时，
+                # 兜底至少测目标本身——否则流式检测整体跳过（检测模块完全不执行）
+                if not eps:
+                    eps = [DiscoveredEndpoint(url=target.url, method="GET", source_url=target.url, source_depth=1)]
+                    all_endpoints.extend(eps)
+
                 # 分批检测已爬到的端点
                 if eps:
                     enriched = await self.crawler.discover_params_batch(eps, self.session)
@@ -939,6 +947,24 @@ class WAVScanner(ScannerIntegrationsMixin):
                     unique_vulns = self._deduplicate(unique_vulns + nuclei_vulns)
             except Exception as e:
                 logger.debug(f"[Scanner] Nuclei phase failed: {e}")
+
+        # ── Phase 3.6: AI 误报复核（T1.2，默认关，--ai-verify 开启） ──
+        if self.config.get("ai.verify", False) and unique_vulns:
+            try:
+                from ..ai import AIVerifier, LLMClient
+
+                ai_client = LLMClient(self.config)
+                if ai_client.available:
+                    verifier = AIVerifier(self.config, ai_client)
+                    unique_vulns = await verifier.verify_batch(unique_vulns)
+                    logger.info(
+                        f"[AI] 复核完成: {verifier.reviewed_count} 条已复核, "
+                        f"{verifier.confirmed_count} 确认 / {verifier.disputed_count} 存疑降级"
+                    )
+                else:
+                    logger.warning("[AI] --ai-verify 已开启但未配置 LLM_API_KEY，跳过 AI 复核")
+            except Exception as e:
+                logger.debug(f"[Scanner] AI verify phase failed: {e}")
 
         # 更新每个漏洞的扫描统计
         for v in unique_vulns:

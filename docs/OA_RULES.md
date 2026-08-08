@@ -62,8 +62,17 @@
 
 | OA | 验证目标 | 指纹识别 | 版本识别 | 漏洞检出 | 误报 | 日期 | 备注 |
 |----|---------|:-------:|:-------:|:-------:|:----:|:----:|------|
-| （待实测） | | | | | | | 需要授权靶机/真实样本 |
-| （待实测） | | | | | | | 每种 OA ≥1 样本后闭环 |
+| 泛微-Ecology | 本地 mock 靶场（weaver 指纹 + weaver.do POST RCE） | ✅ 泛微-Ecology | ✅ | ✅ RCE/critical（octet-stream 证据） | 0 | 2026-08-08 | 见 T0 实测（下方说明） |
+| Nacos | 本地 mock 靶场 1.3.2（nacos_version 变量 + users 列表 pageItems） | ✅ Nacos | ✅ 1.3.2 | ✅ unauth/critical（CVE-2021-29441，版本过滤放行） | 0 | 2026-08-08 | 正样本 |
+| Nacos | 本地 mock 靶场 1.5.0（同响应，版本已修复） | ✅ Nacos | ✅ 1.5.0 | ⬜ 不检出（版本过滤 [min,1.4.1) 正确跳过） | 0 | 2026-08-08 | 负样本，验证版本过滤 |
+| Jenkins | 本地 mock 靶场（X-Jenkins 2.249.1 头 + /script Script Console） | ✅ Jenkins | ✅ 2.249.1 | ✅ RCE/critical（Script Console 证据） | 0 | 2026-08-08 | — |
+
+> **T0 实测说明（2026-08-08）**：本地 mock OA 靶场（`http://127.0.0.1:<port>/`，社区可复现，见 AGENTS.md 变更日志）。
+> 实测中发现并修复 3 个真实缺陷：①crawler 无端点时流式检测整体跳过（scanner 兜底端点前置）；
+> ②httpx「URL 自带 query + params={}」丢弃 query 导致检查项请求缺参（base.py 空 params 不传）；
+> ③scanner 注入短名与 OA_RULES key 断链（"泛微"→"泛微-Ecology" 别名映射）+ OA `_create_vuln` 枚举误传导致报告序列化失败。
+> 验证流程：`python -m wvs scan http://127.0.0.1:<port>/ --modules oa --no-nuclei`。
+> 待办：真实/授权样本继续回填本表（每种 OA ≥1 真实样本后完全闭环）。
 
 > 验证流程建议：对每种 OA 至少 1 个授权目标运行 `python -m wvs scan <url> --all-modules`，
 > 记录识别结果/漏洞/误报，回填本表。S3 验收标准 = 每种 OA ≥1 真实/靶场样本验证记录。

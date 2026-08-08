@@ -1,5 +1,5 @@
 """
-RayScan 1.0.2 — Session lifecycle manager
+RayScan 2.1.0 — Session lifecycle manager
 
 Handles:
 - Session health monitoring (cookie expiry, redirect to login)

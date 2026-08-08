@@ -25,6 +25,20 @@ from ..base import DetectionModule, ModuleInfo, register_module
 
 logger = logging.getLogger("wvs.module.oa")
 
+# ── T0 修复：scanner Step 1.9 注入的短名 → OA_RULES key 别名映射 ──
+# nuclei_template_manager.OA_FINGERPRINTS 用短名（"泛微"），OA_RULES 用带后缀名
+# （"泛微-Ecology"）；注入值若不映射，OA_RULES.get() 为 None → 检查项全部不执行。
+_OA_ALIASES = {
+    "泛微": "泛微-Ecology",
+    "通达": "通达OA",
+    "金蝶": "金蝶-Kingdee",
+    "蓝凌": "蓝凌-Landray",
+    "致远": "致远-Seeyon",
+    "用友": "用友-Yonyou",
+    "禅道": "禅道-Zentao",
+    "万户": "万户-Whir",
+}
+
 # ── OA 系统指纹与检测规则 ──────────────────────────────────────
 # 每个 OA 系统的识别路径、关键词、检测端点
 
@@ -291,8 +305,11 @@ class OADetector(DetectionModule):
         self.logger.info(f"[OA] 开始 OA 专项检测: {url}")
 
         # Step 1: 识别 OA 类型（S3 三级链路第 1 级）
-        #   优先使用 scanner Step 1.9 内容指纹注入值；否则抓首页做内容指纹 + URL 双通道
+        #   优先使用 scanner Step 1.9 内容指纹注入值（T0：短名映射到 OA_RULES key）；
+        #   否则抓首页做内容指纹 + URL 双通道
         detected_oa = getattr(self, "_detected_oa", None)
+        if detected_oa:
+            detected_oa = _OA_ALIASES.get(detected_oa, detected_oa)
         html = ""
         headers: Dict[str, str] = {}
         if not detected_oa:
@@ -509,7 +526,10 @@ class OADetector(DetectionModule):
                         param_type="query",
                         method=method,
                         payload=check_url,
-                        vuln_type=vuln_type,
+                        # T0 修复：vuln_type 必须是字符串（进 title/tags）；枚举走 explicit_vuln_type，
+                        # 否则 tags 含枚举导致报告 JSON 序列化失败
+                        vuln_type=vuln_type_str,
+                        explicit_vuln_type=vuln_type,
                         severity=severity,
                         confidence=Confidence.MEDIUM,
                         evidence=f"HTTP {status}",

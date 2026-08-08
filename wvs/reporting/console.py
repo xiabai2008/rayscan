@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from .. import __version__
 from ..models import Confidence, ScanResult, Severity, Vulnerability
 
 # Severity color mapping
@@ -141,7 +142,7 @@ class ConsoleReporter:
         border = "cyan" if not result.vulnerabilities else "red"
         self.console.print(
             Panel.fit(
-                f"[bold cyan]RayScan 1.0.2[/bold cyan]  "
+                f"[bold cyan]RayScan {__version__}[/bold cyan]  "
                 f"[dim]扫描报告[/dim]\n"
                 f"{'─' * 40}\n"
                 f"[bold]目标 URL:[/bold] {result.target.url}\n"
@@ -269,7 +270,7 @@ class ConsoleReporter:
         self.console.print()
         self.console.print(
             f"[dim]{'─' * 60}[/dim]\n"
-            f"[dim]RayScan 1.0.2 | "
+            f"[dim]RayScan {__version__} | "
             f"总耗时 {result.duration:.1f}s | "
             f"请求 {result.requests_made} | "
             f"端点 {result.endpoints_found or '?'} | "
@@ -285,7 +286,7 @@ class ConsoleReporter:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         lines = [
-            "RayScan 1.0.2 扫描报告",
+            f"RayScan {__version__} 扫描报告",
             f"{'=' * 60}",
             f"目标: {result.target.url}",
             f"时间: {result.scan_time.strftime('%Y-%m-%d %H:%M:%S') if result.scan_time else 'N/A'}",

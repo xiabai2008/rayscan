@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RayScan 1.0.2 — External Tool Integration Module
+RayScan 2.1.0 — External Tool Integration Module
 
 Integrated tools:
 - nuclei  : ProjectDiscovery template-based vulnerability scanning

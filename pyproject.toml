@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rayscan"
-version = "2.0.1"
+version = "2.1.0"
 description = "RayScan — 开箱即用的 Web 漏洞扫描器 | SQLi/XSS/命令注入/LFI/SSRF/XXE/RCE/API安全 | 多引擎聚合(Nuclei/sqlmap/ffuf)+MSF验证链+Profile扫描配置 | CLI+Web UI双模式"
 readme = "README.md"
 license = {text = "MIT"}
@@ -69,6 +69,12 @@ gui = [
 web = [
     "flask>=3.0",
 ]
+mcp = [
+    "mcp>=1.0",
+]
+jsrender = [
+    "playwright>=1.40",
+]
 
 [project.scripts]
 wvs = "wvs.cli:main"
@@ -85,6 +91,9 @@ include = ["wvs*"]
 exclude = ["tests*", "docs*", "examples*"]
 
 # 单一格式化器 = ruff-format（不再使用 black/isort，避免行宽/风格冲突）
+# T4: lint 配置与 CI 门禁统一（本地 = CI，避免 E402/E501 本地不一致）——
+# select/ignore 与 .github/workflows/ci.yml 的 ruff check 保持一致。
+# 更严格的规则集（B/C4/UP/SIM/BLE/TRY 等）作为存量债务逐步启用（见 docs/TECH_DEBT.md）。
 [tool.ruff]
 line-length = 120
 target-version = "py38"
@@ -93,23 +102,10 @@ lint.select = [
     "F",    # pyflakes
     "W",    # pycodestyle warnings
     "I",    # isort — 导入排序
-    "B",    # flake8-bugbear — 常见 bug 模式
-    "C4",   # flake8-comprehensions
-    "UP",   # pyupgrade — 现代语法
-    "SIM",  # flake8-simplify
-    "BLE",  # 裸/盲目 except
-    "TRY",  # try-except 最佳实践
-    "S110", # 静默 suppress 未记录
-    "ARG",  # 未使用参数
-    "PTH",  # pathlib 优于 os.path
-    "RUF",  # ruff 自带检查
 ]
 lint.ignore = [
+    "E402",  # 模块级 import 非顶部（web_ui sys.path 注入等既有模式）
     "E501",  # 行长度由 ruff-format 统一处理
-    # 以下为 CJK 项目误报：中文注释/文档中大量使用 → — ✅ 等 intentional 符号
-    "RUF001",  # ambiguous-unicode-character-string
-    "RUF002",  # ambiguous-unicode-character-docstring
-    "RUF003",  # ambiguous-unicode-character-comment
 ]
 # 历史遗留的载荷数据文件：暂整体排除，列入技术债逐步整改
 lint.exclude = [
@@ -118,9 +114,17 @@ lint.exclude = [
     "wvs/modules/rce/payloads.py",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"wvs/exceptions.py" = ["TRY", "BLE", "S110"]
-"wvs/modules/base.py" = ["TRY", "BLE"]
+# per-file-ignores 引用的规则集（TRY/BLE/S110）已移出 lint.select（见上），
+# 待更严格规则集启用时恢复
+
+[tool.coverage.run]
+source = ["wvs"]
+branch = true
+
+# T4 (TD-006): 覆盖率门禁 — 分支覆盖基线 ~27%（2026-08-08），随测试补齐逐步上调
+[tool.coverage.report]
+fail_under = 25
+show_missing = true
 
 [tool.mypy]
 python_version = "3.8"

@@ -1,5 +1,5 @@
-"""
-RayScan 1.0.2 GUI — ttkbootstrap 主题化 + 响应式布局
+﻿"""
+RayScan 2.1.0 GUI — ttkbootstrap 主题化 + 响应式布局
 """
 import tkinter as tk
 from tkinter import ttk
@@ -113,7 +113,7 @@ class RayScanGUI:
         else:
             self.style = ttk.Style()
             self.root = tk.Tk()
-        self.root.title("RayScan 1.0.2 — Web Vulnerability Scanner")
+        self.root.title("RayScan 2.1.0 — Web Vulnerability Scanner")
         self.root.geometry("1200x800")
         self.root.minsize(960, 640)
 
@@ -160,7 +160,7 @@ class RayScanGUI:
 
         # Logo + 标题
         ttk.Label(bar, text="RayScan", font=("Segoe UI", 15, "bold")).pack(side=tk.LEFT)
-        ttk.Label(bar, text="1.0.2", font=("Segoe UI", 9),
+        ttk.Label(bar, text="2.1.0", font=("Segoe UI", 9),
                   foreground="gray").pack(side=tk.LEFT, padx=(4, 20))
 
         # 主题选择器
@@ -260,9 +260,9 @@ class RayScanGUI:
         # 版本信息
         ver_f = ttk.LabelFrame(left, text="版本", padding=6)
         ver_f.pack(fill=tk.X, side=tk.BOTTOM, pady=(4, 0))
-        ttk.Label(ver_f, text="RayScan 1.0.2").pack(anchor=tk.W)
+        ttk.Label(ver_f, text="RayScan 2.1.0").pack(anchor=tk.W)
         ttk.Label(ver_f, text="MIT License", foreground="gray").pack(anchor=tk.W)
-        ttk.Label(ver_f, text="github.com/xiabai2004",
+        ttk.Label(ver_f, text="github.com/xiabai2008",
                   foreground="gray", font=("", 7)).pack(anchor=tk.W)
 
     # ── 右侧主内容区 ──
@@ -379,9 +379,9 @@ class RayScanGUI:
     def _build_statusbar(self):
         bar = ttk.Frame(self.root, padding=(10, 2))
         bar.grid(row=3, column=0, sticky="ew")
-        ttk.Label(bar, text="RayScan 1.0.2 | MIT License",
+        ttk.Label(bar, text="RayScan 2.1.0 | MIT License",
                   font=("", 7), foreground="gray").pack(side=tk.LEFT)
-        ttk.Label(bar, text="github.com/xiabai2004/RayScan",
+        ttk.Label(bar, text="github.com/xiabai2008/RayScan",
                   font=("", 7), foreground="gray").pack(side=tk.RIGHT)
 
     # ==================== 扫描控制 ====================
@@ -675,7 +675,7 @@ th,td{{padding:8px 12px;border:1px solid #ddd;text-align:left;font-size:13px}}
 th{{background:#2563EB;color:#fff}} tr:hover{{background:#f0f0f0}}
 .summary{{background:#fff;padding:15px;margin-bottom:20px;border-radius:5px}}
 </style></head><body>
-<h1>RayScan 1.0.2 扫描报告</h1>
+<h1>RayScan 2.1.0 扫描报告</h1>
 <div class="summary"><p>时间: {datetime.now().isoformat()}</p>
 <p>漏洞: {len(sv)}</p></div>
 <table><tr><th>严重度</th><th>类型</th><th>URL</th><th>参数</th><th>证据</th></tr>

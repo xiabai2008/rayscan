@@ -16,12 +16,13 @@
 |------|------|------|--------|------|--------|------|
 | TD-001 | 工程配置 | 行宽标准冲突（black=88 / isort=88 / ruff=120 / flake8=150） | 🟡 | ✅ 已解决 | @xiabai2008 | — |
 | TD-002 | 工程配置 | `pyproject.toml` 版本漂移（写 1.1.0，实际 v2.0.0） | 🟡 | ✅ 已解决 | @xiabai2008 | — |
-| TD-003 | 类型安全 | `mypy` 配置宽松：`disallow_untyped_defs=false` 且大片模块 `ignore_errors`，无类型保障 | 🟡 | 📋 待办 | — | — |
+| TD-003 | 类型安全 | `mypy` 配置宽松：`disallow_untyped_defs=false` 且大片模块 `ignore_errors`，无类型保障 | 🟡 | 🚧 部分完成 | @xiabai2008 | 2026-08-08：新模块（ai/mcp_server/mcp/graphql）mypy 0 错误进 CI（advisory）；存量 212 错待渐进 |
 | TD-004 | Lint 覆盖 | `sqli/payloads.py`、`sqli/techniques_mixins.py`、`rce/payloads.py` 被整体排除出 ruff | 🟢 | 📋 待办 | — | — |
 | TD-005 | 流程/知识 | 历史 65 次提交几乎单人直推，无评审记录，知识单点集中 | 🔴 | 🚧 进行中 | @xiabai2008 | PR 流程已启用 |
-| TD-006 | 测试 | CI 未接入 `pytest-cov`，无覆盖率基线/门禁 | 🟡 | 📋 待办 | — | 待 CI 强化 |
-| TD-007 | 可维护性 | 核心模块类型注解缺失，IDE 跳转/重构困难 | 🟡 | 📋 待办 | — | 关联 TD-003 |
-| TD-008 | 测试覆盖 | `wvs/core`（scanner/session/cache/rate_limiter）单元测试薄弱 | 🟡 | 📋 待办 | — | 见 CODE_AUDIT.md |
+| TD-006 | 测试 | CI 未接入 `pytest-cov`，无覆盖率基线/门禁 | 🟡 | ✅ 已解决 | @xiabai2008 | 2026-08-08：branch 覆盖门禁 fail_under=25（基线 ~27%），CI blocking |
+| TD-007 | 可维护性 | 核心模块类型注解缺失，IDE 跳转/重构困难 | 🟡 | 🚧 部分完成 | — | 2026-08-08：新增代码全注解（见 TD-003） |
+| TD-008 | 测试覆盖 | `wvs/core`（scanner/session/cache/rate_limiter）单元测试薄弱 | 🟡 | 🚧 部分完成 | — | 2026-08-08：+25 测试（scanner 去重/归一化、crawler URL 逻辑、session cookie/header）；cache/rate_limiter 仍薄 |
+| TD-009 | 工程配置 | ruff select 与 CI 命令行覆盖不一致（本地 109 错 vs CI 0） | 🟡 | ✅ 已解决 | @xiabai2008 | 2026-08-08：select 收敛 E/F/W/I + ignore E402/E501，本地=CI |
 
 ---
 

@@ -1,5 +1,5 @@
 """
-RayScan 1.0.2 — Encoding bypass payload generator
+RayScan 2.1.0 — Encoding bypass payload generator
 
 Generates encoding-variant payloads to evade WAF/IDS detection:
 - URL encoding (single, double, triple)

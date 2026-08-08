@@ -356,8 +356,10 @@ class WebCrawler(CrawlerParsersMixin):
         await self._seed_common_paths(target_url, session, is_lab=is_lab)
 
         # -- SPA detection: crawl 3 pages, compare body hashes --
-        # 非靶机目标直接跳过 SPA 检测（真实网站不同路径返回相似内容是正常的）
-        if not is_lab:
+        # 实战目标默认跳过 SPA 检测（真实网站不同路径返回相似内容是正常的）；
+        # --js-render 开启（crawler.js_render=true）时对所有目标启用（实验性，需 playwright）
+        js_render_opt = getattr(self, "_js_render", False)
+        if not is_lab and not js_render_opt:
             self._spa_detected = False
             self._spa_checked = True
         elif not self._spa_checked:

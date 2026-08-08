@@ -154,6 +154,14 @@ class ConfigManager:
                 "instances": [],
             },
         },
+        # v2.1: AI 辅助验证（T1，默认全关）
+        # api_key 不写入配置/默认值——仅从环境变量 LLM_API_KEY 或 config ai.api_key 读取
+        "ai": {
+            "verify": False,  # 扫描时对候选漏洞做 LLM 复核（--ai-verify 开启）
+            "base_url": "",  # 空 = 官方 https://api.openai.com/v1
+            "model": "",  # 空 = gpt-4o-mini
+            "timeout": 30,
+        },
     }
 
     # Environment variable mapping

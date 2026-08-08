@@ -154,6 +154,23 @@ def cmd_scan(args):
     if hasattr(args, "no_nuclei") and args.no_nuclei:
         config.set("nuclei.enabled", False)
 
+    # 处理 --ai-verify（T1：AI 误报复核，默认关闭；数据将发送给第三方 LLM）
+    if hasattr(args, "ai_verify") and args.ai_verify:
+        config.set("ai.verify", True)
+        console.print(
+            "[yellow][!] 警告: --ai-verify 已开启，候选漏洞证据将发送给第三方 LLM 服务。"
+            "请配置 LLM_API_KEY（可选 LLM_BASE_URL / LLM_MODEL，支持 OpenAI 兼容 API）"
+            "并确保目标数据合规。[/yellow]"
+        )
+
+    # 处理 --js-render（T3.2：对实战目标启用 SPA 检测 + Playwright 渲染爬取，实验性）
+    if hasattr(args, "js_render") and args.js_render:
+        config.set("crawler.js_render", True)
+        console.print(
+            "[yellow][!] --js-render 已开启（实验性）：将对实战目标执行 SPA 检测与 Playwright "
+            "渲染爬取（需安装 playwright，未安装时自动回退普通爬取）[/yellow]"
+        )
+
     # 处理 --insecure 参数（禁用 SSL 验证）
     if hasattr(args, "insecure") and args.insecure:
         config.set("verify_ssl", False)
@@ -542,10 +559,48 @@ def cmd_version(args):
     """显示版本信息"""
     console.print(
         Panel.fit(
-            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2004",
+            f"[bold cyan]RayScan {__version__}[/bold cyan]\nSQLi + XSS 专精扫描器\nby xiabai2008",
             border_style="cyan",
         )
     )
+    return 0
+
+
+def cmd_ai_report(args):
+    """用 LLM 为既有 JSON 扫描报告生成 markdown 摘要（T1.3）"""
+    report_path = Path(args.report)
+    if not report_path.exists():
+        console.print(f"[red]错误：找不到报告文件 {report_path}[/red]")
+        return 1
+
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        console.print(f"[red]报告解析失败: {e}[/red]")
+        return 1
+
+    from .ai import LLMClient
+    from .ai.report import generate_ai_summary
+
+    client = LLMClient()
+    if not client.available:
+        console.print(
+            "[red]错误：未配置 LLM。请设置环境变量 LLM_API_KEY（可选 LLM_BASE_URL / LLM_MODEL，"
+            "支持 OpenAI 兼容 API）。[/red]"
+        )
+        return 1
+
+    console.print(f"[cyan][AI] 使用 {client.provider_desc} 生成报告摘要...[/cyan]")
+    console.print("[yellow][!] 警告: 报告中的漏洞信息将发送给第三方 LLM 服务，请确保数据合规[/yellow]")
+
+    summary = asyncio.run(generate_ai_summary(report, client))
+    if not summary:
+        console.print("[yellow]AI 摘要生成失败（无漏洞条目或请求失败）[/yellow]")
+        return 1
+
+    output = Path(args.output) if args.output else report_path.with_name(f"{report_path.stem}_ai_summary.md")
+    output.write_text(summary, encoding="utf-8")
+    console.print(f"[green]📄 AI 摘要已保存: {output.resolve()}[/green]")
     return 0
 
 
@@ -784,6 +839,76 @@ def cmd_use(args):
     return 0
 
 
+def cmd_mcp(args):
+    """启动 MCP Server（T2.1：供 Claude/ChatGPT 等 AI 客户端调用扫描能力）"""
+    try:
+        from .mcp_server import run_server
+    except ImportError:
+        console.print(
+            '[red]错误：需要 mcp SDK。请安装：pip install "rayscan[mcp]"（mcp SDK 要求 Python >= 3.10）[/red]'
+        )
+        return 1
+
+    console.print(
+        Panel.fit(
+            f"[bold cyan]RayScan MCP Server[/bold cyan]\n"
+            f"监听: [bold]http://{args.host}:{args.port}/mcp[/bold]\n"
+            f"工具: scan / list_modules / get_report\n"
+            f"[dim]默认仅绑定本机；暴露为 AI 客户端提供完整扫描能力，注意授权边界[/dim]",
+            border_style="cyan",
+        )
+    )
+    run_server(host=args.host, port=args.port)
+    return 0
+
+
+def cmd_update_pocs(args):
+    """更新 PoC 模板索引（T2.3：清除缓存重建 + OA 模板统计）"""
+    from .core.nuclei_template_manager import TECH_STACK_TAGS, NucleiTemplateManager
+
+    console.print("[cyan][*] 重建 PoC 模板索引（忽略旧缓存）...[/cyan]")
+    manager = NucleiTemplateManager()
+    total = manager.build_index(force=True)
+    console.print(f"[green][OK] 索引完成: 共 {total} 个模板[/green]")
+
+    # OA 相关模板统计（对齐 OA 专项检测的 13 类技术栈）
+    oa_keys = [
+        "weaver",
+        "tongda",
+        "kingdee",
+        "landray",
+        "seeyon",
+        "yonyou",
+        "zentao",
+        "whir",
+        "nacos",
+        "jenkins",
+        "spring",
+        "confluence",
+        "ecology",
+    ]
+    oa_count = 0
+    oa_templates = []
+    for t in manager._templates.values():
+        if any(t.matches_tech(k) for k in oa_keys if k in TECH_STACK_TAGS):
+            oa_count += 1
+            oa_templates.append(t)
+    console.print(f"[cyan]OA 相关模板: {oa_count} 个[/cyan]")
+
+    by_sev = manager._stats.get("by_severity", {})
+    sev_line = ", ".join(f"{k}: {v}" for k, v in sorted(by_sev.items()))
+    console.print(f"[dim]按严重度: {sev_line or 'N/A'}[/dim]")
+
+    if args.list_oa:
+        table = Table(title=f"OA 相关模板（{oa_count}）")
+        table.add_column("模板", style="cyan")
+        table.add_column("严重度", justify="center")
+        for t in sorted(oa_templates, key=lambda x: x.severity_order)[:50]:
+            table.add_row(t.name or t.path.split("/")[-1], t.severity or "-")
+        console.print(table)
+    return 0
+
+
 # ─────────────────────────────────────────────────────────────────
 # 结果展示
 # ─────────────────────────────────────────────────────────────────
@@ -882,6 +1007,18 @@ def build_parser() -> argparse.ArgumentParser:
         dest="no_nuclei",
         help="禁用 Nuclei 模板扫描阶段（默认开启：CLI 可用走模板扫描，不可用走内置回退）",
     )
+    control_group.add_argument(
+        "--ai-verify",
+        action="store_true",
+        dest="ai_verify",
+        help="对候选漏洞做 LLM 二次复核（默认关闭；需 LLM_API_KEY，证据将发送给第三方）",
+    )
+    control_group.add_argument(
+        "--js-render",
+        action="store_true",
+        dest="js_render",
+        help="对实战目标启用 SPA 检测与 Playwright 渲染爬取（实验性；需安装 playwright，未安装自动回退）",
+    )
     control_group.add_argument("--rate", type=int, default=10, help="每秒最大请求数（默认 10）")
     control_group.add_argument(
         "--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)"
@@ -945,6 +1082,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     # version 命令
     sub.add_parser("version", help="显示版本信息")
+
+    # ai-report 命令（T1.3：LLM 生成报告摘要）
+    ai_report_parser = sub.add_parser("ai-report", help="用 LLM 为既有 JSON 扫描报告生成 markdown 摘要")
+    ai_report_parser.add_argument("report", help="JSON 扫描报告路径")
+    ai_report_parser.add_argument("-o", "--output", help="输出 markdown 路径（默认 <report>_ai_summary.md）")
+
+    # mcp 命令（T2.1：MCP Server）
+    mcp_parser = sub.add_parser("mcp", help="启动 MCP Server（供 Claude/ChatGPT 等 AI 客户端调用扫描能力）")
+    mcp_parser.add_argument("--host", default="127.0.0.1", help="监听地址（默认仅本机回环）")
+    mcp_parser.add_argument("--port", type=int, default=18000, help="监听端口（默认 18000）")
+
+    # update-pocs 命令（T2.3：重建 PoC 索引 + OA 模板统计）
+    update_pocs_parser = sub.add_parser("update-pocs", help="重建 PoC 模板索引并统计（含 OA 相关模板）")
+    update_pocs_parser.add_argument(
+        "--list-oa", action="store_true", dest="list_oa", help="列出 OA 相关模板（最多 50 个）"
+    )
 
     # profile 命令
     profile_parser = sub.add_parser("profile", help="Profile 管理")
@@ -1013,6 +1166,12 @@ def main():
         return cmd_list_modules(args)
     elif args.command == "version":
         return cmd_version(args)
+    elif args.command == "ai-report":
+        return cmd_ai_report(args)
+    elif args.command == "mcp":
+        return cmd_mcp(args)
+    elif args.command == "update-pocs":
+        return cmd_update_pocs(args)
     elif args.command == "profile":
         return cmd_profile(args)
     elif args.command == "use":

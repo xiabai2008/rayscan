@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 from .api import APIDetector
 from .cmdi import CMDInjectionDetector
+from .graphql import GraphQLDetector
 from .js_analysis import JSAnalysisDetector
 from .jspathfinder import JSPathfinderDetector
 from .lfi import LFIDetector
+from .mcp import MCPDetector
 from .oa import OADetector
 from .rce import RCEDetector
 from .sensitive import SensitiveDetector
@@ -37,9 +39,11 @@ from .xxe import XXEDetector
 __all__ = [
     "APIDetector",
     "CMDInjectionDetector",
+    "GraphQLDetector",
     "JSAnalysisDetector",
     "JSPathfinderDetector",
     "LFIDetector",
+    "MCPDetector",
     "OADetector",
     "RCEDetector",
     "SQLiDetector",
@@ -61,9 +65,11 @@ __all__ = [
 _ALL_DETECTOR_MODULES = [
     "api",
     "cmdi",
+    "graphql",
     "js_analysis",
     "jspathfinder",
     "lfi",
+    "mcp",
     "oa",
     "rce",
     "sensitive",

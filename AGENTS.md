@@ -21,6 +21,50 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-08-08 (T0 收尾 — 版本 SSOT + OA 实测 + 发布 v2.1.0)
+- **版本 SSOT 统一为 2.1.0**：`wvs/__init__.py` 与 pyproject 对齐（SSOT 注释）；报告模块（console/html/markdown）改为动态读取 `__version__`；25 处硬编码 1.0.2/2.0.x 清理（UI/GUI/模板/yml/docstring，CHANGELOG 历史记录保留）
+- **OA mock 靶场实测闭环**（4 样本，记录入 docs/OA_RULES.md §5）：泛微-Ecology（weaver.do RCE/octet-stream ✅）、Nacos 1.3.2（users 列表 pageItems/CVE-2021-29441 ✅）、Nacos 1.5.0（版本过滤 [min,1.4.1) 正确跳过 ⬜ 负样本 ✅）、Jenkins（/script Script Console ✅）
+- **实测发现并修复 3 个真实缺陷**：
+  1. crawler 无端点（单页无链接且 seed 全 404）→ `_crawl_and_detect` 的 `if eps:` 为空 → 流式检测整体跳过 → scanner 兜底端点前置
+  2. httpx「URL 自带 query + 显式 params={}」丢弃 URL query（OA 检查项 `/nacos/v1/auth/users?pageNo=1` 404）→ base.py `_send_request` 空 params 不传
+  3. scanner Step 1.9 注入短名（"泛微"）与 OA_RULES key（"泛微-Ecology"）断链 → `OA_RULES.get()` None → 8 种 OA 检查项从不执行 → `_OA_ALIASES` 别名映射；连带修复 OA `_create_vuln` 枚举误传（vuln_type 应为字符串）导致报告 JSON 序列化失败
+- CHANGELOG 2.1.0 条目 + README 更新（版本徽章/274 测试/AI·MCP·GraphQL 用法）；发布 tag v2.1.0
+
+### 2026-08-08 (T4 工程地基 — 清 TECH_DEBT)
+- **ruff 配置统一（本地 = CI）**：pyproject `lint.select` 收敛为 E/F/W/I + `ignore` 加 E402/E501（与 CI 命令一致）；CI lint job 移除命令行 `--select/--ignore` 覆盖；更严格规则集（B/C4/UP/BLE/TRY 等）标注为存量债务渐进启用
+- **TD-006 覆盖率门禁**：pyproject 新增 `[tool.coverage.run]`（source=wvs, branch）+ `[tool.coverage.report] fail_under=25`（分支覆盖基线 ~27%）；CI test job 升级为 blocking；本地 `pytest --cov` 与 CI 同门槛
+- **TD-008 core 层单测**：新增 `tests/test_core_engine.py`（25 个测试）：scanner 归一化/去重签名/严重度优先/端点 key/端点排序；crawler URL 归一化（host 小写/默认端口/query 排序）、url_key、visited、crawlable 域/扩展名过滤、DiscoveredEndpoint 哈希；HTTPPool 的 get_host、set_cookie 注入 httpx jar、cookie jar 读写、_merge_headers UA/自定义头/jar cookie 注入
+- **TD-003/007 新模块类型收口**：修复 `wvs/ai/client.py` 2 处 `no-any-return`（extract_json/chat 返回类型收窄）；CI types job 改为只查新模块 `mypy wvs/ai wvs/mcp_server.py wvs/modules/mcp wvs/modules/graphql --ignore-missing-imports`（本机 0 错误）；存量模块 mypy 债务（212 错）标注在 TECH_DEBT 渐进整改
+- 全量 **274 passed**；ruff E/F/W/I + format 全绿；coverage 26.75% ≥ 25 门禁
+
+### 2026-08-08 (T3 现代应用覆盖 — GraphQL + 可选 SPA)
+- **T3.1 GraphQL 检测**：新增 `wvs/modules/graphql/`（lite 模块，注册进 ModuleFactory）：8 条标准路径探测 + 指纹确认（__typename/GraphQL/graphiql/apollo）+ 两检查项——introspection 开启（INFO_DISCLOSURE/MEDIUM，`{__schema{types}}` 返回 types 才算）、批量查询支持（API_SECURITY/LOW，JSON 数组请求被接受）；证据验证原则：仅端点可达不报、无 GraphQL 特征不报、introspection 禁用不报
+- 端点策略防路径爆炸：根端点才做标准路径全集探测；具体端点仅路径含 graphql/gql/graphiql 特征词才自身探测（端到端实测：71 个重复漏洞 → 收敛为 1 个真阳性）
+- **T3.2 可选 SPA 爬取**：`scan --js-render`（实验性）→ config `crawler.js_render` → crawler 对实战目标启用 SPA 检测 + Playwright 渲染爬取（复用既有 `_check_spa`/`crawl_js`，未装 playwright 自动回退）；pyproject 新增 `jsrender` extras（playwright）
+- base.py vuln_type_map 补 graphql → API_SECURITY
+- 新增 `tests/test_graphql.py`（12 个测试：特征/introspection 判定/端点探测证据验证/playground 页/非 graphql 端点跳过/js-render 接线/CLI 参数）；全量 **249 passed**；ruff E/F/W/I + format 全过
+- 端到端实测：本地 mock GraphQL 服务 + 真实扫描链路 → introspection 检出，报告仅 1 个真阳性（/graphql）
+
+### 2026-08-08 (T2 MCP 接入 + 账号统一)
+- **T2.1 MCP Server**：新增 `wvs/mcp_server.py`（官方 mcp SDK，可选依赖 `pip install "rayscan[mcp]"`，py3.10+；FastMCP streamable-http，默认绑定 127.0.0.1:18000）；工具：`scan(url, modules, all_modules, max_time)`（完整扫描返回摘要 JSON）、`list_modules`、`get_report`（最近一次扫描结果）；CLI `python -m wvs mcp [--host] [--port]`；无 SDK 时友好提示返回 1
+- **T2.2 MCP 目标扫描**：新增 `wvs/modules/mcp/`（lite 模块，注册进 ModuleFactory）：常见 MCP 端点探测（/mcp、/api/mcp、/sse、/rpc 等 7 条）+ 特征指纹（jsonrpc/serverInfo/SSE 头）+ 证据验证两检查项——tools/list 未授权调用（INFO_DISCLOSURE/MEDIUM）、敏感工具未授权可调（BROKEN_ACCESS/HIGH）；纯握手不报；`_create_vuln` 使用 explicit_vuln_type，base.py vuln_type_map 补 mcp
+- **T2.3 update-pocs**：CLI `rayscan update-pocs [--list-oa]`：重建 PoC 模板索引（force）+ 按 13 类 OA 技术栈统计 OA 相关模板数并可列出（复用 TECH_STACK_TAGS）
+- **账号统一收尾**：`cli.py:cmd_version`、`wvs_gui.py`（2 处）、`web_ui/templates/index.html`、`wvs/reporting/html_report.py` 中残留旧账号 xiabai2004 → xiabai2008（CHANGELOG 历史记录保留）
+- pyproject.toml：新增 `mcp` extras
+- 新增 `tests/test_mcp.py`（20 个测试：指纹/工具解析/端点探测证据验证/POST-only server/无工具不报/MCP Server 摘要与错误路径/CLI）；全量 **237 passed**；ruff E/F/W/I + format 全过
+- 端到端实测：真实启动 MCP Server + 模拟 Claude 客户端完整协议握手（initialize→initialized→tools/list→tools/call）ALL PASS（serverInfo=rayscan、17 模块含 mcp）
+- 修复：FastMCP 1.27 构造签名（host/port 直传、无 version 参数）；mcp_server.py 相对导入层级
+
+### 2026-08-08 (T1 AI 辅助验证 — 官方 API / 最高优先级)
+- 新增 `wvs/ai/` 模块：`LLMClient`（OpenAI 兼容 chat/completions，复用 httpx 无新依赖；`LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL` 环境变量或 config `ai.*`；无 key 时 `available=False` 静默跳过；fail-safe 返回 None）+ `AIVerifier`（候选漏洞复核）+ `report.py`（AI 报告摘要）
+- 误报复核策略：medium+ 候选按 5 条/批送 LLM 判定 → 确认（conf≥0.8）tag `ai_confirmed`；存疑（conf≤0.3）严重度降一级 + tag `ai_disputed`；其余 tag `ai_reviewed`；**只降级不删除**，请求失败/输出不可解析整批原样返回
+- scanner.py：Phase 3.6 接入复核（config `ai.verify` 默认 False）；cli.py：`--ai-verify`（开启即打印第三方数据告警）
+- 新增 `ai-report` 子命令：读既有 JSON 报告 → LLM 生成 markdown 摘要（`rayscan ai-report report.json -o summary.md`）
+- config.py：`ai` 段（verify/base_url/model/timeout 默认全关；api_key 不入库，仅环境变量）
+- 新增 `tests/test_ai_verify.py`（27 个测试：client 可用性/请求构造/MockTransport/JSON 解析、verifier 确认/降级/批次/异常保持、报告提取与 CLI）；全量 **217 passed**；ruff E/F/W/I + format 全过
+- 端到端实测：本地 mock OpenAI 兼容服务 + `ai-report` 真实 HTTP 链路验证通过（摘要落盘）；`scan --help` 参数注册正确
+- 规划文档 `docs/audit/rayscan-upgrade-plan-2026-08-08.md`（外部调研 + T0-T5 分期，用户拍板：官方 API / T1 最高优先级）
+
 ### 2026-08-05 (S3 OA 专项深化 — 三级检测链路)
 - 三级检测链路：指纹识别（内容优先）→ 版本识别 → 漏洞验证（规则级证据优先）+ 版本过滤
 - 新增 `OA_CONTENT_FINGERPRINTS`（12 种 OA 内容指纹：title/正文/响应头/Set-Cookie 四类匹配）

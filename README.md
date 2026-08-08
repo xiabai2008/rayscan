@@ -1,25 +1,24 @@
-# 🔬 RayScan 2.0.1
+# 🔬 RayScan 2.1.0
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-2.0.1-blue)
+![Version](https://img.shields.io/badge/Version-2.1.0-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-190%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-274%20passing-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2008/rayscan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2008/rayscan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2008/rayscan)
 
 **🚀 全栈 Web 漏洞扫描器 | SQLi·XSS·OA·WebShell·弱口令·子域名 | Nuclei PoC 集成（12.5w 模板）**
 
-**已通过 190 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 12种OA系统专项检测**
+**已通过 274 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 12种OA系统专项检测**
 
-> 📈 **测试覆盖路线图**：当前 190 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
+> 📈 **v2.1.0 新特性**：AI 误报复核（--ai-verify）· MCP Server（--serve 给 Claude/ChatGPT）· MCP 目标检测 · GraphQL introspection 检测 · OA mock 靶场实测闭环（泛微/Nacos/Jenkins + 版本过滤负样本）
 > v2.0 新特性：OA专项检测 / WebShell / 弱口令 / 子域名枚举 / Nuclei 模板集成
 > 规划中（roadmap）：多引擎聚合（AWVS/Nessus 集成层已实现，待接入主流程）、Metasploit 验证链、DOM XSS（需 headless 验证）
-> v1.2.0 目标：核心模块行覆盖 ≥ 80%。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ```
 # 一条命令：自动分流靶机/实战，流式爬测协同
@@ -84,6 +83,25 @@ python web_ui/app.py
 - **规划中** — 多引擎聚合（AWVS/Nessus/sqlmap 一键调度）、Metasploit 漏洞验证链
 
 ## 🎯 新功能速览
+
+### 🤖 v2.1.0 — AI 复核 + MCP + GraphQL
+
+```bash
+# AI 误报复核（官方 OpenAI 兼容 API，无 key 时静默跳过）
+export LLM_API_KEY=sk-xxx
+python -m wvs scan https://target.com --ai-verify
+# AI 报告摘要
+python -m wvs ai-report scan_reports/report_xxx.json -o summary.md
+
+# MCP Server — 让 Claude/ChatGPT 直接驱动扫描（pip install "rayscan[mcp]"）
+python -m wvs mcp            # http://127.0.0.1:18000/mcp，工具: scan/list_modules/get_report
+
+# 新增 lite 模块（--all-modules）：mcp（MCP 工具泄露检测）、graphql（introspection/批量查询）
+python -m wvs scan https://target.com --all-modules
+
+# 实验性 SPA 爬取（pip install "rayscan[jsrender]"）
+python -m wvs scan https://spa-target.com --js-render
+```
 
 ### 🏢 OA 专项检测
 RayScan 能自动识别并检测以下 OA/中间件系统：

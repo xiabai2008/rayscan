@@ -287,7 +287,10 @@ class DetectionModule(ABC):
 
             # Normal query/body params
             if method.upper() == "GET":
-                kwargs["params"] = params
+                # T0 修复：空 params 不传 kwargs —— httpx 对「URL 自带 query + params={}」
+                # 会丢弃 URL 中的 query（如 OA 检查项 /nacos/v1/auth/users?pageNo=1）
+                if params:
+                    kwargs["params"] = params
             else:
                 # POST: param_type decides whether to use body or query
                 if param_type == "body":
@@ -491,6 +494,8 @@ class DetectionModule(ABC):
             "api": VulnerabilityType.API_SECURITY,
             "sensitive": VulnerabilityType.INFO_DISCLOSURE,
             "waf": VulnerabilityType.INSECURE_CONFIG,
+            "mcp": VulnerabilityType.INFO_DISCLOSURE,
+            "graphql": VulnerabilityType.API_SECURITY,
         }
 
         module_name = self.info.name.lower()

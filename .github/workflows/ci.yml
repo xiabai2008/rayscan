@@ -37,7 +37,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests (coverage reported, non-blocking)
+      - name: Run tests (coverage gate, blocking)
+        # T4 (TD-006): fail_under 门槛在 pyproject.toml [tool.coverage.report]
         run: pytest tests/ -q --cov=wvs --cov-report=term-missing --tb=short
 
       - name: Test import
@@ -53,9 +54,9 @@ jobs:
           python-version: '3.12'
       - name: Install ruff
         run: pip install "ruff==0.15.21"
-      - name: ruff check (enforced subset E/F/W/I)
-        # 注意：CLI --select 会覆盖配置中的 ignore，故此处显式忽略 E402/E501
-        run: ruff check wvs/ tests/ --select E,F,W,I --ignore E402,E501
+      - name: ruff check
+        # T4: select/ignore 已统一进 pyproject.toml（本地 = CI），此处不再命令行覆盖
+        run: ruff check wvs/ tests/
 
   format:
     name: Format (ruff)
@@ -81,5 +82,6 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -e ".[dev]"
-      - name: mypy (advisory, non-blocking)
-        run: mypy wvs/ || true
+      - name: mypy new modules (advisory, non-blocking)
+        # T4 (TD-003/007): 新增模块全量注解收口；存量模块 mypy 债务渐进整改（见 TECH_DEBT）
+        run: mypy wvs/ai wvs/mcp_server.py wvs/modules/mcp wvs/modules/graphql --ignore-missing-imports || true
