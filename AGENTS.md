@@ -21,9 +21,11 @@ All code changes must be logged in this file. Each entry should include:
 ## Change Log
 
 ### 2026-08-08 (第三轮：xxe/ssrf 基准补全 + 基准回归自动化)
-- **xxe/ssrf 基准补测**：靶场新增 GET 参数型 XXE 提交点 `/xxe_get?xml=`（模拟支持实体展开的解析器，file:///etc/passwd → root:x:0:0: 命中）与 SSRF metadata 模拟（169.254.169.254 → ami-id/instance-id）；两模块均检出真阳性，BENCHMARK.md 矩阵补全（8/10 模块有检出记录）
-- **基准回归自动化**：新增 `scripts/run_benchmark.py`（起靶场 → 逐模块扫描 → 断言各模块预期检出 → 汇总；lfi 在 Windows 自动跳过）；CI 新增 `Benchmark (regression gate)` job（workflow_dispatch 手动触发，发版前/怀疑回归时用：`gh workflow run ci.yml`）
-- 修复靶场导入规范（ruff E/F/W/I 对新脚本全过；scripts/ 历史脚本维持 CI 现有范围 wvs/tests 不变）
+- **xxe/ssrf 基准补测**：靶场新增 GET 参数型 XXE 提交点 `/xxe_get?xml=`（模拟支持实体展开的解析器，file:///etc/passwd → root:x:0:0: 命中）与 SSRF metadata 模拟（169.254.169.254 → ami-id/instance-id）；两模块均检出真阳性
+- **基准回归自动化**：新增 `scripts/run_benchmark.py`（起靶场 → 逐模块扫描 → 断言 → 汇总；lfi Windows 自动跳过）；CI 新增 `Benchmark (regression gate)` job（workflow_dispatch 手动触发）；ci.yml 补 `workflow_dispatch` 触发器
+- **CI 首跑发现并修复**：rce 在 Linux 0 检出（收敛后只信模板求值，Windows 命中是 time 命令挂起特例）→ 靶场新增真实 Jinja2 SSTI 端点 `/ssti`（用户输入作模板本体，{{7*7}}→49，跨平台真阳性）→ 复验全绿
+- **lfi Linux 验证通过**（1/1 检出，/etc/passwd）——确认此前 Windows 0 检出纯属环境限制
+- 全量测试 + ruff + CI（Test 3.9-3.12/Lint/Format/Types/**Benchmark**）全绿
 
 ### 2026-08-08 (第二轮：反射回显误报治理)
 - **策略**：回显类探测收敛为"求值语义"验证——SSTI/EL 只信模板引擎运算求值（{{7*7}}→49），删除"特征词/token 回显"类独立判定（__subclasses__/__builtins__/applicationScope 等，响应出现这些词只证明输入被回显——含截断/引号翻倍变形回显，不证明执行）
