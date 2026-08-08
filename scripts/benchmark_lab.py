@@ -200,6 +200,7 @@ def index():
         "/cmdi?host=127.0.0.1",
         "/lfi?file=index.html",
         "/rce?cmd=echo%20hi",
+        "/ssti?name=world",
         "/ssrf?url=http://127.0.0.1/",
         "/xxe",
         "/xxe_get?xml=<xml>",
@@ -236,6 +237,22 @@ def ssrf():
         return "<html><body><pre>%s</pre></body></html>" % data
     except Exception as e:
         return "<html><body>fetch error: %s</body></html>" % e
+
+
+# ── SSTI（真实模板引擎渲染，跨平台真阳性） ─────────────────────
+
+@app.route("/ssti")
+@_hint()
+def ssti():
+    from jinja2 import Template
+
+    name = request.args.get("name", "world")
+    try:
+        # 用户输入作为模板本体 —— 真实 SSTI 场景（{{7*7}} 求值为 49）
+        return "<html><body>hello %s</body></html>" % Template(name).render()
+    except Exception:
+        # 模板语法错误时回显原始输入（非渲染结果）
+        return "<html><body>hello %s</body></html>" % name, 200
 
 
 # ── Sensitive ─────────────────────────────────────────────────────
