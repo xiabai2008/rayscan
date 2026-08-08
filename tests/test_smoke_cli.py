@@ -34,8 +34,11 @@ def test_cli_help_contains_multi() -> None:
 
 
 def test_version_consistency() -> None:
-    """pyproject.toml 与 wvs.__init__ 的版本必须一致。"""
-    import tomllib
+    """pyproject.toml 与 wvs.__init__ 的版本号保持一致。"""
+    try:
+        import tomllib
+    except ImportError:  # py<3.11：tomli 兜底（dev extras 已声明）
+        import tomli as tomllib
 
     pyproject = tomllib.loads((_project_root() / "pyproject.toml").read_text(encoding="utf-8"))
     assert pyproject["project"]["version"] == __version__
