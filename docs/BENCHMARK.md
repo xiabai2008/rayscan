@@ -17,8 +17,8 @@
 | rce | /rce?cmd= | 1 | ✅ 真阳性 | RCE token 回显 |
 | rce | 反射端点（xss/cmdi/sqli/error） | 0 | ✅ 已修复 | **Python 注入收敛为运算求值**（删除 token echo/__subclasses__/__builtins__ 回显判定） |
 | rce | /cmdi?host=（time-based 盲测） | 1 | ✅ 真阳性 | `;` 分隔符真实触发（Windows time 命令挂起 11s）→ 延迟型命令注入检出 |
-| xxe | /xxe（POST XML 解析） | 0 | ⚠️ 待查 | POST 提交点发现机制受限，靶场 GET 链接不足以驱动；列入待办 |
-| ssrf | /ssrf?url=（任意 URL fetch） | 0 | ⚠️ 漏报待查 | **反射回显误报已修复**（payload 回显排除）；真实 SSRF 样本未检出，列入待办 |
+| xxe | /xxe_get?xml=（实体展开模拟） | 1 | ✅ 真阳性 | 靶场模拟支持实体展开的解析器（Python ET 默认拒绝）；file:///etc/passwd → root:x:0:0: 命中 |
+| ssrf | /ssrf?url=（metadata 回显模拟） | 1 | ✅ 真阳性 | 靶场模拟云 metadata（169.254.169.254 → ami-id/instance-id）；**反射误报已修复** |
 | sensitive | /.env + /backup/backup.sql | 2 | ✅ 真阳性 | **基准驱动修复**（见 §2） |
 
 **误报治理进展（第二轮，2026-08-08）**：反射回显误报从 11 个降至 1 个（sqli boolean 反射，已知类型）。
@@ -49,10 +49,16 @@ python -m wvs scan http://127.0.0.1:18099/ --modules sqli xss cmdi rce --no-nucl
 # 对照 §1 矩阵核对检出/误报/漏报
 ```
 
+**一键回归**（自动起靶场 + 全模块断言，CI 手动触发同款）：
+```bash
+python scripts/run_benchmark.py
+# CI: gh workflow run ci.yml（Benchmark job，发版前/怀疑回归时触发）
+```
+
 ## 4. 待办
 
-- [ ] xxe/ssrf 真实样本补测（POST 提交点发现 / metadata 回调验证）
-- [ ] lfi 在 Linux 环境复测（/etc/passwd）
-- [ ] 反射回显误报治理（回显类探测加"执行语义"验证，如 SSTI 需模板引擎特征）
+- [x] xxe/ssrf 真实样本补测（2026-08-08：靶场补 GET 参数型 XXE 提交点 + metadata 模拟，均检出）
+- [ ] lfi 在 Linux 环境复测（/etc/passwd）——CI Benchmark job 运行时可自动覆盖
+- [ ] 反射回显误报治理——已完成（第二轮，sqli boolean 反射除外）
 - [ ] 接入外部基准（WAVSEP / OWASP Juice Shop）扩充矩阵
-- [ ] 每次发版前跑一轮基准，防回归（可挂 CI 手动触发 job）
+- [x] 基准回归自动化（scripts/run_benchmark.py + CI workflow_dispatch）

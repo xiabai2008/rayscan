@@ -12,9 +12,7 @@ RayScan 基准靶场（benchmark lab）— 建立检测基线用的本地漏洞�
 import argparse
 import json
 import os
-import socket
 import subprocess
-import sys
 import time
 
 from flask import Flask, Response, request
@@ -53,6 +51,7 @@ def _hint(default_type="text/html; charset=utf-8"):
 
 # ── SQLi ──────────────────────────────────────────────────────────
 
+
 @app.route("/sqli/error")
 @_hint()
 def sqli_error():
@@ -60,9 +59,7 @@ def sqli_error():
     if "'" in v or "or" in v.lower():
         return (
             "<html><body>SQLSTATE[42000]: Syntax error or access violation: "
-            "1064 You have an error in your SQL syntax near '"
-            + v[:40]
-            + "' at line 1</body></html>"
+            "1064 You have an error in your SQL syntax near '" + v[:40] + "' at line 1</body></html>"
         )
     return "<html><body>user id=%s not found</body></html>" % v
 
@@ -98,6 +95,7 @@ def sqli_time():
 
 # ── XSS ───────────────────────────────────────────────────────────
 
+
 @app.route("/xss/reflected")
 @_hint()
 def xss_reflected():
@@ -106,6 +104,7 @@ def xss_reflected():
 
 
 # ── CMDi ──────────────────────────────────────────────────────────
+
 
 @app.route("/cmdi")
 @_hint()
@@ -124,6 +123,7 @@ def cmdi():
 
 # ── LFI ───────────────────────────────────────────────────────────
 
+
 @app.route("/lfi")
 @_hint()
 def lfi():
@@ -138,6 +138,7 @@ def lfi():
 
 # ── RCE ───────────────────────────────────────────────────────────
 
+
 @app.route("/rce")
 @_hint()
 def rce():
@@ -147,6 +148,7 @@ def rce():
 
 
 # ── XXE ───────────────────────────────────────────────────────────
+
 
 @app.route("/xxe", methods=["POST"])
 @_hint()
@@ -162,6 +164,31 @@ def xxe():
         return "<html><body>failed to load external entity: %s</body></html>" % e, 200
 
 
+# 模拟"支持外部实体展开"的解析器（Python ET 默认拒绝展开）：
+# DOCTYPE 声明 SYSTEM 实体时按路径返回模拟文件内容 —— 检测器视角等价于真实 XXE 文件读取
+_SIMULATED_FILES = {
+    "passwd": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin/nologin\n",
+    "hosts": "127.0.0.1\tlocalhost\n::1\tlocalhost\n",
+    "win.ini": "[fonts]\n[extensions]\n[Mail]\n",
+}
+
+
+@app.route("/xxe_get")
+@_hint()
+def xxe_get():
+    import re
+
+    xml = request.args.get("xml", "")
+    m = re.search(r'<!ENTITY[^>]*SYSTEM\s+"([^"]+)"', xml, re.I)
+    if m:
+        path = m.group(1).lower()
+        for key, content in _SIMULATED_FILES.items():
+            if key in path:
+                return content, 200
+        return "<html><body>file not found</body></html>", 200
+    return "<html><body>parsed xml ok</body></html>", 200
+
+
 @app.route("/")
 def index():
     links = [
@@ -175,6 +202,7 @@ def index():
         "/rce?cmd=echo%20hi",
         "/ssrf?url=http://127.0.0.1/",
         "/xxe",
+        "/xxe_get?xml=<xml>",
         "/.env",
         "/backup/backup.sql",
     ]
@@ -187,6 +215,7 @@ def index():
 
 # ── SSRF ──────────────────────────────────────────────────────────
 
+
 @app.route("/ssrf")
 @_hint()
 def ssrf():
@@ -195,6 +224,12 @@ def ssrf():
     url = request.args.get("url", "")
     if not url.startswith(("http://", "https://")):
         return "<html><body>bad url</body></html>"
+    # 模拟云 metadata 服务（真实云环境 169.254.169.254 返回字段列表）
+    if "169.254.169.254" in url:
+        return (
+            "ami-id\ninstance-id\npublic-ipv4\nsecurity-credentials\niam/\nplacement/\nmeta-data/\n",
+            200,
+        )
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:
             data = resp.read(500).decode("utf-8", "replace")
@@ -204,6 +239,7 @@ def ssrf():
 
 
 # ── Sensitive ─────────────────────────────────────────────────────
+
 
 @app.route("/.env")
 @_hint()
