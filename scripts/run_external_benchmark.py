@@ -44,6 +44,8 @@ def scan(port: int, modules: str, out_name: str, timeout: int = 1200) -> list:
         "--allow-loopback",
         "--rate",
         "15",
+        "--max-time",
+        "1500",  # 大型 SPA 目标限时，防 CI 超时
         "-o",
         str(out),
     ]
