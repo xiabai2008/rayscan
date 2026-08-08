@@ -11,7 +11,7 @@ import statistics
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 from urllib.parse import parse_qs, urlparse
 
 from ..config import ConfigManager
@@ -42,7 +42,7 @@ class ModuleInfo:
     author: str = "WVS Team"
     version: str = "1.0.0"
     enabled_by_default: bool = True
-    tags: List[str] = None
+    tags: Optional[List[str]] = None
     # T2.1: module tier, used by the scanner to decide auto-loading.
     #   - "core": loaded by default
     #   - "lite": loaded only with --all-modules / modules.all
@@ -79,7 +79,7 @@ class DetectionModule(ABC):
 
         # Runtime state
         self._enabled = self.module_config.enabled
-        self._stats = {
+        self._stats: Dict[str, Any] = {
             "requests_made": 0,
             "vulnerabilities_found": 0,
             "errors": 0,
@@ -134,7 +134,7 @@ class DetectionModule(ABC):
     @property
     def enabled(self) -> bool:
         """Whether this module is enabled."""
-        return self._enabled and self.module_config.enabled
+        return bool(self._enabled and self.module_config.enabled)
 
     @enabled.setter
     def enabled(self, value: bool):
@@ -808,10 +808,10 @@ class DetectionModule(ABC):
             # sqlmap: avg + 7*stdev threshold
             lower_limit = baseline_avg + TIME_BASED_STDEV_COEFF * baseline_std
             threshold = max(TIME_BASED_MIN_VALID_DELAYED, lower_limit)
-            return actual_delay >= threshold
+            return bool(actual_delay >= threshold)
         else:
             # No statistical data — fallback to simple comparison
-            return actual_delay >= max(TIME_BASED_MIN_VALID_DELAYED, expected_delay * 0.7)
+            return bool(actual_delay >= max(TIME_BASED_MIN_VALID_DELAYED, expected_delay * 0.7))
 
     async def _verify_time_based(
         self,
@@ -849,7 +849,7 @@ class DetectionModule(ABC):
             if resp and self._is_valid_time_delay(actual, expected_delay, baseline_avg, baseline_std):
                 success_count += 1
 
-        return success_count >= TIME_BASED_VERIFICATION_ATTEMPTS
+        return bool(success_count >= TIME_BASED_VERIFICATION_ATTEMPTS)
 
     def _should_skip_time_based(
         self,
@@ -1000,7 +1000,7 @@ class ModuleFactory:
     Responsible for creating and managing detection module instances.
     """
 
-    _modules: Dict[str, type] = {}
+    _modules: Dict[str, "Type[DetectionModule]"] = {}
 
     @classmethod
     def register(cls, module_class: type):

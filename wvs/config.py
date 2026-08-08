@@ -218,15 +218,19 @@ class ConfigManager:
             content = path.read_text(encoding="utf-8")
 
             if path.suffix.lower() in [".yaml", ".yml"]:
-                return yaml.safe_load(content) or {}
+                parsed = yaml.safe_load(content) or {}
+                return parsed if isinstance(parsed, dict) else {}
             elif path.suffix.lower() == ".json":
-                return json.loads(content)
+                parsed = json.loads(content)
+                return parsed if isinstance(parsed, dict) else {}
             else:
                 # Try to auto-detect format
                 try:
-                    return json.loads(content)
+                    parsed = json.loads(content)
+                    return parsed if isinstance(parsed, dict) else {}
                 except json.JSONDecodeError:
-                    return yaml.safe_load(content) or {}
+                    parsed = yaml.safe_load(content) or {}
+                    return parsed if isinstance(parsed, dict) else {}
 
         except (yaml.YAMLError, json.JSONDecodeError) as e:
             raise ConfigError(f"Failed to parse configuration file {filepath}: {e}")
@@ -235,7 +239,7 @@ class ConfigManager:
 
     def _load_env_vars(self) -> Dict[str, Any]:
         """Load configuration from environment variables"""
-        config = {}
+        config: Dict[str, Any] = {}
 
         for env_var, config_key in self.ENV_MAPPING.items():
             value = os.getenv(env_var)
@@ -282,7 +286,7 @@ class ConfigManager:
             Configuration value
         """
         keys = key.split(".")
-        value = self._config
+        value: Any = self._config
 
         try:
             for k in keys:
@@ -300,7 +304,7 @@ class ConfigManager:
             value: Configuration value
         """
         keys = key.split(".")
-        config = self._config
+        config: Any = self._config
 
         # Traverse to the parent of the last key
         for k in keys[:-1]:
@@ -327,18 +331,22 @@ class ConfigManager:
         from dataclasses import MISSING, fields
 
         # Create module configurations
-        modules_config = {}
-        for module_name, module_data in self._config.get("modules", {}).items():
-            modules_config[module_name] = ModuleConfig(
-                enabled=module_data.get("enabled", True),
-                timeout=module_data.get("timeout", 30),
-                threads=module_data.get("threads", 3),
-                depth=module_data.get("depth", 3),
-                custom_params=module_data.get("custom_params", {}),
-            )
+        modules_config: Dict[str, ModuleConfig] = {}
+        modules_raw = self._config.get("modules", {})
+        if isinstance(modules_raw, dict):
+            for module_name, module_data in modules_raw.items():
+                if not isinstance(module_data, dict):
+                    continue
+                modules_config[str(module_name)] = ModuleConfig(
+                    enabled=module_data.get("enabled", True),
+                    timeout=module_data.get("timeout", 30),
+                    threads=module_data.get("threads", 3),
+                    depth=module_data.get("depth", 3),
+                    custom_params=module_data.get("custom_params", {}),
+                )
 
         # Auto-map ScannerConfig fields to eliminate manual per-field duplication
-        kwargs = {}
+        kwargs: Dict[str, Any] = {}
         for f in fields(ScannerConfig):
             if f.name == "modules":
                 kwargs["modules"] = modules_config

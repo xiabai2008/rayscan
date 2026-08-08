@@ -444,6 +444,15 @@ class SQLiTechniquesMixin:
             if true_resp is None or false_resp is None:
                 continue
 
+            # 基准驱动修复（2026-08-08）：boolean 命中必须排除 payload 原样回显——
+            # 反射端点（如 /xss/reflected）把 True/False payload 原文回显，响应差异只是
+            # 输入反射，不是 SQL 条件求值；真实盲注响应不含 payload（盲注语义），
+            # 回显型 boolean 差异宁漏报（与 RCE/SSTI 收敛同策略）
+            true_text = true_resp.get("text", "") or ""
+            false_text = false_resp.get("text", "") or ""
+            if true_payload in true_text or false_payload in false_text:
+                continue
+
             if analyzer.is_boolean_blind_positive(true_resp, false_resp):
                 if await self._verify_with_different_payload(url, params, param_name, method, param_type, "boolean"):
                     vuln = self._create_vuln(

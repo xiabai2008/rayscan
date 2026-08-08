@@ -97,6 +97,7 @@ class GraphQLDetector(DetectionModule):
         vulns: List[Vulnerability] = []
 
         # GET 探测（响应特征命中直接进入深测；404/403 跳过）
+        assert self._active_session is not None, "session required"
         try:
             get_resp = await self._active_session.request(
                 "GET", url, timeout=self.module_config.timeout, follow_redirects=False
@@ -163,6 +164,7 @@ class GraphQLDetector(DetectionModule):
 
     async def _post_query(self, url: str, body: str) -> Optional[Dict[str, Any]]:
         """发送 GraphQL POST（application/json）；返回 {"text", "status_code"} 或 None。"""
+        assert self._active_session is not None, "session required"
         try:
             resp = await self._active_session.request(
                 "POST",

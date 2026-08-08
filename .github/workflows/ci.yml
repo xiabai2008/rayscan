@@ -84,9 +84,14 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -e ".[dev]"
-      - name: mypy new modules (advisory, non-blocking)
-        # T4 (TD-003/007): 新增模块全量注解收口；存量模块 mypy 债务渐进整改（见 TECH_DEBT）
-        run: mypy wvs/ai wvs/mcp_server.py wvs/modules/mcp wvs/modules/graphql --ignore-missing-imports || true
+      - name: mypy core chain (advisory, non-blocking)
+        # T4/T5 (TD-003/007): 核心链路 11 路径 0 错误（scanner/models/config/base/dedup/
+        # result_merger/cache + 新模块 ai/mcp_server/mcp/graphql）；存量模块 mypy 债务渐进整改
+        run: |
+          mypy wvs/ai wvs/mcp_server.py wvs/modules/mcp wvs/modules/graphql \
+            wvs/core/scanner.py wvs/core/dedup.py wvs/core/result_merger.py wvs/core/cache.py \
+            wvs/models.py wvs/config.py wvs/modules/base.py \
+            --ignore-missing-imports --follow-imports=skip || true
 
   benchmark:
     name: Benchmark (regression gate)
@@ -102,3 +107,18 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Run benchmark regression
         run: python scripts/run_benchmark.py --port 18099
+
+  benchmark-external:
+    name: Benchmark External (Juice Shop)
+    runs-on: ubuntu-latest
+    # 手动触发：外部基准（Juice Shop docker 容器），本机网络受限时使用
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Run external benchmark (Juice Shop)
+        run: python scripts/run_external_benchmark.py --port 3000

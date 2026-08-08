@@ -140,6 +140,7 @@ class MCPDetector(DetectionModule):
     async def _probe_endpoint(self, url: str, base: str) -> List[Vulnerability]:
         """探测单个端点；返回发现的漏洞（证据验证通过才报）。"""
         vulns: List[Vulnerability] = []
+        assert self._active_session is not None, "session required"
         try:
             baseline_resp = await self._active_session.request(
                 "GET", url, timeout=self.module_config.timeout, follow_redirects=False
@@ -218,6 +219,7 @@ class MCPDetector(DetectionModule):
 
     async def _post_jsonrpc(self, url: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """发送 JSON-RPC POST；返回 {"text", "headers", "status_code"} 或 None。"""
+        assert self._active_session is not None, "session required"
         try:
             resp = await self._active_session.request(
                 "POST",

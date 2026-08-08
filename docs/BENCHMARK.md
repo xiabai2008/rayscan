@@ -9,7 +9,8 @@
 | 模块 | 样本端点 | 检出 | 结果 | 备注 |
 |------|---------|:----:|------|------|
 | sqli | /sqli/error?（error/union/blind/time 四型） | 4 | ✅ 真阳性 | error 多变体 + stacked；union/blind/time 由 error 端点覆盖 |
-| sqli | /xss/reflected?q=（反射参数） | 1 | ⚠️ 误报 | boolean 差异误判（输入回显 + 响应随 payload 变化）——**已知误报类型** |
+| sqli | /sqli/blind?（boolean 条件响应差异） | 1 | ✅ 真阳性 | 靶场通用等值判断（\d+=\d+）；**反射误报已修复**（payload 回显排除） |
+| sqli | /xss/reflected?q=（反射参数） | 0 | ✅ 已修复 | **boolean 命中排除 payload 原样回显**（盲注语义）——反射误报清除 |
 | xss | /xss/reflected?q= | 4 变体 | ✅ 真阳性 | img onerror / polyglot / svg 均检出 |
 | xss | {{config}}（SSTI 探测） | 0 | ✅ 已修复 | **SSTI 弱信号路径删除**（只信 7*7=49 运算求值） |
 | cmdi | /rce?cmd=（shell 拼接） | 2 | ✅ 真阳性 | `; echo <token>` 二次验证命中 |
@@ -21,10 +22,11 @@
 | ssrf | /ssrf?url=（metadata 回显模拟） | 1 | ✅ 真阳性 | 靶场模拟云 metadata（169.254.169.254 → ami-id/instance-id）；**反射误报已修复** |
 | sensitive | /.env + /backup/backup.sql | 2 | ✅ 真阳性 | **基准驱动修复**（见 §2） |
 
-**误报治理进展（第二轮，2026-08-08）**：反射回显误报从 11 个降至 1 个（sqli boolean 反射，已知类型）。
+**误报治理进展（第二轮+，2026-08-08）**：反射回显误报 11 → **0**（全类型清除）。
 修复策略：**回显类探测收敛为"求值语义"验证**——SSTI/EL 只信模板引擎运算求值（{{7*7}}→49），
 删除"特征词/token 回显"类独立判定（__subclasses__/__builtins__/applicationScope 等，
-响应出现这些词只证明输入被回显——含截断回显与引号翻倍变形回显，不证明执行）。
+响应出现这些词只证明输入被回显——含截断回显与引号翻倍变形回显，不证明执行）；
+**sqli boolean 命中排除 payload 原样回显**（盲注语义，反射端点天然免疫）。
 
 ## 2. 基准驱动修复记录（2026-08-08）
 
@@ -40,6 +42,9 @@
 | 8 | rce token echo 路径（变形回显绕过 _is_input_reflection） | 收敛版删除（运算求值已覆盖模板引擎场景） |
 | 9 | rce Java EL leak ≥2 indicators 判定同样受变形回显影响 | 加 payload 回显排除 |
 | 10 | ssrf metadata pattern 命中未排除 payload 回显（反射端点天然含 URL 字样） | payload 在响应中 → 直接排除 |
+| 11 | **sqli boolean 反射误报**（`' AND 'a'='a` 对在反射端点产生响应差异） | **boolean 命中排除 payload 原样回显**（盲注语义）——误报清零 |
+| 12 | 靶场 /sqli/blind 条件检查写死 "1=1"（verify 用 2>1 无差异） | 通用数值等值判断（\d+=\d+）+ '1'='1 兼容 |
+| 13 | rce 在 Linux 0 检出（收敛后只信模板求值，靶场无模板引擎） | 靶场新增真实 Jinja2 SSTI 端点 /ssti（跨平台真阳性） |
 
 ## 3. 复测流程
 

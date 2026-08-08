@@ -20,6 +20,12 @@ All code changes must be logged in this file. Each entry should include:
 - Affected files/modules
 ## Change Log
 
+### 2026-08-08 (第四轮：sqli boolean 误报清零 + 外部基准 + mypy 核心清零)
+- **sqli boolean 反射误报修复**：boolean 命中排除 payload 原样回显（盲注语义）——反射端点天然免疫；`/sqli/blind` 真阳性保留（靶场改通用等值判断兼容 verify payload）；**反射误报 11 → 0 全类型清零**
+- **外部基准（Juice Shop）**：本机网络受限（Docker Hub/npm/GitHub 下载全阻断）→ 新增 `scripts/run_external_benchmark.py`（docker 起 Juice Shop → sqli/xss/api/sensitive 扫描 → 断言）+ CI `benchmark-external` job（workflow_dispatch，GitHub Actions 网络正常环境运行）；WAVSEP 无 release 资产暂缓
+- **mypy 核心链路清零（TD-003/007）**：scanner/models/config/base/dedup/result_merger/cache + 新模块（ai/mcp_server/mcp/graphql）共 11 路径 **0 错误**（从全库 212 → 核心 0）；修复类型：__init__ Optional 注解（_lab_profile/_nuclei_integration）、no-any-return（json.loads/safe_load isinstance、bool() 收窄）、ModuleFactory `Type[DetectionModule]`、TIME_BASED 常量注解、_active_session 断言、cache parse_qs 恒非 None；CI types job 范围扩至核心链路
+- 全量测试 + ruff + format 全绿
+
 ### 2026-08-08 (第三轮：xxe/ssrf 基准补全 + 基准回归自动化)
 - **xxe/ssrf 基准补测**：靶场新增 GET 参数型 XXE 提交点 `/xxe_get?xml=`（模拟支持实体展开的解析器，file:///etc/passwd → root:x:0:0: 命中）与 SSRF metadata 模拟（169.254.169.254 → ami-id/instance-id）；两模块均检出真阳性
 - **基准回归自动化**：新增 `scripts/run_benchmark.py`（起靶场 → 逐模块扫描 → 断言 → 汇总；lfi Windows 自动跳过）；CI 新增 `Benchmark (regression gate)` job（workflow_dispatch 手动触发）；ci.yml 补 `workflow_dispatch` 触发器

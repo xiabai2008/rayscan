@@ -116,7 +116,8 @@ class ResultDeduplicator:
         cp = self._checkpoint_path(target_url)
         if cp.exists():
             try:
-                return json.loads(cp.read_text(encoding="utf-8"))
+                parsed = json.loads(cp.read_text(encoding="utf-8"))
+                return parsed if isinstance(parsed, dict) else None
             except Exception as e:
                 logger.warning(f"Checkpoint load failed: {e}")
         return None

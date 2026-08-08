@@ -76,9 +76,16 @@ def sqli_union():
 @app.route("/sqli/blind")
 @_hint()
 def sqli_blind():
+    import re as _re
+
     v = request.args.get("id", "")
-    # boolean 差异：payload 含真条件时返回 "admin"，否则空
-    if "1=1" in v or "'a'='a" in v:
+    # boolean 差异：通用数值等值判断（1=1 → admin，1=2 → guest）——
+    # 兼容检测器的多组 True/False payload 对与二次验证
+    m = _re.search(r"(\d+)\s*=\s*(\d+)", v)
+    if m and m.group(1) == m.group(2):
+        return "<html><body>Hello admin</body></html>"
+    # 兼容 verify 用 payload：' OR '1'='1 / " OR "1"="1 / 'a'='a / 1=1
+    if any(k in v for k in ("1=1", "'a'='a", "1'='1", '1"="1')):
         return "<html><body>Hello admin</body></html>"
     return "<html><body>Hello guest</body></html>"
 
@@ -240,6 +247,7 @@ def ssrf():
 
 
 # ── SSTI（真实模板引擎渲染，跨平台真阳性） ─────────────────────
+
 
 @app.route("/ssti")
 @_hint()

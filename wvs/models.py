@@ -226,7 +226,7 @@ class ScanResult:
     @property
     def vulnerability_count(self) -> Dict[str, int]:
         """Count vulnerabilities by type (None-safe)"""
-        counts = {}
+        counts: Dict[str, int] = {}
         for vuln in self.vulnerabilities:
             vuln_type = vuln.type.value if vuln.type else "unknown"
             counts[vuln_type] = counts.get(vuln_type, 0) + 1
@@ -235,7 +235,7 @@ class ScanResult:
     @property
     def severity_count(self) -> Dict[str, int]:
         """Count vulnerabilities by severity (None-safe)"""
-        counts = {}
+        counts: Dict[str, int] = {}
         for vuln in self.vulnerabilities:
             severity = vuln.severity.value if vuln.severity else "info"
             counts[severity] = counts.get(severity, 0) + 1
