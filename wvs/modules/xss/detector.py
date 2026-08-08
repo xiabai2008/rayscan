@@ -415,21 +415,9 @@ class XSSDetector(DetectionModule):
                 logger.info(f"[XSS] SSTI detected: {url} [{param_name}] (7*7=49)")
                 return
 
-            # Also check for generic reflection of template syntax
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
-            if reflected and any(kw in resp_text.lower() for kw in ("config", "self", "__class__")):
-                vuln = self._create_vuln(
-                    url=url,
-                    param=param_name,
-                    param_type=param_type,
-                    method=method,
-                    payload=payload[:80],
-                    vuln_type="ssti",
-                    evidence=evidence or "Template syntax reflected with context clues",
-                )
-                self._found_vulns.append(vuln)
-                logger.info(f"[XSS] SSTI reflection: {url} [{param_name}]")
-                return
+            # 基准驱动修复（2026-08-08）：删除"模板语法反射 + config/self/__class__ 关键词"弱信号路径
+            # ——反射端点原样回显 {{config}} 即误报；SSTI 只信运算求值（7*7=49，上方已验证）
+            return
 
     async def _test_reflected(
         self,
