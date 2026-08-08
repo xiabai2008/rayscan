@@ -30,7 +30,7 @@ def wait_ready(url: str, timeout: int = 180) -> bool:
     return False
 
 
-def scan(port: int, modules: str, out_name: str, timeout: int = 1200) -> list:
+def scan(port: int, modules: str, out_name: str, timeout: int = 1800) -> list:
     out = ROOT / f"{out_name}.json"
     cmd = [
         sys.executable,
