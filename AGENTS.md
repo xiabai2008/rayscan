@@ -21,6 +21,14 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-08-08 (检测基准体系 + 架构清理 + CI 真实验证)
+- **检测基准（①）**：新增 `scripts/benchmark_lab.py`（Flask 本地靶场，仅 127.0.0.1：sqli 四型/xss/cmdi/lfi/rce/xxe/ssrf/sensitive）+ `docs/BENCHMARK.md` 基线矩阵：sqli 4真+1反射误报、xss 有效、cmdi 2真、rce 1真+4回显误报、sensitive 2真（修复后）、lfi 0（Windows 无 /etc/passwd 待 Linux 复测）、xxe/ssrf 待办
+- **基准驱动修复（3 处 sensitive 缺陷）**：.env 无引号格式新增 `env_var_secret` pattern（(?m) 逐行）；探测路径补 `/backup/backup.sql` 等；内容阈值 50→10（短 .env 被误杀）
+- **CLI `--allow-loopback`**：scan 命令注册（本地靶场/基准测试用；SSRF 防护默认仍拦截内网，修复远端缺口）
+- **架构清理（②）**：确认 `scan()` 已作 facade 委托 ScanOrchestrator；删除死代码 `_do_authenticate`/`_run_module`/`_run_module_no_semaphore`（-198 行 + 4 个未用 auth import）
+- **CI 真实验证（③）**：push 后 GitHub Actions 首次真实运行——修复 2 个失败：`test_mcp.py` 缺 `importorskip('mcp')`（CI [dev] 无 mcp 依赖）、`test_smoke_cli.py` tomllib py3.9/3.10 兼容（tomli 兜底）；**最终 CI 全绿**（Test 3.9-3.12 + Lint + Format + Types）
+- **OA 真实样本流程（④）**：OA_RULES.md §7 收集流程 + 记录模板 + 待收集清单（泛微/致远/用友 等 9 种）
+
 ### 2026-08-08 (T0 收尾 — 版本 SSOT + OA 实测 + 发布 v2.1.0)
 - **版本 SSOT 统一为 2.1.0**：`wvs/__init__.py` 与 pyproject 对齐（SSOT 注释）；报告模块（console/html/markdown）改为动态读取 `__version__`；25 处硬编码 1.0.2/2.0.x 清理（UI/GUI/模板/yml/docstring，CHANGELOG 历史记录保留）
 - **OA mock 靶场实测闭环**（4 样本，记录入 docs/OA_RULES.md §5）：泛微-Ecology（weaver.do RCE/octet-stream ✅）、Nacos 1.3.2（users 列表 pageItems/CVE-2021-29441 ✅）、Nacos 1.5.0（版本过滤 [min,1.4.1) 正确跳过 ⬜ 负样本 ✅）、Jenkins（/script Script Console ✅）
