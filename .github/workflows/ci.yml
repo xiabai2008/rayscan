@@ -9,6 +9,8 @@ on:
       - 'docs/**'
   pull_request:
     branches: [master, main]
+  # 手动触发（Benchmark 回归门禁等）：gh workflow run ci.yml 或 Actions 页面 Run workflow
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
