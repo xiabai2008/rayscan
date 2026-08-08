@@ -1,9 +1,19 @@
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
 from .builtin import BUILTIN_PROFILES
+
+# Profile name whitelist: alphanumeric + dash/underscore only, max 64 chars
+_PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _validate_profile_name(name: str) -> None:
+    """Validate profile name to prevent path traversal (P0 security fix)."""
+    if not _PROFILE_NAME_RE.match(name):
+        raise ValueError(f"Invalid profile name: {name!r}. Must match ^[A-Za-z0-9_-]{{1,64}}$")
 
 
 class ProfileManager:
@@ -20,7 +30,6 @@ class ProfileManager:
         """List all available profiles (builtin + custom)."""
         profiles = []
 
-        # Built-in profiles
         for name, data in BUILTIN_PROFILES.items():
             profiles.append(
                 {
@@ -31,7 +40,6 @@ class ProfileManager:
                 }
             )
 
-        # Custom profiles from disk
         for path in self.profiles_dir.glob("*.yaml"):
             name = path.stem
             if name not in BUILTIN_PROFILES:
@@ -52,16 +60,15 @@ class ProfileManager:
 
     def load_profile(self, name: str) -> Optional[Dict[str, Any]]:
         """Load a profile by name (builtin or custom)."""
-        # Check builtin first
+        _validate_profile_name(name)
+
         if name in BUILTIN_PROFILES:
             return BUILTIN_PROFILES[name].copy()
 
-        # Check custom profiles
         profile_path = self.profiles_dir / f"{name}.yaml"
         if profile_path.exists():
             try:
-                data = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
-                return data
+                return yaml.safe_load(profile_path.read_text(encoding="utf-8"))
             except Exception:
                 return None
 
@@ -69,6 +76,8 @@ class ProfileManager:
 
     def save_profile(self, name: str, data: Dict[str, Any]) -> Path:
         """Save a custom profile to disk."""
+        _validate_profile_name(name)
+
         profile_path = self.profiles_dir / f"{name}.yaml"
         profile_path.parent.mkdir(parents=True, exist_ok=True)
         profile_path.write_text(
@@ -78,7 +87,12 @@ class ProfileManager:
         return profile_path
 
     def delete_profile(self, name: str) -> bool:
-        """Delete a custom profile. Returns True if deleted, False if not found or builtin."""
+        """Delete a custom profile.
+
+        Returns True if deleted, False if not found or builtin.
+        """
+        _validate_profile_name(name)
+
         if name in BUILTIN_PROFILES:
             return False
         profile_path = self.profiles_dir / f"{name}.yaml"
@@ -89,19 +103,26 @@ class ProfileManager:
 
     def apply_to_config(self, config_manager, profile_name: str) -> bool:
         """Apply a profile's settings to a ConfigManager instance."""
+        _validate_profile_name(profile_name)
+
         profile = self.load_profile(profile_name)
         if profile is None:
             return False
 
-        # Apply params
         params = profile.get("params", {})
         for key, value in params.items():
             config_manager.set(key, value)
 
         return True
 
-    def get_profile_modules(self, profile_name: str) -> tuple:
-        """Get enabled and disabled modules from a profile. Returns (enabled_list, disabled_list)."""
+    def get_profile_modules(self, profile_name: str) -> Tuple[List[str], List[str]]:
+        """Get enabled and disabled modules from a profile.
+
+        Returns:
+            (enabled_list, disabled_list).
+        """
+        _validate_profile_name(profile_name)
+
         profile = self.load_profile(profile_name)
         if profile is None:
             return ([], [])

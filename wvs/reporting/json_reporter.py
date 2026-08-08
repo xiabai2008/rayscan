@@ -104,6 +104,10 @@ class JSONReporter:
             if value is not None:
                 data[key] = value
 
+        # Explain 模式证据链(Phase 1: --explain)
+        if getattr(v, "evidence_chain", None):
+            data["evidence_chain"] = v.evidence_chain
+
         return data
 
     # ─────────────────────────────────────────────────────────────
@@ -192,6 +196,9 @@ class JSONReporter:
 
         if v.cwe_id:
             result["properties"]["cwe"] = f"CWE-{v.cwe_id}"
+
+        if getattr(v, "evidence_chain", None):
+            result["properties"]["evidence_chain"] = v.evidence_chain
 
         return result
 

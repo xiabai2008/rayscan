@@ -4,6 +4,7 @@ RayScan Core — scanner, crawler, session management, rate limiting, and cachin
 
 from .cache import CacheManager, ScanCache, TargetFingerprinter, cache_scan, get_cached_scan
 from .crawler import DiscoveredEndpoint, WebCrawler
+from .dedup import ResultDeduplicator, prioritize_endpoints
 from .rate_limiter import AdaptiveRateLimiter, IntelligentRateLimiter, RateLimiter, WAFEvasion
 from .scanner import WAVScanner
 from .scheduler import PrioritizedTask, TaskPriority, TaskScheduler
@@ -66,6 +67,8 @@ __all__ = [
     "PrioritizedTask",
     "SessionManager",
     "SessionState",
+    "ResultDeduplicator",
+    "prioritize_endpoints",
     "PoCGenerator",
     "PoC",
     "LabProfile",
@@ -94,9 +97,4 @@ __all__ = [
     "ResultMerger",
     "MergedVulnerability",
     "merge_and_display",
-    # PoC Source Manager
-    "PoCSourceManager",
-    "PoCSourceInfo",
-    "get_poc_source_manager",
-    "DEFAULT_POC_CONFIG",
 ]

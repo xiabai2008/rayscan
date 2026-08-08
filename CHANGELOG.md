@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.1.0] - 2026-08-08
+## [2.2.0] - 2026-08-08
 
 ### Added
 - **AI 辅助验证（T1）**：`scan --ai-verify` 对候选漏洞做 LLM 二次复核（确认/存疑降级，只降不删）；`rayscan ai-report` 用 LLM 生成报告摘要；官方 OpenAI 兼容 API（`LLM_API_KEY`），无 key 静默跳过
@@ -26,10 +26,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - 统一账号引用 xiabai2008（cli/wvs_gui/web_ui/html_report 残留清理）
 
 ### Changed
-- 版本 SSOT：`wvs/__init__.py` = 2.1.0（与 pyproject 一致）；报告模块（console/html/markdown）动态读取 `__version__`，UI 硬编码版本统一 2.1.0
+- 版本 SSOT：`wvs/__init__.py` = 2.2.0（与 pyproject 一致）；报告模块（console/html/markdown）动态读取 `__version__`，UI 硬编码版本统一
 - OA 实测闭环（mock 靶场 4 样本：泛微/Nacos 1.3.2/Nacos 1.5.0 负样本/Jenkins），记录入 docs/OA_RULES.md
+- 与远程 v2.1.0（可解释检测/被动扫描/业务逻辑/规则管理/编排层）合并：保留双方功能（AI/MCP/GraphQL + demo/passive/idor/authbypass/rules/编排器）
 
 ---
+
+## [2.1.0] - 2026-08-07
+
+### 🚀 升级亮点
+
+- **一键演示 `rayscan demo`**:内置本地靶场(SQLi/XSS,仅 127.0.0.1),启动即自动扫描,实测检出 12 个漏洞,每条附证据链
+- **可解释检测 `--explain`**:每个漏洞附 `evidence_chain`(基线差异/命中特征/置信度依据),JSON/SARIF 报告同步输出,可直接作为 SRC 提交证据
+- **被动扫描 `rayscan passive`**:零依赖轻量 MITM 代理,分析真实流量覆盖登录后页面,`--target` 域名过滤防误扫
+- **业务逻辑检测(新增模块)**:
+  - `idor` 越权检测:对象替换(±1/批量)对比 + 批量接口 + 管理端点探测
+  - `authbypass` 认证绕过:认证头移除重放 + JWT none/弱密钥 + 默认凭据
+- **合规预设 `--preset`**:`gentle`(低速率/浅爬/有限模块/授权提示)等 5 种预设
+- **规则管理 `rayscan rules status|init|update`**:检测规则增量更新无需发版(git pull,非 git 优雅降级)
+- **社区运营体系**:运营规划、规则贡献三阶段流程(detect→exploit→regression)、Issue/PR 模板、贡献者致谢
+
+### Added
+
+- 架构:新增 `ScanOrchestrator`/`ScanStage` 编排层,`WAVScanner.scan()` 作为 facade 拆分(WAF/靶机认证/OA 检测/去重抽为独立 stage)
+- 被动扫描包 `wvs/core/passive/`、演示靶场 `wvs/demo_lab.py`、规则管理 `wvs/core/rule_updater.py`
+- CLI 新命令:`demo`、`passive`、`rules`;`scan/use` 新增 `--explain`、`--preset`、`--concurrency`
+- 多引擎聚合报告视图:`multi` 结果表新增置信度/来源引擎/★多引擎高可信标记
+- `--i-have-permission` 授权确认后真正执行 exploit 验证链(此前仅日志空转)
+- CI 覆盖率门禁(`--cov-fail-under=30`);Docker 运行时安装 git 支持规则更新
+
+### Fixed
+
+- `multi` 子命令重复定义且 `main()` 未接线 → 已接入可达
+- `HTMLReporter.generate_json` 误用(CLI JSON 报告调用不存在方法)→ 改 `JSONReporter.generate`
+- `WAVScanner._vuln_seen` 未初始化 → 扫描去重崩溃
+- 报告版本硬编码 "1.0.2" → 动态读取 `__version__`
+- `_validate_target_url` SSRF 防护放行参数(默认关闭,仅 demo 本地靶场使用)
+- 全局并发 `Semaphore` 跨模块共享(此前每个模块独立新建,未真正限流)
+
+### Changed
+
+- 模块加载保持 `ModuleFactory` 注册表单一事实源;新增模块按 lite 分层注册
+- 核心统一 httpx;aiohttp 仅存于 exploit/OOB/Wappalyzer 外围适配层
+- 技术债清理:双重 `@staticmethod`、`__all__` 重复导出、类级可变默认值
+- 测试套件:新增 6 个测试文件(CLI 冒烟/被动扫描/业务逻辑/编排器/规则报告/Demo 靶场),远程 v2.0 回归套件(OAVersion/fp_guard/s2_resume)全量纳入
+
+### Testing
+
+- 完整测试套件全绿(约 211 用例):远程 v2.0(OA 三级链路/Nuclei/checkpoint/S1 误报治理)+ 本地 Phase 0-4 全量
+
+---
+
+## [2.0.1] - 2026-08-06
 
 ### Fixed
 - 统一仓库账号引用至 `xiabai2008`：修正 README/CONTRIBUTING/CHANGELOG/LICENSE 及代码内旧账号 `xiabai2004` 链接（badge、clone、Release、版权、Docker 镜像名）

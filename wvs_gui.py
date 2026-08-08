@@ -1,4 +1,4 @@
-﻿"""
+"""
 RayScan 2.1.0 GUI — ttkbootstrap 主题化 + 响应式布局
 """
 import tkinter as tk
@@ -381,7 +381,7 @@ class RayScanGUI:
         bar.grid(row=3, column=0, sticky="ew")
         ttk.Label(bar, text="RayScan 2.1.0 | MIT License",
                   font=("", 7), foreground="gray").pack(side=tk.LEFT)
-        ttk.Label(bar, text="github.com/xiabai2008/RayScan",
+        ttk.Label(bar, text="github.com/xiabai2008/rayscan",
                   font=("", 7), foreground="gray").pack(side=tk.RIGHT)
 
     # ==================== 扫描控制 ====================

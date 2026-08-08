@@ -73,7 +73,7 @@ def _build_initialize() -> Dict[str, Any]:
         "params": {
             "protocolVersion": "2025-06-18",
             "capabilities": {},
-            "clientInfo": {"name": "rayscan", "version": "2.1.0"},
+            "clientInfo": {"name": "rayscan", "version": "2.2.0"},
         },
     }
 

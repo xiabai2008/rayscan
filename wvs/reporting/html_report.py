@@ -44,15 +44,6 @@ class HTMLReporter:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html_content, encoding="utf-8")
 
-    def generate_json(self, result: ScanResult, output_path: Path):
-        """Generate JSON report"""
-        data = self._build_json(result)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    def _build_json(self, result: ScanResult) -> Dict[str, Any]:
-        return result.to_dict()
-
     def _build_html(self, result: ScanResult) -> str:
         """Build complete HTML"""
         has_vulns = bool(result.vulnerabilities)
