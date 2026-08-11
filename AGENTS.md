@@ -20,6 +20,16 @@ All code changes must be logged in this file. Each entry should include:
 - Affected files/modules
 ## Change Log
 
+### 2026-08-08 (第六轮：--js-render 成熟化 — SPA/JSON API 覆盖闭环)
+- **crawler.crawl_js 网络捕获**：Playwright 渲染时监听 XHR/fetch → 还原 API 端点（query 参数 + JSON body 参数 + is_api）；修复捕获代码 urlparse 未导入 bug
+- **JSON 参数传递链**：ScanTarget 新增 `param_types` 字段；scanner ep_target 传递；base._send_request 支持 `param_type="json"`（httpx json body）；sqli 检测器对 POST data 判定 json 类型
+- **4xx 响应不再抛异常**（HTTPPool 核心修复）：401/403 对检测有信息价值——登录类 API 的 boolean 差异（200+token vs 401+Invalid）是强信号；检测器按 status_code != 200 自然跳过；修复连锁影响（全量测试通过）
+- **boolean 判定豁免**：状态码差异时豁免 payload 回显排除（回显型注入如 login email 不被误拦，真实 Juice Shop 同形态）
+- **scanner 尾斜杠豁免**：is_api 端点不做目录尾斜杠修复（/rest/user/login 不加 / → 404）
+- **基准闭环**：自建 SPA mock（/spa + /rest/products/search + /rest/user/login SQLi 模拟）纳入 run_benchmark.py 断言——**spa_sqli 1/1、spa_xss 3/1 PASS**；run_external_benchmark 改回硬断言（Juice Shop sqli/xss ≥1）；CI benchmark job 安装 playwright+chromium
+- **mypy 14 路径 0 错误**（+crawler/session/techniques_mixins）：SecureCookieStorage None 检查、_sc 注解、_rotate_ua 收窄、get_all_cookies/_get_semaphore 适配、base_params 类型收窄
+- 全量测试 + ruff + format 全绿；CI types 范围扩至 14 路径
+
 ### 2026-08-08 (第五轮：外部基准闭环 + 全类型误报清零)
 - **sqli boolean 反射误报修复**（第四轮延续）：boolean 命中排除 payload 原样回显（盲注语义）——反射端点天然免疫；靶场 /sqli/blind 改通用等值判断；**反射误报 11 → 0 全类型清零**（BENCHMARK.md §2 修复记录 13 条）
 - **外部基准（Juice Shop）CI 闭环**：`scripts/run_external_benchmark.py` + CI `benchmark-external` job；历经 4 轮修复（--max-time 1500 限时 / subprocess timeout 1800 / 记录模式）→ **最终 CI 10 job 全绿**；结论：SPA 0 检出 = 真实短板诊断（Angular SPA + JSON API 覆盖不足），记录模式待 SPA 能力提升后改硬断言；WAVSEP 无 release 资产暂缓

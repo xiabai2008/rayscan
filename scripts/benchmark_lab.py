@@ -196,6 +196,48 @@ def xxe_get():
     return "<html><body>parsed xml ok</body></html>", 200
 
 
+# ── SPA mock（第五轮：--js-render 验证用，模拟 Angular 形态） ─────
+
+_SPA_HTML = """<!DOCTYPE html>
+<html><head><title>SPA App</title></head>
+<body><div id="app"></div>
+<script>
+fetch('/rest/products/search?q=test').then(function(r){return r.json();}).then(function(d){
+  document.getElementById('app').innerText = JSON.stringify(d);
+});
+fetch('/rest/user/login', {method:'POST', headers:{'Content-Type':'application/json'},
+  body: JSON.stringify({email:'admin@example.com', password:'x'})});
+</script></body></html>"""
+
+
+@app.route("/spa")
+@_hint()
+def spa():
+    return _SPA_HTML, 200
+
+
+@app.route("/rest/products/search")
+@_hint()
+def rest_search():
+    q = request.args.get("q", "")
+    # 反射 q 的 JSON 响应（Juice Shop 形态）
+    return {"data": [{"name": "result for %s" % q}]}, 200
+
+
+@app.route("/rest/user/login", methods=["POST"])
+@_hint()
+def rest_login():
+    import re as _re
+
+    body = request.get_json(silent=True) or {}
+    email = body.get("email", "")
+    # SQLi 模拟（精确等值语义）：' OR '1'='1 → 真；' OR '1'='2 → 假（boolean 差异）
+    m = _re.search(r"['\"]?(\w+)['\"]?\s*=\s*['\"]?(\w+)['\"]?", email)
+    if m and m.group(1) == m.group(2):
+        return {"authentication": {"token": "fake-token-abc123", "user": {"email": email}}}, 200
+    return {"message": "Invalid email or password."}, 401
+
+
 @app.route("/")
 def index():
     links = [
@@ -213,6 +255,7 @@ def index():
         "/xxe_get?xml=<xml>",
         "/.env",
         "/backup/backup.sql",
+        "/spa",
     ]
     body = "<html><head><title>Benchmark Lab</title></head><body><h1>Benchmark Lab</h1><ul>"
     for link in links:

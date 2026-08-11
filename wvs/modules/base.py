@@ -298,6 +298,9 @@ class DetectionModule(ABC):
                 # POST: param_type decides whether to use body or query
                 if param_type == "body":
                     kwargs["data"] = params
+                elif param_type == "json":
+                    # 第五轮：SPA/JSON API 提交点（Playwright 捕获的 JSON body 端点）
+                    kwargs["json"] = params
                 else:
                     kwargs["params"] = params
 
@@ -351,12 +354,14 @@ class DetectionModule(ABC):
 
         # 2. POST body data
         if target.data:
+            # 第五轮：SPA/JSON API 提交点 —— param_types 记录 json/body 类型
+            body_types = getattr(target, "param_types", None) or {}
             endpoints.append(
                 {
                     "url": url,
                     "params": target.data.copy() if isinstance(target.data, dict) else dict(target.data),
                     "method": "POST",
-                    "param_type": "body",
+                    "param_type": "json" if any(t == "json" for t in body_types.values()) else "body",
                 }
             )
 

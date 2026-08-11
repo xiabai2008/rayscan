@@ -444,14 +444,17 @@ class SQLiTechniquesMixin:
             if true_resp is None or false_resp is None:
                 continue
 
-            # 基准驱动修复（2026-08-08）：boolean 命中必须排除 payload 原样回显——
+            # 基准驱动修复（2026-08-08）：boolean 命中排除 payload 原样回显——
             # 反射端点（如 /xss/reflected）把 True/False payload 原文回显，响应差异只是
-            # 输入反射，不是 SQL 条件求值；真实盲注响应不含 payload（盲注语义），
-            # 回显型 boolean 差异宁漏报（与 RCE/SSTI 收敛同策略）
+            # 输入反射，不是 SQL 条件求值；真实盲注响应不含 payload（盲注语义）。
+            # 第五轮修正：仅"状态码相同"（弱差异）时应用排除——登录类 API（200+token vs
+            # 401+Invalid）状态码差异是强信号（SQLi 逻辑绕过成功），响应回显 email 是附带，
+            # 回显型注入不被误拦（真实 Juice Shop login 亦回显 email）。
             true_text = true_resp.get("text", "") or ""
             false_text = false_resp.get("text", "") or ""
-            if true_payload in true_text or false_payload in false_text:
-                continue
+            if true_resp.get("status_code") == false_resp.get("status_code"):
+                if true_payload in true_text or false_payload in false_text:
+                    continue
 
             if analyzer.is_boolean_blind_positive(true_resp, false_resp):
                 if await self._verify_with_different_payload(url, params, param_name, method, param_type, "boolean"):

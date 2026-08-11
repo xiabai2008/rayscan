@@ -566,7 +566,7 @@ class WebCrawler(CrawlerParsersMixin):
             base_params: Dict[str, str] = {}
             if parsed.query:
                 for k, v in urllib.parse.parse_qs(parsed.query).items():
-                    base_params[k] = v[0] if v else ""
+                    base_params[k] = v[0] if isinstance(v, list) and v else str(v)
 
             fields: List[FormField] = []
             for tag_name in ("input", "textarea", "select"):
@@ -592,9 +592,9 @@ class WebCrawler(CrawlerParsersMixin):
             param_types: Dict[str, str] = {}
             params: Dict[str, str] = {}
             # Merge URL query params first
-            for k, v in base_params.items():
+            for k in base_params:
                 param_types[k] = "query"
-                params[k] = v
+                params[k] = base_params[k]
             for f in fields:
                 if f.field_type in ("image", "reset", "file"):
                     continue
@@ -1202,6 +1202,39 @@ class WebCrawler(CrawlerParsersMixin):
                 )
                 page = await context.new_page()
 
+                # ── SPA API 捕获（第五轮：XHR/fetch 网络监听） ──
+                # SPA 的 API 端点靠 JS 运行时请求才能发现（Angular/Vue/React 无静态链接），
+                # 渲染时监听所有 XHR/fetch 请求 → 还原为可检测端点（含 query/JSON body 参数）
+                api_requests: List[Dict[str, Any]] = []
+
+                async def _on_request(request) -> None:
+                    try:
+                        if request.resource_type not in ("xhr", "fetch"):
+                            return
+                        req_url = str(request.url)
+                        parsed = urllib.parse.urlparse(req_url)
+                        host_no_port = parsed.hostname or ""
+                        allowed = (self._allowed_host or "").split(":")[0]
+                        if allowed and host_no_port != allowed:
+                            return
+                        body: Dict[str, str] = {}
+                        post_data = request.post_data
+                        if post_data:
+                            ctype = request.headers.get("content-type", "")
+                            if "json" in ctype.lower():
+                                try:
+                                    raw = json.loads(post_data)
+                                    body = {str(k): str(v) for k, v in raw.items() if v is not None}
+                                except Exception:
+                                    body = {}
+                            else:
+                                body = {k: v[0] for k, v in urllib.parse.parse_qs(post_data).items()}
+                        api_requests.append({"method": request.method, "url": req_url, "body": body})
+                    except Exception as e:  # pragma: no cover - debug
+                        logger.debug(f"[Crawler] capture request failed: {e}")
+
+                page.on("request", _on_request)
+
                 # Navigate and wait for JS to settle
                 await page.goto(url, wait_until="networkidle", timeout=30000)
 
@@ -1209,6 +1242,35 @@ class WebCrawler(CrawlerParsersMixin):
                 for _ in range(3):
                     await page.evaluate("window.scrollBy(0, window.innerHeight)")
                     await page.wait_for_timeout(1000)
+
+                # 捕获的 API 请求 → 端点（含 query/JSON body 参数）
+                logger.debug(f"[Crawler] crawl_js captured {len(api_requests)} API requests")
+                for req in api_requests:
+                    try:
+                        req_url = req["url"]
+                        method = req["method"].upper()
+                        parsed_req = urllib.parse.urlparse(req_url)
+                        qs_params = {
+                            k: v[0] if len(v) == 1 else v[0] for k, v in urllib.parse.parse_qs(parsed_req.query).items()
+                        }
+                        body_params = req.get("body") or {}
+                        if qs_params or body_params or method != "GET" or self._is_api_url(req_url):
+                            ep = DiscoveredEndpoint(
+                                url=req_url,
+                                method=method,
+                                source_url=url,
+                                source_depth=depth,
+                                is_api=True,
+                            )
+                            if body_params:
+                                ep.parameters = body_params
+                                ep.param_types = dict.fromkeys(body_params, "json")
+                            elif qs_params:
+                                ep.parameters = qs_params
+                                ep.param_types = dict.fromkeys(qs_params, "query")
+                            endpoints.append(ep)
+                    except Exception:
+                        continue
 
                 # Extract all links after rendering
                 rendered_html = await page.content()

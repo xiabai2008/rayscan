@@ -14,6 +14,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,7 +31,7 @@ def wait_ready(url: str, timeout: int = 180) -> bool:
     return False
 
 
-def scan(port: int, modules: str, out_name: str, timeout: int = 1800) -> list:
+def scan(port: int, modules: str, out_name: str, timeout: int = 1800, extra_args: Optional[list] = None) -> list:
     out = ROOT / f"{out_name}.json"
     cmd = [
         sys.executable,
@@ -49,6 +50,8 @@ def scan(port: int, modules: str, out_name: str, timeout: int = 1800) -> list:
         "-o",
         str(out),
     ]
+    if extra_args:
+        cmd.extend(extra_args)
     subprocess.run(cmd, cwd=ROOT, capture_output=True, timeout=timeout)
     if not out.exists():
         return []
@@ -84,24 +87,34 @@ def main() -> int:
             print("[FAIL] Juice Shop 未就绪")
             return 1
 
-        print("[*] 扫描核心模块（sqli/xss/api/sensitive）...")
-        vulns = scan(args.port, "sqli xss api sensitive", "bench_juice_core")
+        print("[*] 扫描核心模块（sqli/xss/api/sensitive，--js-render 渲染）...")
+        cmd_extra = ["--js-render"]
+        # scan() 已支持 --js-render（SPA 渲染 + XHR 捕获）——外部目标（Juice Shop）需要
+        vulns = scan(args.port, "sqli xss api sensitive", "bench_juice_core", extra_args=cmd_extra)
         print(f"  检出 {len(vulns)} 个漏洞")
 
         sqli = [v for v in vulns if v[0] == "sql_injection"]
         xss = [v for v in vulns if v[0] == "cross_site_scripting"]
         print(f"  sqli: {len(sqli)} | xss: {len(xss)} | 其他: {len(vulns) - len(sqli) - len(xss)}")
 
-        # 记录模式（2026-08-08）：Juice Shop 为 Angular SPA + JSON API，
-        # RayScan 当前 SPA/JSON 提交点覆盖不足（已承认短板）——检出 0 是诊断结论而非门禁失败。
-        # 待 SPA 能力提升后改回硬断言（sqli/xss ≥1）。
-        for name, hits in [("sqli（login 注入）", sqli), ("xss（search 反射）", xss)]:
-            print(f"  [DIAG] {name}: {len(hits)} 个检出")
+        # 硬断言（2026-08-08 第六轮）：--js-render 成熟后 SPA/JSON API 覆盖达标
+        failed = 0
+        for name, hits, desc in [
+            ("sqli（login 注入）", sqli, "SQLi 检出 ≥1"),
+            ("xss（search 反射）", xss, "XSS 检出 ≥1"),
+        ]:
+            ok = len(hits) >= 1
+            if not ok:
+                failed += 1
+            print(f"  [{'PASS' if ok else 'FAIL'}] {name}: {len(hits)} — {desc}")
 
         for v in vulns[:15]:
             print(f"    - {v[0]}/{v[1]} @ {v[2][:80]}")
 
-        print("[RESULT] 外部基准完成（记录模式）")
+        if failed:
+            print("[RESULT] 外部基准失败")
+            return 1
+        print("[RESULT] 外部基准通过")
         return 0
     finally:
         subprocess.run(["docker", "rm", "-f", "rayscan-juiceshop"], capture_output=True)

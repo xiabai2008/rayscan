@@ -320,7 +320,14 @@ class WAVScanner(ScannerIntegrationsMixin):
                     return []
                 ep_url = ep.url
                 parsed = urlparse(ep_url)
-                if not parsed.query and "." not in parsed.path.split("/")[-1] and not parsed.path.endswith("/"):
+                # 第五轮：API 端点（is_api）不做目录尾斜杠修复——SPA 捕获的
+                # /rest/user/login 是精确路径，加斜杠 → 404（真实 API 语义）
+                if (
+                    not ep.is_api
+                    and not parsed.query
+                    and "." not in parsed.path.split("/")[-1]
+                    and not parsed.path.endswith("/")
+                ):
                     ep_url = ep_url.rstrip("/") + "/"
 
                 if ep.method.upper() == "POST":
@@ -331,6 +338,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                         headers=target.headers,
                         auth=target.auth,
                         data=ep.parameters,
+                        param_types=ep.param_types,
                     )
                 else:
                     ep_target = ScanTarget(
@@ -340,6 +348,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                         headers=target.headers,
                         auth=target.auth,
                         params=ep.parameters,
+                        param_types=ep.param_types,
                     )
                 try:
                     found: List[Vulnerability] = await module.scan(ep_target)

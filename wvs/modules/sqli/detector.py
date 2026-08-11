@@ -98,7 +98,10 @@ class SQLiDetector(DetectionModule, SQLiTechniquesMixin):
             url_key = target.url.rstrip("/")
             if url_key not in self._checked_urls:
                 self._checked_urls.add(url_key)
-                targets.append((target.url, target_data.copy(), "POST", "body"))
+                # 第五轮：SPA/JSON API 提交点 —— param_types 判定 json body
+                body_types = getattr(target, "param_types", None) or {}
+                pt = "json" if any(t == "json" for t in body_types.values()) else "body"
+                targets.append((target.url, target_data.copy(), "POST", pt))
 
         # ── 2. Supplement: extract more injection points ──
         form_eps = await self._extract_endpoints_async(target)

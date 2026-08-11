@@ -205,6 +205,8 @@ class ScanTarget:
     auth: Optional[Dict[str, str]] = None
     data: Optional[Dict[str, str]] = None
     params: Optional[Dict[str, str]] = None
+    # 第五轮：参数类型映射（query/body/json），SPA 捕获的 JSON API 提交点传递用
+    param_types: Optional[Dict[str, str]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

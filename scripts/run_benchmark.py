@@ -34,6 +34,12 @@ EXPECTATIONS = {
     "lfi": (1, "/lfi 文件读取（Linux 专属）"),
 }
 
+# SPA 基准（第五轮：--js-render 链路）→ (扫描路径, 模块, 预期 ≥, 说明)
+SPA_EXPECTATIONS = {
+    "spa_sqli": ("/spa", "sqli", 1, "/rest/user/login JSON API boolean 注入"),
+    "spa_xss": ("/spa", "xss", 1, "/rest/products/search JSON 反射 XSS"),
+}
+
 EXCLUDE_LFI_ON_WINDOWS = os.name == "nt"
 
 
@@ -48,15 +54,16 @@ def wait_ready(url: str, timeout: int = 30) -> bool:
     return False
 
 
-def scan_module(port: int, module: str, timeout: int = 900) -> dict:
+def scan_module(port: int, module: str, timeout: int = 900, path: str = "/") -> dict:
     """扫描单模块并返回漏洞 URL 列表。"""
-    out = ROOT / f"bench_{module}.json"
+    out_key = f"{module}_{path.strip('/').replace('/', '_') or 'root'}"
+    out = ROOT / f"bench_{out_key}.json"
     cmd = [
         sys.executable,
         "-m",
         "wvs",
         "scan",
-        f"http://127.0.0.1:{port}/",
+        f"http://127.0.0.1:{port}{path}",
         "--modules",
         module,
         "--no-nuclei",
@@ -66,6 +73,9 @@ def scan_module(port: int, module: str, timeout: int = 900) -> dict:
         "-o",
         str(out),
     ]
+    # SPA 基准需要 --js-render（Playwright 渲染 + XHR 捕获）
+    if path != "/":
+        cmd.append("--js-render")
     subprocess.run(cmd, cwd=ROOT, capture_output=True, timeout=timeout)
     if not out.exists():
         return []
@@ -98,6 +108,13 @@ def main() -> int:
             results[module] = urls
             print(f"  [{module}] {len(urls)} 个检出")
 
+        # SPA 基准（--js-render 链路）
+        print("\n===== SPA 基准（--js-render） =====")
+        for key, (path, module, minimum, desc) in SPA_EXPECTATIONS.items():
+            urls = scan_module(args.port, module, timeout=1200, path=path)
+            results[key] = urls
+            print(f"  [{key}] {len(urls)} 个检出")
+
         print("\n===== 基准断言 =====")
         failed = 0
         for module, (minimum, desc) in EXPECTATIONS.items():
@@ -110,6 +127,14 @@ def main() -> int:
             if not ok:
                 failed += 1
             print(f"  [{status}] {module}: {count}/{minimum} — {desc}")
+
+        for key, (path, module, minimum, desc) in SPA_EXPECTATIONS.items():
+            count = len(results[key])
+            ok = count >= minimum
+            status = "PASS" if ok else "FAIL"
+            if not ok:
+                failed += 1
+            print(f"  [{status}] {key}: {count}/{minimum} — {desc}（{path}）")
 
         if failed:
             print(f"\n[RESULT] {failed} 项断言失败")

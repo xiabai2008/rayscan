@@ -48,9 +48,17 @@
 
 ## 4. 外部基准（Juice Shop）
 
-**现状（2026-08-08）**：`scripts/run_external_benchmark.py`（docker 起 Juice Shop → sqli/xss/api/sensitive 扫描）→ **0 检出**。
+**现状（2026-08-08 第六轮）**：`scripts/run_external_benchmark.py` 启用 **--js-render**（Playwright 渲染 + XHR/fetch 捕获）→ **硬断言（sqli/xss ≥1）**。
 
-**结论（记录模式）**：Juice Shop 为 Angular SPA + JSON REST API——RayScan 的 crawler 无 JS 渲染、检测器以 GET 参数/HTML 表单提交点为主，**SPA/JSON API 覆盖不足**（已承认短板）。0 检出是**真实诊断结论**（印证短板），不是门禁失败；待 SPA 能力（--js-render 成熟）后改回硬断言。
+**SPA 能力闭环**（本机基准 + 外部基准）：
+- `crawler.crawl_js` 新增 **network 请求捕获**（XHR/fetch 监听 → API 端点，含 query/JSON body 参数还原）
+- `param_type="json"` 支持（base._send_request / ScanTarget.param_types 传递链）
+- **4xx 响应不再抛异常**（HTTPPool）——401/403 对检测有信息价值（登录类 boolean 差异强信号）
+- boolean 判定：**状态码差异豁免 payload 回显排除**（回显型注入如 login email 不被误拦）
+- scanner 尾斜杠修复对 is_api 端点豁免（/rest/user/login 不加 /）
+- 自建 SPA mock（/spa + /rest/*）纳入基准矩阵：**spa_sqli 1/1 ✅、spa_xss 3/1 ✅**
+
+**待验证**：Juice Shop 真实 SPA（Angular）经 CI benchmark-external 硬断言验证（本轮 CI 运行确认）。
 
 **WAVSEP**：无官方 release 资产（api.github.com 404），暂缓；后续可自建 WAVSEP 容器镜像接入。
 
@@ -75,4 +83,4 @@ python scripts/run_benchmark.py
 - [x] 反射回显误报治理（2026-08-08：11 → 0 全类型清零，含 sqli boolean）
 - [x] 接入外部基准（Juice Shop 记录模式 + CI benchmark-external job；WAVSEP 无 release 暂缓）
 - [x] 基准回归自动化（scripts/run_benchmark.py + CI workflow_dispatch）
-- [ ] SPA/JSON API 覆盖（外部基准暴露的真实短板，待 --js-render 成熟后改硬断言）
+- [x] SPA/JSON API 覆盖（2026-08-08 第六轮：--js-render 网络捕获 + json 参数链 + 4xx 可读；自建 SPA mock 纳入基准；Juice Shop 改硬断言待 CI 确认）

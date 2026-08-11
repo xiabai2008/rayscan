@@ -156,9 +156,11 @@ class SecureCookieStorage:
 
     def _migrate_from_plaintext(self) -> Dict[str, Any]:
         """Migrate legacy plaintext Cookie file"""
-        cookies = {}
+        cookies: Dict[str, Any] = {}
 
         try:
+            if self.legacy_path is None:
+                return cookies
             data = self.legacy_path.read_text(encoding="utf-8")
             cookies = json.loads(data)
 
@@ -201,7 +203,7 @@ class HTTPPool:
             config: Config manager (reads timeout / retry_count / max_requests_per_second etc.)
         """
         self.config = config or ConfigManager()
-        self._sc = None  # httpx.AsyncClient singleton
+        self._sc: Optional[httpx.AsyncClient] = None  # httpx.AsyncClient singleton
 
         # P8: Request-level dedup cache — avoids identical GET requests across modules
         self._request_cache: Dict[str, httpx.Response] = {}
@@ -349,7 +351,8 @@ class HTTPPool:
         """Rotate User-Agent on each call — WAF evasion."""
         if self._fake_ua:
             try:
-                return self._fake_ua.random
+                ua = self._fake_ua.random
+                return ua if isinstance(ua, str) else self._ua_pool[self._ua_idx]
             except Exception:  # noqa: S110
                 pass
         self._ua_idx = (self._ua_idx + 1) % len(self._ua_pool)
@@ -394,7 +397,7 @@ class HTTPPool:
     def _inject_cookies(self, url: str, kwargs: Dict[str, Any]) -> None:
         """Inject persisted Cookies into the request"""
         host = self._get_host(url)
-        cookies = self.get_all_cookies(host)
+        cookies = self._cookie_jar.get(host, {})
         if cookies:
             existing = kwargs.get("headers", {})
             cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
@@ -539,10 +542,10 @@ class HTTPPool:
                         await asyncio.sleep(retry_after)
                         last_exc = RateLimitError(f"Rate limited by {host}", retry_after=retry_after)
                         continue
-                    else:
-                        raise RequestError(
-                            f"HTTP {resp.status_code}: {resp.reason_phrase}", status_code=resp.status_code, url=url
-                        )
+                    # 第五轮修复：4xx 返回响应而非抛异常——401/403 对检测有信息价值
+                    # （登录类 API 的 boolean 差异：200+token vs 401+Invalid 是强信号），
+                    # 检测器按 status_code != 200 自然跳过；不再丢失 4xx 响应体
+                    return resp
 
                 # 5xx server errors -> retry
                 if 500 <= resp.status_code < 600:
@@ -659,7 +662,11 @@ class HTTPPool:
         Args:
             host: Hostname
         """
-        sem = self._get_semaphore(host)
+        sem = (
+            self._rate_limiter.get_semaphore(host)
+            if hasattr(self._rate_limiter, "get_semaphore")
+            else self._rate_limiter._semaphore
+        )
         await sem.acquire()
         try:
             # Empty block, acquire then immediately release
@@ -679,7 +686,12 @@ class HTTPPool:
         Returns:
             asyncio.Semaphore
         """
-        return self._get_semaphore(host)
+        sem = (
+            self._rate_limiter.get_semaphore(host)
+            if hasattr(self._rate_limiter, "get_semaphore")
+            else self._rate_limiter._semaphore
+        )
+        return sem if isinstance(sem, asyncio.Semaphore) else asyncio.Semaphore(1)
 
     def get_rps(self, host: str) -> int:
         """Get the current request count for the specified host"""
