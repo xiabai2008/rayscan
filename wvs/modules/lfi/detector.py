@@ -135,6 +135,18 @@ class LFIDetector(DetectionModule):
 
         await self._scan_endpoint_method(url, params, method, param_type)
 
+    @staticmethod
+    def _prioritize_params(params: Dict[str, str], limit: int = 5) -> List[str]:
+        """参数预算（第六轮）：每端点最多测 limit 个参数，file/path 类优先——
+        参数发现给无参数端点塞 20+ 个参数 × 每参数 30 payload = 请求爆炸（CI lfi 超时）。
+        高价值参数名优先，其余按字母序补齐。"""
+        high_value = ["file", "path", "include", "page", "doc", "document", "dir", "folder", "name", "f"]
+        ranked = sorted(
+            params.keys(),
+            key=lambda k: (0 if k.lower() in high_value else 1, k),
+        )
+        return ranked[:limit]
+
     async def _scan_endpoint_method(
         self,
         url: str,
@@ -153,8 +165,8 @@ class LFIDetector(DetectionModule):
 
         baseline_text = baseline.get("text", "")[:10000]
 
-        # Test each parameter
-        for param_name in params:
+        # Test each parameter (参数预算：防请求爆炸)
+        for param_name in self._prioritize_params(params):
             found = await self._test_lfi(url, params, param_name, method, param_type, baseline_text)
             if found:
                 # Only report one LFI per endpoint (avoid reporting multiple on same param)

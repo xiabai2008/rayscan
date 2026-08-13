@@ -34,6 +34,11 @@ EXPECTATIONS = {
     "lfi": (1, "/lfi 文件读取（Linux 专属）"),
 }
 
+# 每模块额外 CLI 参数（第六轮：lfi 请求爆炸（参数发现×payload）→ 10 分钟预算限时）
+MODULE_EXTRA_ARGS = {
+    "lfi": ["--max-time", "600"],
+}
+
 # SPA 基准（第五轮：--js-render 链路）→ (扫描路径, 模块, 预期 ≥, 说明)
 SPA_EXPECTATIONS = {
     "spa_sqli": ("/spa", "sqli", 1, "/rest/user/login JSON API boolean 注入"),
@@ -73,6 +78,9 @@ def scan_module(port: int, module: str, timeout: int = 900, path: str = "/") -> 
         "-o",
         str(out),
     ]
+    # 模块级额外参数（如 lfi 的 --max-time 限时）
+    for extra in MODULE_EXTRA_ARGS.get(module, []):
+        cmd.append(extra)
     # SPA 基准需要 --js-render（Playwright 渲染 + XHR 捕获）
     if path != "/":
         cmd.append("--js-render")
