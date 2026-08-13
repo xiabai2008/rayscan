@@ -304,6 +304,9 @@ class WebCrawler(CrawlerParsersMixin):
         self._spa_checked: bool = False
         # API mode (activated when SPA is detected)
         self._api_mode_extracted: bool = False
+        # 第六轮：JS 渲染预算（--js-render 时最多渲染页数，防真实 SPA 时间爆炸）
+        self._js_render_count: int = 0
+        self._js_render_budget: int = 3
         self._skip_param_injection_extensions: Set[str] = STATIC_NO_PARAM_EXTENSIONS
         # UA rotation (Playwright JS rendering only — HTTP UA rotation handled by HTTPPool)
         self._ua_pool = [
@@ -424,12 +427,16 @@ class WebCrawler(CrawlerParsersMixin):
 
             discovered = await self.crawl_static(url, session, depth)
             # v19.2: JS rendering (Playwright) — disabled by default
+            # 第六轮：渲染预算（默认 3 页）——SPA 首页 + 少量页面渲染即捕获 API 调用；
+            # 全量渲染在真实 SPA（Juice Shop 等）上时间爆炸（每页 30s+）
             if getattr(self, "_js_render", False):
-                try:
-                    js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=30)
-                    discovered.extend(js_endpoints)
-                except BaseException:
-                    logger.debug(f"[Crawler] JS rendering failed for {url}", exc_info=True)
+                if self._js_render_count < getattr(self, "_js_render_budget", 3):
+                    self._js_render_count += 1
+                    try:
+                        js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=45)
+                        discovered.extend(js_endpoints)
+                    except BaseException:
+                        logger.debug(f"[Crawler] JS rendering failed for {url}", exc_info=True)
 
             for ep in discovered:
                 self._endpoints.add(ep)
