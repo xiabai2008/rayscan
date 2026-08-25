@@ -65,6 +65,7 @@ class GraphQLDetector(DetectionModule):
 
     @classmethod
     def get_info(cls) -> ModuleInfo:
+        """返回模块元数据（ID/严重级别/CWE/描述/风险/缓解措施/参考链接）。"""
         return ModuleInfo(
             name="graphql",
             description="GraphQL 端点识别 / introspection 开启 / 批量查询检测",
@@ -73,6 +74,7 @@ class GraphQLDetector(DetectionModule):
         )
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
+        """GraphQL 主扫描逻辑：端点探测 - 指纹确认 - introspection/批量查询检测。"""
         vulns: List[Vulnerability] = []
         base = target.url.rstrip("/")
         parsed = urlparse(base)

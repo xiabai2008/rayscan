@@ -23,6 +23,7 @@ class ResultDeduplicator:
     """Handles vulnerability deduplication and scan checkpoint persistence."""
 
     def __init__(self):
+        """初始化去重器（签名缓存/checkpoint 机制）。"""
         self._last_checkpoint_time: float = 0.0
 
     # -- URL normalization (preserved from scanner.py) --
@@ -84,6 +85,7 @@ class ResultDeduplicator:
 
     @staticmethod
     def _checkpoint_path(target_url: str) -> Path:
+        """去重 checkpoint 文件路径。"""
         url_hash = hashlib.md5(target_url.encode()).hexdigest()[:12]
         return Path(tempfile.gettempdir()) / f"rayscan_checkpoint_{url_hash}.json"
 
@@ -127,6 +129,7 @@ def prioritize_endpoints(endpoints):
     """Sort endpoints so most promising (dynamic, parameterised) ones are scanned first."""
 
     def score(ep) -> int:
+        """漏洞严重级别分数（CRITICAL=5 > HIGH=3 > MEDIUM=2 > LOW=1 > INFO=0）。"""
         s = 0
         if ep.parameters:
             s -= 100

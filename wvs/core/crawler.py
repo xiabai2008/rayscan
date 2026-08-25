@@ -47,6 +47,7 @@ class DiscoveredEndpoint:
     is_api: bool = False
 
     def param_signature(self) -> str:
+        """参数签名：URL（去 query）+ 排序后的 query 参数，用于端点去重。"""
         query_parts = []
         for k, v in sorted(self.parameters.items()):
             ptype = self.param_types.get(k, "query")
@@ -58,9 +59,11 @@ class DiscoveredEndpoint:
         return sig
 
     def __hash__(self) -> int:
+        """端点哈希：url + method + 参数签名（用于 set 去重）。"""
         return hash((self.url, self.method, self.param_signature()))
 
     def __eq__(self, other: object) -> bool:
+        """端点相等判定：url + method + 参数签名均相同。"""
         if not isinstance(other, DiscoveredEndpoint):
             return False
         return (
@@ -282,6 +285,7 @@ class WebCrawler(CrawlerParsersMixin):
         user_agent: str = "WVS/19.0",
         seed_paths: Optional[List[str]] = None,
     ):
+        """初始化爬虫（深度/数量预算/UA/SPA 状态/JS 渲染预算）。"""
         self.max_depth = max_depth
         self.max_urls_per_run = max_urls_per_run
         self.max_urls_per_prefix = max_urls_per_prefix
@@ -329,6 +333,7 @@ class WebCrawler(CrawlerParsersMixin):
     # ── Main entry ──────────────────────────────────────────────
 
     async def crawl(self, target_url: str, session: HTTPPool) -> List[DiscoveredEndpoint]:
+        """主爬取入口：连通性检查 - seed 路径 - 队列式深度爬取 - API/表单补充。"""
         target_url = self._normalize_url(target_url)
         self._urls_to_visit = [(target_url, 1)]
         self._visited.clear()
@@ -493,6 +498,7 @@ class WebCrawler(CrawlerParsersMixin):
     # ── Static HTML parsing ─────────────────────────────────────
 
     async def crawl_static(self, url: str, session: HTTPPool, depth: int = 1) -> List[DiscoveredEndpoint]:
+        """静态 HTML 解析：提取 <a href> 链接与 <form> 提交点。"""
         endpoints: List[DiscoveredEndpoint] = []
         timeout_val = max(getattr(session, "timeout", 30), 30)  # crawler needs >=30s for slow local servers
 
@@ -861,6 +867,7 @@ class WebCrawler(CrawlerParsersMixin):
                     self._endpoints.add(ep)
 
     async def _probe_api_path(self, url: str, session: HTTPPool, source_url: str) -> List[DiscoveredEndpoint]:
+        """探测单个候选 API 路径，成功（200/JSON/API 特征）则生成端点。"""
         endpoints: List[DiscoveredEndpoint] = []
         try:
             resp = await session.get(url, timeout=10, follow_redirects=True)
@@ -977,6 +984,7 @@ class WebCrawler(CrawlerParsersMixin):
         sem = asyncio.Semaphore(5)
 
         async def _probe_one(path: str):
+            """seed 路径单次探测（并发探测内使用）。"""
             async with sem:
                 full_url = origin + path
                 if self._is_visited(full_url):
@@ -1215,6 +1223,7 @@ class WebCrawler(CrawlerParsersMixin):
                 api_requests: List[Dict[str, Any]] = []
 
                 async def _on_request(request) -> None:
+                    """Playwright 网络捕获回调：监听 XHR/fetch，还原 API 端点参数。"""
                     try:
                         if request.resource_type not in ("xhr", "fetch"):
                             return
@@ -1365,6 +1374,7 @@ class WebCrawler(CrawlerParsersMixin):
         return urllib.parse.urlunparse((parsed.scheme, netloc, path, "", query, ""))
 
     def _join_url(self, base: str, path: str) -> str:
+        """URL 拼接（过滤 data:/mailto:/tel: 等非 HTTP 协议）。"""
         if not path:
             return base
         if path.startswith("data:") or path.startswith("mailto:") or path.startswith("tel:"):
@@ -1375,6 +1385,7 @@ class WebCrawler(CrawlerParsersMixin):
             return base
 
     def _url_key(self, url: str) -> str:
+        """URL 去重键：scheme+host+path（去尾斜杠）+ 关键参数。"""
         parsed = urllib.parse.urlparse(url)
         base = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
         if parsed.query:
@@ -1389,9 +1400,11 @@ class WebCrawler(CrawlerParsersMixin):
         return base
 
     def _is_visited(self, url: str) -> bool:
+        """是否已访问（按 _url_key 判断）。"""
         return self._url_key(url) in self._visited
 
     def _is_crawlable(self, url: str) -> bool:
+        """是否可爬：http(s) 协议 + 同域 + 非跳过扩展名。"""
         if not url or not url.startswith("http"):
             return False
         if self._allowed_host:
@@ -1408,8 +1421,10 @@ class WebCrawler(CrawlerParsersMixin):
         return True
 
     def _is_api_url(self, url: str) -> bool:
+        """是否 API URL（路径含 /api/、/v1/ 等特征）。"""
         url_lower = url.lower()
         return any(ind in url_lower for ind in API_PATH_PATTERNS)
 
     def get_stats(self) -> Dict[str, Any]:
+        """返回爬取统计（页面数/端点/表单/错误）。"""
         return {**self._stats, "endpoints_found": len(self._endpoints)}

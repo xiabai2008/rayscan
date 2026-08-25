@@ -87,6 +87,7 @@ class LLMClient:
         self._verify_ssl = verify_ssl
 
     def _get_config(self, key: str) -> Any:
+        """获取 AI 配置（环境变量优先于 config 文件）。"""
         if self._config is None:
             return None
         return self._config.get(f"ai.{key}")

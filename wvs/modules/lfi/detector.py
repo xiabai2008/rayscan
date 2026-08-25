@@ -71,6 +71,7 @@ GENERIC_FILE_MARKERS = [
 class LFIDetector(DetectionModule):
     @classmethod
     def get_info(cls) -> ModuleInfo:
+        """返回模块元数据（ID/严重级别/CWE/描述/风险/缓解措施/参考链接）。"""
         return ModuleInfo(
             name="lfi",
             description="Detect Local File Inclusion vulnerabilities (LFI / /proc/ / PHP wrappers)",
@@ -81,12 +82,14 @@ class LFIDetector(DetectionModule):
         )
 
     def __init__(self, config=None, session: Optional[HTTPPool] = None):
+        """初始化 LFI 检测器（参数预算/超时）。"""
         super().__init__(config)
         self.session = session
         self._found_vulns: List[Vulnerability] = []
         self._checked_urls: set = set()
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
+        """LFI 主扫描逻辑：遍历端点，尝试文件包含探测。"""
         self._found_vulns = []
 
         # ── 1. Prefer target.params (from scanner/crawler, already with auth) ──
@@ -130,6 +133,7 @@ class LFIDetector(DetectionModule):
         method: str,
         param_type: str,
     ) -> None:
+        """对单个端点执行 LFI 探测（路径遍历 payload）。"""
         if not params:
             return
 
@@ -473,6 +477,7 @@ class LFIDetector(DetectionModule):
         file_path: str,
         evidence: str,
     ) -> Vulnerability:
+        """创建 LFI 漏洞记录（带证据）。"""
         return Vulnerability(
             type=VulnerabilityType.LFI,
             title="Local File Inclusion / File Read",

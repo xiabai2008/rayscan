@@ -382,12 +382,15 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     @staticmethod
     def _normalize_vuln_url(url: str) -> str:
+        """URL 归一化（去尾斜杠/统一 scheme）用于漏洞去重。"""
         return str(ResultDeduplicator.normalize_vuln_url(url))
 
     def _vuln_signature(self, v: Vulnerability) -> str:
+        """漏洞签名：type + url + evidence（用于跨引擎去重）。"""
         return str(self.dedup.signature(v))
 
     def _deduplicate(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
+        """扫描结果去重（按漏洞签名）。"""
         return list(self.dedup.deduplicate(vulns))
 
     async def _run_nuclei(self, target: ScanTarget) -> List[Vulnerability]:
@@ -421,10 +424,12 @@ class WAVScanner(ScannerIntegrationsMixin):
     # ── Timeout helpers ────────────────────────────────────────
 
     def _elapsed(self) -> float:
+        """已用时间（秒）。"""
         start = self._stats.get("start_time") or 0.0
         return time.time() - float(start)
 
     def _timeout_remaining(self) -> float:
+        """距超时剩余时间（秒）。"""
         if not self._scan_max_time or self._scan_max_time <= 0:
             return float("inf")
         return max(0.0, self._scan_max_time - self._elapsed())
@@ -434,6 +439,7 @@ class WAVScanner(ScannerIntegrationsMixin):
     # -- Checkpoint (原生文件实现,与 ResultDeduplicator 路径一致) --
 
     def _checkpoint_file(self, target_url: str) -> Path:
+        """checkpoint 文件路径。"""
         return Path(ResultDeduplicator._checkpoint_path(target_url))
 
     def _try_save_checkpoint(

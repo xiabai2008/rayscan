@@ -61,10 +61,12 @@ class MergedVulnerability:
 
     @property
     def engine_count(self) -> int:
+        """已注册引擎数量。"""
         return len(self.engines)
 
     @property
     def is_multi_engine(self) -> bool:
+        """是否为多引擎模式。"""
         return self.engine_count >= 2
 
 
@@ -72,6 +74,7 @@ class ResultMerger:
     """多引擎扫描结果合并器"""
 
     def __init__(self):
+        """初始化结果合并器（去重策略/严重级别优先级）。"""
         self._stats: Dict[str, Any] = {
             "total_input": 0,
             "total_output": 0,

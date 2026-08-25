@@ -66,6 +66,7 @@ SENSITIVE_TOOL_PATTERNS = [
 
 
 def _build_initialize() -> Dict[str, Any]:
+    """构建 MCP JSON-RPC initialize 请求体。"""
     return {
         "jsonrpc": "2.0",
         "id": 1,
@@ -79,10 +80,12 @@ def _build_initialize() -> Dict[str, Any]:
 
 
 def _build_tools_list() -> Dict[str, Any]:
+    """构建 MCP tools/list 请求体。"""
     return {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
 
 
 def _build_tools_call(tool_name: str) -> Dict[str, Any]:
+    """构建 MCP tools/call 请求体。"""
     return {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": tool_name, "arguments": {}}}
 
 
@@ -115,6 +118,7 @@ class MCPDetector(DetectionModule):
 
     @classmethod
     def get_info(cls) -> ModuleInfo:
+        """返回模块元数据（ID/严重级别/CWE/描述/风险/缓解措施/参考链接）。"""
         return ModuleInfo(
             name="mcp",
             description="MCP Server 暴露检测（端点发现/工具列表泄露/敏感工具未授权调用）",
@@ -123,6 +127,7 @@ class MCPDetector(DetectionModule):
         )
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
+        """MCP 主扫描逻辑：探测常见端点 - 指纹确认 - tools/list 未授权调用。"""
         vulns: List[Vulnerability] = []
         base = target.url.rstrip("/")
 

@@ -75,6 +75,7 @@ _SYSTEM_PROMPT = (
 
 
 def _build_user_prompt(items: List[Dict[str, Any]]) -> str:
+    """构建 AI 复核 prompt（含扫描结果 JSON）。"""
     return "候选漏洞列表（JSON）：\n" + json.dumps(items, ensure_ascii=False)
 
 
@@ -82,6 +83,7 @@ class AIVerifier:
     """候选漏洞 LLM 复核器。"""
 
     def __init__(self, config: Any = None, client: Optional[LLMClient] = None):
+        """初始化 AI 复核器（LLM 客户端/置信度阈值/候选漏洞列表）。"""
         self.config = config
         self.client = client or LLMClient(config)
         self.reviewed_count = 0
@@ -90,6 +92,7 @@ class AIVerifier:
 
     @property
     def available(self) -> bool:
+        """是否可用（LLM 客户端就绪且 API key 已配置）。"""
         return self.client.available
 
     async def verify_batch(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
@@ -172,6 +175,7 @@ class AIVerifier:
 
     @staticmethod
     def _record_context(v: Vulnerability, verdict: Optional[Dict[str, Any]]) -> None:
+        """记录复核上下文（输入/输出/延迟）到审计日志。"""
         ctx = dict(v.context or {})
         ctx["ai_reviewed"] = True
         if verdict is not None:
