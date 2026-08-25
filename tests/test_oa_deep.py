@@ -225,7 +225,7 @@ class TestConfluenceRuleIntegration:
     def test_cve_2021_26084_evidence_hit(self):
         """OGNL 233*233 结果 54289 回显 → 命中"""
         det = _detector()
-        assert det._verify_evidence("rce", "<div class=\"error\">54289</div>", "text/html", "54289") is True
+        assert det._verify_evidence("rce", '<div class="error">54289</div>', "text/html", "54289") is True
 
     def test_cve_2021_26084_evidence_miss(self):
         """无结果回显 → 不报（GET 探测/未安装页面）"""
@@ -272,11 +272,17 @@ class TestRemainingOARules:
 
     def test_tongda_auth_bypass_evidence_hit(self):
         det = _detector()
-        assert det._verify_evidence("auth_bypass", '{"status":1,"msg":"success"}', "application/json", '"status":1') is True
+        assert (
+            det._verify_evidence("auth_bypass", '{"status":1,"msg":"success"}', "application/json", '"status":1')
+            is True
+        )
 
     def test_tongda_auth_bypass_evidence_miss(self):
         det = _detector()
-        assert det._verify_evidence("auth_bypass", '{"status":0,"msg":"failed"}', "application/json", '"status":1') is False
+        assert (
+            det._verify_evidence("auth_bypass", '{"status":0,"msg":"failed"}', "application/json", '"status":1')
+            is False
+        )
 
     # ── 金蝶-Kingdee ──
     def test_kingdee_commonfileserver(self):
@@ -368,4 +374,3 @@ class TestRemainingOARules:
     def test_whir_unauth_evidence_miss(self):
         det = _detector()
         assert det._verify_evidence("unauth", "<html>login</html>", "text/html", '"userList"') is False
-

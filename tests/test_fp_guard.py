@@ -168,7 +168,10 @@ class TestOADetectorEvidence:
             "type": "sqli",
             "severity": "critical",
         }
-        assert self._run_check(monkeypatch, 200, '{"success": false, "error": "sql error"}', "application/json", check) is None
+        assert (
+            self._run_check(monkeypatch, 200, '{"success": false, "error": "sql error"}', "application/json", check)
+            is None
+        )
 
     def test_rce_octet_stream_is_vuln(self, monkeypatch):
         check = {"path": "/seeyon/htmlofficeservlet", "type": "rce", "severity": "critical"}
