@@ -304,6 +304,9 @@ class WebCrawler(CrawlerParsersMixin):
         self._spa_checked: bool = False
         # API mode (activated when SPA is detected)
         self._api_mode_extracted: bool = False
+        # 第六轮：JS 渲染预算（--js-render 时最多渲染页数，防真实 SPA 时间爆炸）
+        self._js_render_count: int = 0
+        self._js_render_budget: int = 3
         self._skip_param_injection_extensions: Set[str] = STATIC_NO_PARAM_EXTENSIONS
         # UA rotation (Playwright JS rendering only — HTTP UA rotation handled by HTTPPool)
         self._ua_pool = [
@@ -356,8 +359,10 @@ class WebCrawler(CrawlerParsersMixin):
         await self._seed_common_paths(target_url, session, is_lab=is_lab)
 
         # -- SPA detection: crawl 3 pages, compare body hashes --
-        # 非靶机目标直接跳过 SPA 检测（真实网站不同路径返回相似内容是正常的）
-        if not is_lab:
+        # 实战目标默认跳过 SPA 检测（真实网站不同路径返回相似内容是正常的）；
+        # --js-render 开启（crawler.js_render=true）时对所有目标启用（实验性，需 playwright）
+        js_render_opt = getattr(self, "_js_render", False)
+        if not is_lab and not js_render_opt:
             self._spa_detected = False
             self._spa_checked = True
         elif not self._spa_checked:
@@ -422,12 +427,16 @@ class WebCrawler(CrawlerParsersMixin):
 
             discovered = await self.crawl_static(url, session, depth)
             # v19.2: JS rendering (Playwright) — disabled by default
+            # 第六轮：渲染预算（默认 3 页）——SPA 首页 + 少量页面渲染即捕获 API 调用；
+            # 全量渲染在真实 SPA（Juice Shop 等）上时间爆炸（每页 30s+）
             if getattr(self, "_js_render", False):
-                try:
-                    js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=30)
-                    discovered.extend(js_endpoints)
-                except BaseException:
-                    logger.debug(f"[Crawler] JS rendering failed for {url}", exc_info=True)
+                if self._js_render_count < getattr(self, "_js_render_budget", 3):
+                    self._js_render_count += 1
+                    try:
+                        js_endpoints = await asyncio.wait_for(self.crawl_js(url, session, depth), timeout=45)
+                        discovered.extend(js_endpoints)
+                    except BaseException:
+                        logger.debug(f"[Crawler] JS rendering failed for {url}", exc_info=True)
 
             for ep in discovered:
                 self._endpoints.add(ep)
@@ -564,7 +573,7 @@ class WebCrawler(CrawlerParsersMixin):
             base_params: Dict[str, str] = {}
             if parsed.query:
                 for k, v in urllib.parse.parse_qs(parsed.query).items():
-                    base_params[k] = v[0] if v else ""
+                    base_params[k] = v[0] if isinstance(v, list) and v else str(v)
 
             fields: List[FormField] = []
             for tag_name in ("input", "textarea", "select"):
@@ -590,9 +599,9 @@ class WebCrawler(CrawlerParsersMixin):
             param_types: Dict[str, str] = {}
             params: Dict[str, str] = {}
             # Merge URL query params first
-            for k, v in base_params.items():
+            for k in base_params:
                 param_types[k] = "query"
-                params[k] = v
+                params[k] = base_params[k]
             for f in fields:
                 if f.field_type in ("image", "reset", "file"):
                     continue
@@ -1200,6 +1209,39 @@ class WebCrawler(CrawlerParsersMixin):
                 )
                 page = await context.new_page()
 
+                # ── SPA API 捕获（第五轮：XHR/fetch 网络监听） ──
+                # SPA 的 API 端点靠 JS 运行时请求才能发现（Angular/Vue/React 无静态链接），
+                # 渲染时监听所有 XHR/fetch 请求 → 还原为可检测端点（含 query/JSON body 参数）
+                api_requests: List[Dict[str, Any]] = []
+
+                async def _on_request(request) -> None:
+                    try:
+                        if request.resource_type not in ("xhr", "fetch"):
+                            return
+                        req_url = str(request.url)
+                        parsed = urllib.parse.urlparse(req_url)
+                        host_no_port = parsed.hostname or ""
+                        allowed = (self._allowed_host or "").split(":")[0]
+                        if allowed and host_no_port != allowed:
+                            return
+                        body: Dict[str, str] = {}
+                        post_data = request.post_data
+                        if post_data:
+                            ctype = request.headers.get("content-type", "")
+                            if "json" in ctype.lower():
+                                try:
+                                    raw = json.loads(post_data)
+                                    body = {str(k): str(v) for k, v in raw.items() if v is not None}
+                                except Exception:
+                                    body = {}
+                            else:
+                                body = {k: v[0] for k, v in urllib.parse.parse_qs(post_data).items()}
+                        api_requests.append({"method": request.method, "url": req_url, "body": body})
+                    except Exception as e:  # pragma: no cover - debug
+                        logger.debug(f"[Crawler] capture request failed: {e}")
+
+                page.on("request", _on_request)
+
                 # Navigate and wait for JS to settle
                 await page.goto(url, wait_until="networkidle", timeout=30000)
 
@@ -1207,6 +1249,35 @@ class WebCrawler(CrawlerParsersMixin):
                 for _ in range(3):
                     await page.evaluate("window.scrollBy(0, window.innerHeight)")
                     await page.wait_for_timeout(1000)
+
+                # 捕获的 API 请求 → 端点（含 query/JSON body 参数）
+                logger.debug(f"[Crawler] crawl_js captured {len(api_requests)} API requests")
+                for req in api_requests:
+                    try:
+                        req_url = req["url"]
+                        method = req["method"].upper()
+                        parsed_req = urllib.parse.urlparse(req_url)
+                        qs_params = {
+                            k: v[0] if len(v) == 1 else v[0] for k, v in urllib.parse.parse_qs(parsed_req.query).items()
+                        }
+                        body_params = req.get("body") or {}
+                        if qs_params or body_params or method != "GET" or self._is_api_url(req_url):
+                            ep = DiscoveredEndpoint(
+                                url=req_url,
+                                method=method,
+                                source_url=url,
+                                source_depth=depth,
+                                is_api=True,
+                            )
+                            if body_params:
+                                ep.parameters = body_params
+                                ep.param_types = dict.fromkeys(body_params, "json")
+                            elif qs_params:
+                                ep.parameters = qs_params
+                                ep.param_types = dict.fromkeys(qs_params, "query")
+                            endpoints.append(ep)
+                    except Exception:
+                        continue
 
                 # Extract all links after rendering
                 rendered_html = await page.content()

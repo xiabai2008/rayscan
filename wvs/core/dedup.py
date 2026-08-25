@@ -39,7 +39,9 @@ class ResultDeduplicator:
         # Collapse static resource sub-paths
         u = re.sub(
             r"/(css|js|img|images|themes|theme|static|assets|fonts|locale|lang)/.+",
-            r"/\1/*", u, flags=re.IGNORECASE,
+            r"/\1/*",
+            u,
+            flags=re.IGNORECASE,
         )
         # Collapse dynamic path segments
         u = re.sub(r"/(\d{2,})/", "/:id/", u)
@@ -86,8 +88,12 @@ class ResultDeduplicator:
         return Path(tempfile.gettempdir()) / f"rayscan_checkpoint_{url_hash}.json"
 
     def save_checkpoint(
-        self, target_url: str, vulns: List[Vulnerability],
-        modules_done: List[str], endpoints_found: int, requests_made: int,
+        self,
+        target_url: str,
+        vulns: List[Vulnerability],
+        modules_done: List[str],
+        endpoints_found: int,
+        requests_made: int,
     ) -> None:
         """Save incremental scan results for crash/timeout resilience."""
         try:
@@ -110,7 +116,8 @@ class ResultDeduplicator:
         cp = self._checkpoint_path(target_url)
         if cp.exists():
             try:
-                return json.loads(cp.read_text(encoding="utf-8"))
+                parsed = json.loads(cp.read_text(encoding="utf-8"))
+                return parsed if isinstance(parsed, dict) else None
             except Exception as e:
                 logger.warning(f"Checkpoint load failed: {e}")
         return None
@@ -118,6 +125,7 @@ class ResultDeduplicator:
 
 def prioritize_endpoints(endpoints):
     """Sort endpoints so most promising (dynamic, parameterised) ones are scanned first."""
+
     def score(ep) -> int:
         s = 0
         if ep.parameters:
@@ -131,4 +139,5 @@ def prioritize_endpoints(endpoints):
         ):
             s -= 30
         return s
+
     return sorted(endpoints, key=score)

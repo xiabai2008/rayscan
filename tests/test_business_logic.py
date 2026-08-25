@@ -50,12 +50,12 @@ class _FakeResponse:
 
 # HTML 结构一致的"用户资料页"(模拟 IDOR); 长度需 >100 字符以通过防误报门槛
 _USER_PAGE = (
-    '<html><head><title>User Profile</title></head><body>'
+    "<html><head><title>User Profile</title></head><body>"
     '<div id="profile"><h1>User Profile</h1><p>Name: Alice</p><p>Email: alice@example.com</p>'
-    '<p>Phone: +86-13800000000</p><p>Address: Beijing</p></div>'
+    "<p>Phone: +86-13800000000</p><p>Address: Beijing</p></div>"
     '<div id="footer">copyright</div></body></html>'
 )
-_FORBIDDEN = '<html><head><title>403</title></head><body><h1>403 Forbidden</h1><p>Access Denied</p></body></html>'
+_FORBIDDEN = "<html><head><title>403</title></head><body><h1>403 Forbidden</h1><p>Access Denied</p></body></html>"
 
 
 def _make_idor() -> Any:
@@ -150,10 +150,10 @@ def test_authbypass_header_removal_detected() -> None:
     module.enabled = True
 
     page = (
-        '<html><head><title>Admin Dashboard</title></head><body>'
+        "<html><head><title>Admin Dashboard</title></head><body>"
         '<div id="dash"><h1>Admin Dashboard</h1><table>'
-        '<tr><th>User</th><th>Role</th></tr><tr><td>alice</td><td>admin</td></tr>'
-        '<tr><td>bob</td><td>user</td></tr></table></div>'
+        "<tr><th>User</th><th>Role</th></tr><tr><td>alice</td><td>admin</td></tr>"
+        "<tr><td>bob</td><td>user</td></tr></table></div>"
         '<div id="footer">internal tool</div></body></html>'
     )
     session = _FakeSession({"http://app.test/dashboard": {"status_code": 200, "text": page}})

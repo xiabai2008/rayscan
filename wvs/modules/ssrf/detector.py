@@ -420,6 +420,11 @@ class SSRFDetector(DetectionModule):
             return not baseline_lower or pattern not in baseline_lower
 
         # 1. Cloud metadata / internal service patterns (high confidence)
+        # 基准驱动修复（2026-08-08）：命中必须排除 payload 原样回显——反射端点把
+        # http://169.254.169.254/... 回显时天然含 pattern 字样；真实 SSRF 返回的是
+        # metadata 内容（不含 payload URL 本身）
+        if payload and payload.lower() in text_lower:
+            return False
         for pattern in SSRF_SUCCESS_PATTERNS:
             if pattern.lower() in text_lower and not_in_baseline(pattern.lower()):
                 return True

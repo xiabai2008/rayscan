@@ -11,7 +11,7 @@ import statistics
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 from urllib.parse import parse_qs, urlparse
 
 from ..config import ConfigManager
@@ -42,7 +42,7 @@ class ModuleInfo:
     author: str = "WVS Team"
     version: str = "1.0.0"
     enabled_by_default: bool = True
-    tags: List[str] = None
+    tags: Optional[List[str]] = None
     # T2.1: module tier, used by the scanner to decide auto-loading.
     #   - "core": loaded by default
     #   - "lite": loaded only with --all-modules / modules.all
@@ -79,7 +79,7 @@ class DetectionModule(ABC):
 
         # Runtime state
         self._enabled = self.module_config.enabled
-        self._stats = {
+        self._stats: Dict[str, Any] = {
             "requests_made": 0,
             "vulnerabilities_found": 0,
             "errors": 0,
@@ -134,7 +134,7 @@ class DetectionModule(ABC):
     @property
     def enabled(self) -> bool:
         """Whether this module is enabled."""
-        return self._enabled and self.module_config.enabled
+        return bool(self._enabled and self.module_config.enabled)
 
     @enabled.setter
     def enabled(self, value: bool):
@@ -293,13 +293,18 @@ class DetectionModule(ABC):
             # URL 中已有的 query string（如检查项 URL 自带的 ?pageNo=1&pageSize=10），
             # 导致 Nacos 等接口报 "Required int parameter missing" 500。
             if method.upper() == "GET":
+                # T0 修复：空 params 不传 kwargs —— httpx 对「URL 自带 query + params={}」
+                # 会丢弃 URL 中的 query（如 OA 检查项 /nacos/v1/auth/users?pageNo=1）
                 if params:
                     kwargs["params"] = params
             else:
                 # POST: param_type decides whether to use body or query
                 if param_type == "body":
                     kwargs["data"] = params
-                elif params:
+                elif param_type == "json":
+                    # 第五轮：SPA/JSON API 提交点（Playwright 捕获的 JSON body 端点）
+                    kwargs["json"] = params
+                else:
                     kwargs["params"] = params
 
             response = await self._active_session.request(method.upper(), url, **kwargs)
@@ -352,12 +357,14 @@ class DetectionModule(ABC):
 
         # 2. POST body data
         if target.data:
+            # 第五轮：SPA/JSON API 提交点 —— param_types 记录 json/body 类型
+            body_types = getattr(target, "param_types", None) or {}
             endpoints.append(
                 {
                     "url": url,
                     "params": target.data.copy() if isinstance(target.data, dict) else dict(target.data),
                     "method": "POST",
-                    "param_type": "body",
+                    "param_type": "json" if any(t == "json" for t in body_types.values()) else "body",
                 }
             )
 
@@ -499,6 +506,8 @@ class DetectionModule(ABC):
             "api": VulnerabilityType.API_SECURITY,
             "sensitive": VulnerabilityType.INFO_DISCLOSURE,
             "waf": VulnerabilityType.INSECURE_CONFIG,
+            "mcp": VulnerabilityType.INFO_DISCLOSURE,
+            "graphql": VulnerabilityType.API_SECURITY,
             "idor": VulnerabilityType.BROKEN_ACCESS,
             "authbypass": VulnerabilityType.BROKEN_ACCESS,
         }
@@ -807,10 +816,10 @@ class DetectionModule(ABC):
             # sqlmap: avg + 7*stdev threshold
             lower_limit = baseline_avg + TIME_BASED_STDEV_COEFF * baseline_std
             threshold = max(TIME_BASED_MIN_VALID_DELAYED, lower_limit)
-            return actual_delay >= threshold
+            return bool(actual_delay >= threshold)
         else:
             # No statistical data — fallback to simple comparison
-            return actual_delay >= max(TIME_BASED_MIN_VALID_DELAYED, expected_delay * 0.7)
+            return bool(actual_delay >= max(TIME_BASED_MIN_VALID_DELAYED, expected_delay * 0.7))
 
     async def _verify_time_based(
         self,
@@ -848,7 +857,7 @@ class DetectionModule(ABC):
             if resp and self._is_valid_time_delay(actual, expected_delay, baseline_avg, baseline_std):
                 success_count += 1
 
-        return success_count >= TIME_BASED_VERIFICATION_ATTEMPTS
+        return bool(success_count >= TIME_BASED_VERIFICATION_ATTEMPTS)
 
     def _should_skip_time_based(
         self,
@@ -999,7 +1008,7 @@ class ModuleFactory:
     Responsible for creating and managing detection module instances.
     """
 
-    _modules: Dict[str, type] = {}
+    _modules: Dict[str, "Type[DetectionModule]"] = {}
 
     @classmethod
     def register(cls, module_class: type):

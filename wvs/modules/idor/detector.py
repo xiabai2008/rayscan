@@ -49,10 +49,23 @@ class IDORDetector(DetectionModule):
 
     # 常见管理端点(垂直越权探测);module-level tuple 避免 RUF012 可变类级默认值
     _ADMIN_PATHS = (
-        "/admin", "/administrator", "/manage", "/management", "/admin.php",
-        "/admin/index.php", "/admin/users", "/admin/user", "/admin/list",
-        "/admin/config", "/api/admin", "/api/users", "/api/admin/users",
-        "/console", "/backend", "/sys", "/system/admin",
+        "/admin",
+        "/administrator",
+        "/manage",
+        "/management",
+        "/admin.php",
+        "/admin/index.php",
+        "/admin/users",
+        "/admin/user",
+        "/admin/list",
+        "/admin/config",
+        "/api/admin",
+        "/api/users",
+        "/api/admin/users",
+        "/console",
+        "/backend",
+        "/sys",
+        "/system/admin",
     )
 
     # 批量/导出参数名
@@ -62,11 +75,29 @@ class IDORDetector(DetectionModule):
     def _is_public_path(url: str) -> bool:
         """排除公开路径与静态资源,降低误报。"""
         public_patterns = [
-            "/login", "/logout", "/register", "/signup", "/signin",
-            "/forgot-password", "/reset-password", "/assets/", "/static/",
-            "/public/", "/css/", "/js/", "/images/", "/img/", "/favicon",
-            "/robots.txt", "/sitemap.xml", "/.well-known/", "/health",
-            "/healthz", "/ping", "/status", "/version",
+            "/login",
+            "/logout",
+            "/register",
+            "/signup",
+            "/signin",
+            "/forgot-password",
+            "/reset-password",
+            "/assets/",
+            "/static/",
+            "/public/",
+            "/css/",
+            "/js/",
+            "/images/",
+            "/img/",
+            "/favicon",
+            "/robots.txt",
+            "/sitemap.xml",
+            "/.well-known/",
+            "/health",
+            "/healthz",
+            "/ping",
+            "/status",
+            "/version",
         ]
         url_lower = url.lower()
         return any(p in url_lower for p in public_patterns)

@@ -20,7 +20,7 @@ from ..models import (
     ScanTarget,
     Vulnerability,
 )
-from ..plugins.auth import APIKeyAuth, BasicAuth, BearerTokenAuth, CookieAuth, FormLoginAuth
+from ..plugins.auth import FormLoginAuth
 from .crawler import DiscoveredEndpoint, WebCrawler
 from .dedup import ResultDeduplicator, prioritize_endpoints
 from .lab_profiles import detect_lab_profile, get_lab_endpoints
@@ -71,6 +71,8 @@ class WAVScanner(ScannerIntegrationsMixin):
             max_urls_per_prefix=prefix_max,
             user_agent=self.config.get("user_agent", "WVS/19.0"),
         )
+        # T3.2: --js-render 实验性开关（对实战目标启用 SPA 检测 + Playwright 渲染爬取）
+        self.crawler._js_render = bool(self.config.get("crawler.js_render", False))
 
         # 已加载的检测模块 {module_name -> module_instance}
         self._modules: Dict[str, Any] = {}
@@ -106,8 +108,8 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._enabled_modules = self._resolve_enabled_modules()
 
         # 靶机自动识别（lab profiles）
-        self._lab_profile = None
-        self._lab_base_url = None
+        self._lab_profile: Optional[Any] = None
+        self._lab_base_url: Optional[str] = None
 
         # 集成开关（默认关闭，避免未导入的集成模块导致崩溃）
         self._integrations_enabled = False
@@ -116,7 +118,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._vuln_seen: set = set()
 
         # Nuclei 集成实例(懒加载;config nuclei.enabled 默认 True,接入主流程)
-        self._nuclei_integration = None
+        self._nuclei_integration: Optional[Any] = None
 
         # S2 checkpoint 复活:初始化防 AttributeError(save_checkpoint 引用)
         self._modules_done: List[str] = []  # 已完成模块(按批)
@@ -214,7 +216,9 @@ class WAVScanner(ScannerIntegrationsMixin):
         if not self._lab_profile or not self._lab_profile.login_path:
             return False
         lp = self._lab_profile
-        base = self._lab_base_url
+        base = self._lab_base_url or ""
+        if not base:
+            return False
         login_url = base.rstrip("/") + lp.login_path
         try:
             logger.info(f"[*] Detected lab target ({lp.name}), auto-authenticating...")
@@ -241,65 +245,6 @@ class WAVScanner(ScannerIntegrationsMixin):
         except Exception as e:
             logger.info(f"[*] {lp.name} auto-auth skipped: {e}")
         return False
-
-    async def _do_authenticate(self, target: ScanTarget) -> Dict[str, Any]:
-        """
-        执行登录认证并注入 cookie 到 session
-
-        Args:
-            target: 扫描目标（含 auth_config）
-
-        Returns:
-            auth_result dict
-        """
-        ac = target.auth_config
-        auth_type = ac.get("type", "form").lower()
-
-        if auth_type == "form":
-            provider = FormLoginAuth(
-                login_url=ac["login_url"],
-                username=ac.get("username", ""),
-                password=ac.get("password", ""),
-                username_field=ac.get("username_field", "username"),
-                password_field=ac.get("password_field", "password"),
-                extra_fields=ac.get("extra_fields"),
-                success_check=ac.get("success_check"),
-                fail_check=ac.get("fail_check"),
-            )
-        elif auth_type == "bearer":
-            provider = BearerTokenAuth(
-                token=ac.get("token", ""),
-                header=ac.get("header", "Authorization"),
-            )
-        elif auth_type == "basic":
-            provider = BasicAuth(
-                username=ac.get("username", ""),
-                password=ac.get("password", ""),
-            )
-        elif auth_type == "apikey":
-            provider = APIKeyAuth(
-                key=ac.get("api_key", ""),
-                header=ac.get("header", "X-API-Key"),
-            )
-        elif auth_type == "cookie":
-            provider = CookieAuth(
-                cookies=ac.get("cookies", {}),
-            )
-        else:
-            return {"authenticated": False, "error": f"未知认证类型: {auth_type}"}
-
-        # 执行认证，拿到 cookies/headers
-        result = await provider.authenticate(self.session._get_httpx_client())
-
-        if result.get("authenticated"):
-            # 将 cookies 注入到 HTTPPool 的 cookie jar
-            for name, value in result.get("cookies", {}).items():
-                self.session.set_cookie(target.url, name, value)
-            # 将 auth headers 注入
-            for hname, hvalue in result.get("headers", {}).items():
-                self.session.set_header(hname, hvalue)
-
-        return result
 
     def load_module(self, module_name: str) -> bool:
         """
@@ -352,145 +297,6 @@ class WAVScanner(ScannerIntegrationsMixin):
             return f"{path}?{'&'.join(param_names)}"
         return path
 
-    async def _run_module(
-        self,
-        module_name: str,
-        target: ScanTarget,
-        endpoints: List[DiscoveredEndpoint],
-        semaphore: asyncio.Semaphore,
-    ) -> List[Vulnerability]:
-        """
-        运行单个检测模块（带并发控制）
-
-        Args:
-            module_name: 模块名
-            target: 扫描目标
-            endpoints: 待测试端点列表
-            semaphore: 并发控制信号量
-
-        Returns:
-            发现的漏洞列表
-        """
-        if module_name not in self._modules:
-            return []
-
-        module = self._modules[module_name]
-
-        async with semaphore:
-            vulns: List[Vulnerability] = []
-
-            for ep in endpoints:
-                if not ep.url:
-                    continue
-
-                # URL 尾部斜杠修复：Apache/目录型 URL 需要尾部斜杠
-                # e.g. /dvwa/vulnerabilities/sqli → /dvwa/vulnerabilities/sqli/
-                ep_url = ep.url
-                parsed = urlparse(ep_url)
-                path_part = parsed.path
-                # 无查询参数、无扩展名、无尾部斜杠 → 可能是目录
-                if not parsed.query and "." not in path_part.split("/")[-1] and not path_part.endswith("/"):
-                    ep_url = ep_url.rstrip("/") + "/"
-
-                # 构建当前端点的 ScanTarget
-                # POST 方法时用 data 字段（body），GET 方法时用 params（query）
-                if ep.method.upper() == "POST":
-                    ep_target = ScanTarget(
-                        url=ep_url,
-                        methods=[ep.method],
-                        cookies=target.cookies,
-                        headers=target.headers,
-                        auth=target.auth,
-                        data=ep.parameters,
-                    )
-                else:
-                    ep_target = ScanTarget(
-                        url=ep_url,
-                        methods=[ep.method],
-                        cookies=target.cookies,
-                        headers=target.headers,
-                        auth=target.auth,
-                        params=ep.parameters,
-                    )
-
-                try:
-                    found = await module.scan(ep_target)
-                except Exception as e:
-                    logger.debug(f"[Scanner] 模块 {module_name} 扫描 {ep.url} 出错: {e}")
-                    found = []
-
-                for v in found:
-                    v.module = module_name
-                    v.parameter = list(ep.parameters.keys())[0] if ep.parameters else None
-                    v.parameter_type = ep.param_types.get(v.parameter or "", "query")
-                    vulns.append(v)
-
-            return vulns
-
-    async def _run_module_no_semaphore(
-        self,
-        module_name: str,
-        target: ScanTarget,
-        endpoints: List[DiscoveredEndpoint],
-    ) -> List[Vulnerability]:
-        """运行单个检测模块（无外部 semaphore，只用 HTTPPool 内部限流）"""
-        if module_name not in self._modules:
-            return []
-
-        module = self._modules[module_name]
-        vulns: List[Vulnerability] = []
-
-        for ep in endpoints:
-            if not ep.url:
-                continue
-
-            # URL 尾部斜杠修复（同上）
-            ep_url = ep.url
-            parsed = urlparse(ep_url)
-            if not parsed.query and "." not in parsed.path.split("/")[-1] and not parsed.path.endswith("/"):
-                ep_url = ep_url.rstrip("/") + "/"
-
-            # Preserve auth data from the original target
-            auth_data = getattr(target, "auth", None) or getattr(target, "auth_config", None)
-            if ep.method.upper() == "POST":
-                ep_target = ScanTarget(
-                    url=ep_url,
-                    methods=[ep.method],
-                    cookies=target.cookies,
-                    headers=target.headers,
-                    auth=auth_data,
-                    data=ep.parameters,
-                )
-            else:
-                ep_target = ScanTarget(
-                    url=ep_url,
-                    methods=[ep.method],
-                    cookies=target.cookies,
-                    headers=target.headers,
-                    auth=auth_data,
-                    params=ep.parameters,
-                )
-
-            try:
-                found = await module.scan(ep_target)
-            except asyncio.CancelledError:
-                # 超时取消：保存部分结果并停止
-                self._partial_vulns.extend(vulns)
-                raise
-            except Exception as e:
-                logger.debug(f"[Scanner] 模块 {module_name} 扫描 {ep.url} 出错: {e}")
-                found = []
-
-            for v in found:
-                v.module = module_name
-                v.parameter = list(ep.parameters.keys())[0] if ep.parameters else None
-                v.parameter_type = ep.param_types.get(v.parameter or "", "query")
-                vulns.append(v)
-
-        # 模块完成：保存完整结果到 partial（超时抢救用）
-        self._partial_vulns.extend(vulns)
-        return vulns
-
     # ── Concurrent module runner ─────────────────────────────────
 
     async def _run_module_concurrent(
@@ -514,7 +320,14 @@ class WAVScanner(ScannerIntegrationsMixin):
                     return []
                 ep_url = ep.url
                 parsed = urlparse(ep_url)
-                if not parsed.query and "." not in parsed.path.split("/")[-1] and not parsed.path.endswith("/"):
+                # 第五轮：API 端点（is_api）不做目录尾斜杠修复——SPA 捕获的
+                # /rest/user/login 是精确路径，加斜杠 → 404（真实 API 语义）
+                if (
+                    not ep.is_api
+                    and not parsed.query
+                    and "." not in parsed.path.split("/")[-1]
+                    and not parsed.path.endswith("/")
+                ):
                     ep_url = ep_url.rstrip("/") + "/"
 
                 if ep.method.upper() == "POST":
@@ -525,6 +338,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                         headers=target.headers,
                         auth=target.auth,
                         data=ep.parameters,
+                        param_types=ep.param_types,
                     )
                 else:
                     ep_target = ScanTarget(
@@ -534,9 +348,10 @@ class WAVScanner(ScannerIntegrationsMixin):
                         headers=target.headers,
                         auth=target.auth,
                         params=ep.parameters,
+                        param_types=ep.param_types,
                     )
                 try:
-                    found = await module.scan(ep_target)
+                    found: List[Vulnerability] = await module.scan(ep_target)
                 except Exception as e:
                     logger.debug(f"[Scanner] {module_name} EP {ep.url}: {e}")
                     found = []
@@ -567,13 +382,13 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     @staticmethod
     def _normalize_vuln_url(url: str) -> str:
-        return ResultDeduplicator.normalize_vuln_url(url)
+        return str(ResultDeduplicator.normalize_vuln_url(url))
 
     def _vuln_signature(self, v: Vulnerability) -> str:
-        return self.dedup.signature(v)
+        return str(self.dedup.signature(v))
 
     def _deduplicate(self, vulns: List[Vulnerability]) -> List[Vulnerability]:
-        return self.dedup.deduplicate(vulns)
+        return list(self.dedup.deduplicate(vulns))
 
     async def _run_nuclei(self, target: ScanTarget) -> List[Vulnerability]:
         """S2 接入:运行 Nuclei 外部引擎(模板扫描),结果由主流程去重合并。
@@ -588,11 +403,12 @@ class WAVScanner(ScannerIntegrationsMixin):
         if not self._nuclei_integration.is_available:
             logger.info("[Nuclei] nuclei CLI 不可用，使用内置回退模板（内容特征验证）")
 
-        return await self._nuclei_integration.scan(
+        result = await self._nuclei_integration.scan(
             target.url,
             cookies=target.cookies or None,
             severities=None,  # 默认全部严重级，由结果合并后统一去重/排序
         )
+        return result if isinstance(result, list) else []
 
     def _call_progress(self, module_name: str, done: int, total: int, pct: int = 0):
         """向 GUI 发送进度回调（如果有注册回调的话）"""
@@ -605,7 +421,8 @@ class WAVScanner(ScannerIntegrationsMixin):
     # ── Timeout helpers ────────────────────────────────────────
 
     def _elapsed(self) -> float:
-        return time.time() - self._stats["start_time"]
+        start = self._stats.get("start_time") or 0.0
+        return time.time() - float(start)
 
     def _timeout_remaining(self) -> float:
         if not self._scan_max_time or self._scan_max_time <= 0:
@@ -617,7 +434,7 @@ class WAVScanner(ScannerIntegrationsMixin):
     # -- Checkpoint (原生文件实现,与 ResultDeduplicator 路径一致) --
 
     def _checkpoint_file(self, target_url: str) -> Path:
-        return ResultDeduplicator._checkpoint_path(target_url)
+        return Path(ResultDeduplicator._checkpoint_path(target_url))
 
     def _try_save_checkpoint(
         self, target: ScanTarget, vulns: List[Vulnerability], endpoints: List[DiscoveredEndpoint]
@@ -651,7 +468,8 @@ class WAVScanner(ScannerIntegrationsMixin):
         cp = self._checkpoint_file(target_url)
         if cp.exists():
             try:
-                return json.loads(cp.read_text(encoding="utf-8"))
+                parsed = json.loads(cp.read_text(encoding="utf-8"))
+                return parsed if isinstance(parsed, dict) else None
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Checkpoint load failed: {e}")
         return None
@@ -661,7 +479,7 @@ class WAVScanner(ScannerIntegrationsMixin):
     @staticmethod
     def _prioritize_endpoints(endpoints: List[DiscoveredEndpoint]) -> List[DiscoveredEndpoint]:
         """Sort endpoints (delegated to prioritize_endpoints)."""
-        return prioritize_endpoints(endpoints)
+        return list(prioritize_endpoints(endpoints))
 
     # ── Core scan flow ──────────────────────────────────────────
 
@@ -739,16 +557,16 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         # S2 resume:合并上次 checkpoint 已发现漏洞 + 跳过已完成模块
         self._modules_done = []
-        if getattr(self, "_resume_checkpoint", None):
-            cp = self._resume_checkpoint
-            for vdict in cp.get("vulnerabilities", []):
+        resume_cp: Optional[Dict[str, Any]] = getattr(self, "_resume_checkpoint", None)
+        if resume_cp:
+            for vdict in resume_cp.get("vulnerabilities", []):
                 try:
                     v = Vulnerability.from_dict(vdict)
                     all_vulns_before_dedup.append(v)
                     logger.info(f"[resume] 复用已发现漏洞: {v.url} ({v.type.value})")
                 except Exception:  # noqa: BLE001
                     logger.debug("[resume] 反序列化漏洞失败,跳过")
-            skip_modules = set(cp.get("modules_done", []))
+            skip_modules = set(resume_cp.get("modules_done", []))
             if skip_modules:
                 logger.info(f"[resume] 跳过已完成模块: {sorted(skip_modules)}")
                 for m in list(self._modules.keys()):
@@ -765,6 +583,12 @@ class WAVScanner(ScannerIntegrationsMixin):
                 # 第一次爬取
                 eps = await self.crawler.crawl(target.url, self.session)
                 all_endpoints.extend(eps)
+
+                # T0 修复：crawler 未产出端点（单页无链接且 seed 全 404）时，
+                # 兜底至少测目标本身——否则流式检测整体跳过（检测模块完全不执行）
+                if not eps:
+                    eps = [DiscoveredEndpoint(url=target.url, method="GET", source_url=target.url, source_depth=1)]
+                    all_endpoints.extend(eps)
 
                 # 分批检测已爬到的端点
                 if eps:
@@ -912,6 +736,24 @@ class WAVScanner(ScannerIntegrationsMixin):
                     unique_vulns = self._deduplicate(unique_vulns + nuclei_vulns)
             except Exception as e:  # noqa: BLE001
                 logger.debug(f"[Scanner] Nuclei phase failed: {e}")
+
+        # ── Phase 3.6: AI 误报复核（T1.2，默认关，--ai-verify 开启） ──
+        if self.config.get("ai.verify", False) and unique_vulns:
+            try:
+                from ..ai import AIVerifier, LLMClient
+
+                ai_client = LLMClient(self.config)
+                if ai_client.available:
+                    verifier = AIVerifier(self.config, ai_client)
+                    unique_vulns = await verifier.verify_batch(unique_vulns)
+                    logger.info(
+                        f"[AI] 复核完成: {verifier.reviewed_count} 条已复核, "
+                        f"{verifier.confirmed_count} 确认 / {verifier.disputed_count} 存疑降级"
+                    )
+                else:
+                    logger.warning("[AI] --ai-verify 已开启但未配置 LLM_API_KEY，跳过 AI 复核")
+            except Exception as e:
+                logger.debug(f"[Scanner] AI verify phase failed: {e}")
 
         # S2 checkpoint: 扫描结束保存最终 checkpoint(供 --resume 合并)
         try:

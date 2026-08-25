@@ -40,7 +40,6 @@ class _FakeResponse:
 
 
 class TestSQLiDetectorIntegration:
-
     @pytest.fixture
     def mock_session(self):
         return _make_mock_session()
@@ -48,6 +47,7 @@ class TestSQLiDetectorIntegration:
     @pytest.mark.asyncio
     async def test_detector_initialization(self, config, mock_session):
         from wvs.modules.sqli import SQLiDetector
+
         detector = SQLiDetector(config=config, session=mock_session)
         assert detector.info.name == "sqli"
         assert detector.info.category == "core"
@@ -56,6 +56,7 @@ class TestSQLiDetectorIntegration:
     @pytest.mark.asyncio
     async def test_scan_normal_page(self, config, mock_session):
         from wvs.modules.sqli import SQLiDetector
+
         detector = SQLiDetector(config=config, session=mock_session)
         target = ScanTarget(url="http://example.com/page?id=1")
         vulns = await detector.scan(target)
@@ -64,6 +65,7 @@ class TestSQLiDetectorIntegration:
     @pytest.mark.asyncio
     async def test_extract_endpoints_query_params(self, config, mock_session):
         from wvs.modules.sqli import SQLiDetector
+
         detector = SQLiDetector(config=config, session=mock_session)
         target = ScanTarget(url="http://example.com/search?q=test&page=1")
         endpoints = detector._extract_endpoints(target)
@@ -75,6 +77,7 @@ class TestSQLiDetectorIntegration:
     @pytest.mark.asyncio
     async def test_extract_endpoints_post_body(self, config, mock_session):
         from wvs.modules.sqli import SQLiDetector
+
         detector = SQLiDetector(config=config, session=mock_session)
         target = ScanTarget(
             url="http://example.com/login",
@@ -89,6 +92,7 @@ class TestSQLiDetectorIntegration:
     async def test_create_vuln(self, config, mock_session):
         from wvs.models import Confidence, VulnerabilityType
         from wvs.modules.sqli import SQLiDetector
+
         detector = SQLiDetector(config=config, session=mock_session)
         vuln = detector._create_vuln(
             url="http://example.com?id=1",
@@ -107,6 +111,7 @@ class TestSQLiDetectorIntegration:
     @pytest.mark.asyncio
     async def test_detector_disabled(self, config, mock_session):
         from wvs.modules.sqli import SQLiDetector
+
         detector = SQLiDetector(config=config, session=mock_session)
         detector.disable()
         target = ScanTarget(url="http://example.com/page?id=1")
@@ -118,7 +123,6 @@ class TestSQLiDetectorIntegration:
 
 
 class TestXSSDetectorIntegration:
-
     @pytest.fixture
     def mock_session(self):
         return _make_mock_session()
@@ -126,6 +130,7 @@ class TestXSSDetectorIntegration:
     @pytest.mark.asyncio
     async def test_detector_initialization(self, config, mock_session):
         from wvs.modules.xss import XSSDetector
+
         detector = XSSDetector(config=config, session=mock_session)
         assert detector.info.name == "xss"
         assert detector.info.category == "core"
@@ -133,6 +138,7 @@ class TestXSSDetectorIntegration:
     @pytest.mark.asyncio
     async def test_extract_endpoints(self, config, mock_session):
         from wvs.modules.xss import XSSDetector
+
         detector = XSSDetector(config=config, session=mock_session)
         target = ScanTarget(url="http://example.com/search?q=test")
         endpoints = detector._extract_endpoints(target)
@@ -141,6 +147,7 @@ class TestXSSDetectorIntegration:
     @pytest.mark.asyncio
     async def test_disabled_detector(self, config, mock_session):
         from wvs.modules.xss import XSSDetector
+
         detector = XSSDetector(config=config, session=mock_session)
         detector.disable()
         target = ScanTarget(url="http://example.com/page?q=test")
@@ -152,9 +159,9 @@ class TestXSSDetectorIntegration:
 
 
 class TestXSSContextAnalyzer:
-
     def test_html_content_reflection(self):
         from wvs.modules.xss.context_analyzer import analyze_reflection
+
         contexts = analyze_reflection(
             '<html><body><div id="content">XSS_TEST_12345</div></body></html>',
             "XSS_TEST_12345",
@@ -163,6 +170,7 @@ class TestXSSContextAnalyzer:
 
     def test_attribute_reflection(self):
         from wvs.modules.xss.context_analyzer import analyze_reflection
+
         contexts = analyze_reflection(
             '<input type="text" value="XSS_TEST_12345">',
             "XSS_TEST_12345",
@@ -171,6 +179,7 @@ class TestXSSContextAnalyzer:
 
     def test_no_reflection(self):
         from wvs.modules.xss.context_analyzer import analyze_reflection
+
         contexts = analyze_reflection(
             "<html><body>No match here</body></html>",
             "XSS_TEST_12345",
@@ -179,6 +188,7 @@ class TestXSSContextAnalyzer:
 
     def test_script_context(self):
         from wvs.modules.xss.context_analyzer import analyze_reflection
+
         contexts = analyze_reflection(
             "<script>var x = 'XSS_TEST_12345';</script>",
             "XSS_TEST_12345",

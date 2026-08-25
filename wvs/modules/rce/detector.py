@@ -18,7 +18,6 @@ from ...models import Confidence, ScanTarget, Severity, Vulnerability
 from ..base import DetectionModule, ModuleInfo, register_module
 from .payloads import (
     JAVA_EXPRESSION_PAYLOADS,
-    PYTHON_CODE_INJECTION_PAYLOADS,
     TIME_BASED_PAYLOADS,
 )
 
@@ -408,26 +407,24 @@ class RCEDetector(DetectionModule):
         return vulns
 
     async def _detect_python_injection(self, target: ScanTarget, test_token: str) -> List[Vulnerability]:
-        """Detect Python code injection/SSTI — using full PYTHON_CODE_INJECTION_PAYLOADS library"""
+        """Detect Python code injection/SSTI — 基准驱动收敛（2026-08-08）
+
+        判定只信模板引擎运算求值（{{7*7}}→49）：
+          - 反射端点（完整/截断/引号翻倍等变形回显）不产生 49，天然免疫
+          - 删除 token echo / __subclasses__ 等"回显词"判定——响应中出现这些词
+            只证明输入被回显（任何形态），不证明模板求值（真实求值会展开，词本身消失）
+        """
         vulns: List[Vulnerability] = []
         params = target.params or {}
 
-        # SSTI quick detection payloads (math operations + echo)
+        # SSTI 运算求值 payloads（expected = 求值结果）
         ssti_payloads = [
             ("{{7*7}}", "49", "SSTI detected: {{7*7}} evaluated to 49"),
             ("${7*7}", "49", "Mako SSTI: ${7*7} evaluated to 49"),
             ("#{7*7}", "49", "SpEL: #{7*7} evaluated to 49"),
-            (f"{{{{'{test_token}'}}}}", test_token, f"SSTI token echo: '{test_token}' reflected"),
-            (f"${{{test_token}}}", test_token, f"Mako token echo: ${{{test_token}}}"),
-            ("{{config}}", None, "SSTI config object leaked"),
-            ("{{''.__class__.__mro__[2].__subclasses__()}}", "__subclasses__", "SSTI: __mro__/__subclasses__ exposed"),
-            ("{{request.application.__globals__.__builtins__}}", "__builtins__", "SSTI: __builtins__ leaked"),
+            ("<%= 7*7 %>", "49", "ERB/JSP: <%= 7*7 %> evaluated to 49"),
+            ("{{7*'7'}}", "7777777", "Jinja2: {{7*'7'}} evaluated to 7777777"),
         ]
-
-        # Append behavioral characteristic payloads from payloads.py
-        for py_payload in PYTHON_CODE_INJECTION_PAYLOADS:
-            if "system" in py_payload and py_payload not in [p[0] for p in ssti_payloads]:
-                ssti_payloads.append((py_payload, None, f"Python code injection: {py_payload[:60]}"))
 
         # P8: Baseline — avoid matching content already present without injection
         baseline_text = ""
@@ -442,7 +439,7 @@ class RCEDetector(DetectionModule):
             logger.debug(f"[RCE] Python injection baseline failed for {target.url}", exc_info=True)
 
         for param_name, param_value in params.items():
-            for payload, expected, evidence_base in ssti_payloads[:12]:
+            for payload, expected, evidence_base in ssti_payloads:
                 try:
                     test_params = dict(params)
                     test_params[param_name] = payload
@@ -454,7 +451,8 @@ class RCEDetector(DetectionModule):
                     )
 
                     # P8: Check expected output with baseline comparison
-                    if expected and expected in resp.text:
+                    # 额外排除 payload 原样回显（完整回显防御；变形回显天然不产生 49）
+                    if expected and expected in resp.text and payload not in resp.text:
                         # Baseline check: if expected value already exists without injection -> FP
                         if expected in baseline_text and expected == "49":
                             continue  # "49" already in baseline (page number, ID, etc.)
@@ -468,42 +466,6 @@ class RCEDetector(DetectionModule):
                             )
                         )
                         return vulns
-
-                    # Echo detection
-                    if test_token in resp.text and not self._is_input_reflection(resp.text, payload, test_token):
-                        vulns.append(
-                            self._create_vulnerability(
-                                target=target,
-                                param=param_name,
-                                payload=payload,
-                                evidence=f"Token '{test_token}' found in response (Python/SSTI injection)",
-                                severity=Severity.CRITICAL,
-                            )
-                        )
-                        return vulns
-
-                    # Check SSTI leak characteristics (__subclasses__, __globals__, __builtins__)
-                    ssti_leak_indicators = [
-                        "__subclasses__",
-                        "__globals__",
-                        "__builtins__",
-                        "__mro__",
-                        "__bases__",
-                        "__class__",
-                    ]
-                    for indicator in ssti_leak_indicators:
-                        if indicator in resp.text and indicator in payload:
-                            vulns.append(
-                                self._create_vulnerability(
-                                    target=target,
-                                    param=param_name,
-                                    payload=payload,
-                                    evidence=f"SSTI object leaked: {indicator} exposed in response",
-                                    severity=Severity.CRITICAL,
-                                )
-                            )
-                            return vulns
-
                 except Exception as e:
                     logger.debug(f"Python injection test failed: {e}")
 

@@ -5,7 +5,32 @@ All notable changes to RayScan (formerly WVS) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**259 collected**（2026-08-24）。
+> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**376 collected**（2026-08-25）。
+
+---
+
+## [2.2.0] - 2026-08-08
+
+### Added
+- **AI 辅助验证（T1）**：`scan --ai-verify` 对候选漏洞做 LLM 二次复核（确认/存疑降级，只降不删）；`rayscan ai-report` 用 LLM 生成报告摘要；官方 OpenAI 兼容 API（`LLM_API_KEY`），无 key 静默跳过
+- **MCP 接入（T2）**：`python -m wvs mcp` 启动 MCP Server（`pip install "rayscan[mcp]"`，默认 127.0.0.1:18000，供 Claude/ChatGPT 调用 scan/list_modules/get_report）；新增 `mcp` lite 模块检测 MCP server 工具列表泄露与敏感工具未授权调用
+- **GraphQL 检测（T3.1）**：`graphql` lite 模块（端点识别 / introspection 开启 / 批量查询，证据验证）
+- **可选 SPA 爬取（T3.2）**：`scan --js-render` 对实战目标启用 Playwright 渲染（实验性，`pip install "rayscan[jsrender]"`）
+- `rayscan update-pocs [--list-oa]`：重建 PoC 模板索引 + OA 相关模板统计
+- 工程地基（T4）：覆盖率门禁（`fail_under=25`，CI blocking）、ruff 配置本地=CI 统一、core 层 +25 单测、新模块 mypy 0 错误
+- 测试：190 → **274**（AI 27 / MCP 20 / GraphQL 12 / core 25）
+
+### Fixed
+- **crawler 无端点时流式检测整体跳过**（单页无链接且 seed 全 404 时检测模块完全不执行）→ scanner 兜底端点前置
+- **httpx 空 params 丢弃 URL 自带 query**（OA 检查项 `/nacos/v1/auth/users?pageNo=1` 缺参 404）→ base.py 空 params 不传
+- **OA 短名断链**：scanner 注入"泛微"与 OA_RULES key"泛微-Ecology"不匹配 → 别名映射修复（8 种 OA 检查项此前从不执行）
+- **OA `_create_vuln` 枚举误传**导致报告 JSON 序列化失败 → `vuln_type` 传字符串 + `explicit_vuln_type` 传枚举
+- 统一账号引用 xiabai2008（cli/wvs_gui/web_ui/html_report 残留清理）
+
+### Changed
+- 版本 SSOT：`wvs/__init__.py` = 2.2.0（与 pyproject 一致）；报告模块（console/html/markdown）动态读取 `__version__`，UI 硬编码版本统一
+- OA 实测闭环（mock 靶场 4 样本：泛微/Nacos 1.3.2/Nacos 1.5.0 负样本/Jenkins），记录入 docs/OA_RULES.md
+- 与远程 v2.1.0（可解释检测/被动扫描/业务逻辑/规则管理/编排层）合并：保留双方功能（AI/MCP/GraphQL + demo/passive/idor/authbypass/rules/编排器）
 
 ---
 

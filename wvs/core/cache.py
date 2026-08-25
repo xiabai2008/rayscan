@@ -64,7 +64,7 @@ class ScanCache:
         self.max_size = max_size
         self.default_ttl = default_ttl
         self._cache: Dict[str, CacheEntry] = {}
-        self._lru_order = OrderedDict()
+        self._lru_order: "OrderedDict[str, None]" = OrderedDict()
         self._lock = threading.RLock()
         self._hits = 0
         self._misses = 0
@@ -245,11 +245,8 @@ class TargetFingerprinter:
                 sorted_params = sorted([(k, sorted(v) if isinstance(v, list) else v) for k, v in params.items()])
                 query_parts = []
                 for key, values in sorted_params:
-                    if isinstance(values, list):
-                        for val in values:
-                            query_parts.append(f"{key}={val}" if val is not None else key)
-                    else:
-                        query_parts.append(f"{key}={values}" if values is not None else key)
+                    for val in values if isinstance(values, list) else [values]:
+                        query_parts.append(f"{key}={val}")
                 query = "&".join(query_parts)
 
             return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, query, ""))

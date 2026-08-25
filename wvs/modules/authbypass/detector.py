@@ -55,11 +55,29 @@ class AuthBypassDetector(DetectionModule):
     @staticmethod
     def _is_public_path(url: str) -> bool:
         public_patterns = [
-            "/login", "/logout", "/register", "/signup", "/signin",
-            "/forgot-password", "/reset-password", "/assets/", "/static/",
-            "/public/", "/css/", "/js/", "/images/", "/img/", "/favicon",
-            "/robots.txt", "/sitemap.xml", "/.well-known/", "/health",
-            "/healthz", "/ping", "/status", "/version",
+            "/login",
+            "/logout",
+            "/register",
+            "/signup",
+            "/signin",
+            "/forgot-password",
+            "/reset-password",
+            "/assets/",
+            "/static/",
+            "/public/",
+            "/css/",
+            "/js/",
+            "/images/",
+            "/img/",
+            "/favicon",
+            "/robots.txt",
+            "/sitemap.xml",
+            "/.well-known/",
+            "/health",
+            "/healthz",
+            "/ping",
+            "/status",
+            "/version",
         ]
         url_lower = url.lower()
         return any(p in url_lower for p in public_patterns)
@@ -134,9 +152,7 @@ class AuthBypassDetector(DetectionModule):
                         confidence=Confidence.MEDIUM,
                         evidence=f"Default credentials {user}:{pwd} accepted on login endpoint",
                         description="Login endpoint accepts well-known default credentials",
-                        recommendation=(
-                            "Force password change on first login and enforce a strong password policy."
-                        ),
+                        recommendation=("Force password change on first login and enforce a strong password policy."),
                         context={"username": user},
                     )
                 )

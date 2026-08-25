@@ -34,16 +34,20 @@ class TestScannerCore:
     @pytest.fixture
     def mock_session(self):
         session = MagicMock(spec=HTTPPool)
-        session.request = AsyncMock(return_value=MagicMock(
-            status_code=200,
-            text="<html><body>Test</body></html>",
-            headers={"Content-Type": "text/html"},
-        ))
-        session.get = AsyncMock(return_value=MagicMock(
-            status_code=200,
-            text="<html><body>Test Page</body></html>",
-            headers={},
-        ))
+        session.request = AsyncMock(
+            return_value=MagicMock(
+                status_code=200,
+                text="<html><body>Test</body></html>",
+                headers={"Content-Type": "text/html"},
+            )
+        )
+        session.get = AsyncMock(
+            return_value=MagicMock(
+                status_code=200,
+                text="<html><body>Test Page</body></html>",
+                headers={},
+            )
+        )
         session._get_httpx_client = MagicMock()
         session._lab_mode = False
         session.set_cookie = MagicMock()
@@ -112,6 +116,7 @@ class TestScannerCore:
     @pytest.mark.asyncio
     async def test_ensure_params_preserves_existing(self, config, mock_session):
         from wvs.core.crawler import DiscoveredEndpoint
+
         scanner = WAVScanner(config=config, session=mock_session)
         ep = DiscoveredEndpoint(
             url="http://example.com/page?id=1",
@@ -124,6 +129,7 @@ class TestScannerCore:
     @pytest.mark.asyncio
     async def test_ensure_params_fills_missing(self, config, mock_session):
         from wvs.core.crawler import DiscoveredEndpoint
+
         scanner = WAVScanner(config=config, session=mock_session)
         ep = DiscoveredEndpoint(
             url="http://example.com/page?id=1&name=test",
@@ -201,6 +207,7 @@ class TestModuleFactory:
     def test_list_modules_includes_core(self):
         from wvs.modules import register_all_modules
         from wvs.modules.base import ModuleFactory
+
         register_all_modules()
         modules = ModuleFactory.list_modules()
         assert "sqli" in modules
@@ -209,6 +216,7 @@ class TestModuleFactory:
     def test_create_module_returns_instance(self):
         from wvs.modules import register_all_modules
         from wvs.modules.base import DetectionModule, ModuleFactory
+
         register_all_modules()
         mod = ModuleFactory.create("sqli")
         assert isinstance(mod, DetectionModule)
@@ -218,6 +226,7 @@ class TestModuleFactory:
     def test_get_module_info(self):
         from wvs.modules import register_all_modules
         from wvs.modules.base import ModuleFactory
+
         register_all_modules()
         info = ModuleFactory.get_module_info("xss")
         assert info is not None

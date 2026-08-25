@@ -1,5 +1,5 @@
 """
-RayScan 1.0.2 — Web UI (Flask + SSE 实时日志)
+RayScan 2.2.0 — Web UI (Flask + SSE 实时日志)
 """
 import sys
 import os
@@ -490,7 +490,7 @@ if __name__ == "__main__":
     bind_host = os.environ.get("RAYSCAN_WEB_HOST", "127.0.0.1")
     bind_port = int(os.environ.get("RAYSCAN_WEB_PORT", "5000"))
     print("=" * 50)
-    print("  RayScan 1.0.2 — Web UI")
+    print("  RayScan 2.2.0 — Web UI")
     print(f"  http://{bind_host}:{bind_port}")
     if bind_host in ("0.0.0.0", "::"):
         print("  [WARN] 监听所有网卡 — 请确保已启用鉴权 (RAYSCAN_WEB_TOKEN)")
