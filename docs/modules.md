@@ -1,6 +1,6 @@
 # 检测模块说明
 
-RayScan 当前注册 **18 个检测模块**，分三个层级：`core`（默认加载）、`optional`（按需启用）、`lite`（`--all-modules` 启用）。
+RayScan 当前注册 **20 个检测模块**，分三个层级：`core`（默认加载）、`optional`（按需启用）、`lite`（`--all-modules` 启用）。
 
 > 分层由代码决定：`ModuleInfo.category`（`wvs/modules/base.py`），未显式标注的模块默认 `lite`。本文与 `wvs/modules/__init__.py` 的注册表保持同步，模块增删请同步更新。
 
@@ -10,7 +10,7 @@ RayScan 当前注册 **18 个检测模块**，分三个层级：`core`（默认�
 |------|------|---------|
 | 🟢 core | `sqli` `xss` | 默认加载 |
 | 🔵 optional | `jspathfinder` | 配置/参数启用 |
-| 🟡 lite | `cmdi` `lfi` `rce` `ssrf` `xxe` `api` `sensitive` `waf` `js_analysis` `oa` `subdomain` `weakpass` `webshell` `idor` `authbypass` | `--all-modules` |
+| 🟡 lite | `cmdi` `lfi` `rce` `ssrf` `xxe` `api` `sensitive` `waf` `js_analysis` `oa` `subdomain` `weakpass` `webshell` `idor` `authbypass` `graphql` `mcp` | `--all-modules` |
 
 ## 模块清单
 
@@ -21,7 +21,9 @@ RayScan 当前注册 **18 个检测模块**，分三个层级：`core`（默认�
 | `jspathfinder` | optional | JavaScript 端点发现 | — |
 | `oa` | lite | 12 种 OA/中间件专项：泛微/通达/金蝶/蓝凌/致远/用友/禅道/万户/Nacos/Spring/Jenkins/Confluence，三级检测链路 | 多类 |
 | `cmdi` | lite | 命令注入（多分隔符 + time-based 并发） | A03:2021 |
+| `graphql` | lite | GraphQL 端点识别 / introspection 开启 / 批量查询检测（证据验证） | API Top 10 |
 | `lfi` | lite | 本地文件包含（目录遍历 / PHP 伪协议 / 编码绕过） | A01:2021 |
+| `mcp` | lite | MCP Server 暴露检测（端点发现 / 工具列表泄露 / 敏感工具未授权调用） | — |
 | `rce` | lite | 远程代码执行 | A03:2021 |
 | `ssrf` | lite | 服务端请求伪造（内网探测 / 云元数据 / OOB blind） | A10:2021 |
 | `xxe` | lite | XML 外部实体（内联 / 外部 / blind OOB，file/http/ftp/php://） | A05:2021 |
@@ -56,6 +58,7 @@ modules/
 ├── cmdi/ lfi/ rce/          # detector / payloads
 ├── ssrf/ xxe/               # detector / payloads
 ├── api/ sensitive/ waf/     # detector
+├── graphql/ mcp/            # detector（GraphQL introspection / MCP 暴露检测）
 ├── jspathfinder/ js_analysis/
 ├── subdomain/ weakpass/ webshell/
 └── idor/ authbypass/

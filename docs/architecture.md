@@ -7,11 +7,13 @@
 ```
 RayScan/
 ├── wvs/                       # 核心扫描库
-│   ├── cli.py                 # CLI 入口（scan/batch/list-modules/rules/demo…）
+│   ├── cli.py                 # CLI 入口（scan/batch/list-modules/rules/demo/ai-report/mcp…）
 │   ├── config.py              # 配置管理（YAML/JSON/环境变量，分层覆盖）
 │   ├── models.py              # 数据模型（Vulnerability / ScanTarget / ScanResult）
 │   ├── constants.py           # 全局常量
 │   ├── exceptions.py          # 异常体系
+│   ├── ai/                    # AI 误报复核（client / verifier / report，LLM_API_KEY）
+│   ├── mcp_server.py          # MCP Server（--serve，供 Claude/ChatGPT 调用 scan/list_modules/get_report）
 │   ├── core/                  # 扫描引擎
 │   │   ├── scanner.py         # 主扫描器 WAVScanner（阶段编排 + 流式检测 + checkpoint）
 │   │   ├── orchestrator.py    # ScanOrchestrator（Stage 编排器）
@@ -31,7 +33,7 @@ RayScan/
 │   │   ├── rule_updater.py    # 规则更新
 │   │   ├── oob/               # OOB 检测（dnslog / interactsh / oob_manager）
 │   │   └── passive/           # 被动扫描代理（proxy）
-│   ├── modules/               # 18 个检测模块（见 docs/modules.md）
+│   ├── modules/               # 20 个检测模块（见 docs/modules.md）
 │   ├── integrations/          # 第三方集成
 │   │   ├── nuclei_integration.py       # Nuclei（已接入主流程）
 │   │   ├── sqlmap_integration.py       # sqlmap（独立可用，未接入主流程）
@@ -63,8 +65,8 @@ RayScan/
 │    ├─ Nuclei 阶段（CLI 可用走模板，否则内置回退）     │
 │    └─ Checkpoint（30s 落盘，--resume 恢复）         │
 ├──────────────────────────────────────────────────┤
-│         ModuleFactory 注册表（18 模块）             │  ← 检测层
-│   core: sqli/xss  ·  lite: oa/cmdi/lfi/…  ×16     │
+│         ModuleFactory 注册表（20 模块）             │  ← 检测层
+│   core: sqli/xss  ·  lite: oa/cmdi/lfi/…  ×18     │
 ├──────────────────────────────────────────────────┤
 │   Integrations: Nuclei(接入) / sqlmap/ffuf/…       │  ← 外部工具
 ├──────────────────────────────────────────────────┤

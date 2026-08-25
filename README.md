@@ -72,6 +72,7 @@ python web_ui/app.py
 |------|------|
 | CMDi / LFI / RCE / SSRF / XXE | 通用漏洞检测 |
 | sensitive / api / waf / jspathfinder | 信息收集 + 绕过 |
+| mcp / graphql | MCP 工具泄露检测 · GraphQL introspection/批量查询 |
 | 第三方集成 | Nuclei · sqlmap · ffuf · Wappalyzer |
 | 报告格式 | HTML · JSON · CSV · Markdown · Console |
 
@@ -159,7 +160,7 @@ RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ RayScan 2.1.0 扫描目标: http://192.168.18.131                    │
+│ RayScan 2.2.0 扫描目标: http://192.168.18.131                    │
 │ 模块: sqli, xss (核心专精)                          │
 │ 速率: 10 req/s                                             │
 └────────────────────────────────────────────────────────────┘
