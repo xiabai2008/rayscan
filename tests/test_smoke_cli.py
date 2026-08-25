@@ -35,10 +35,12 @@ def test_cli_help_contains_multi() -> None:
 
 def test_version_consistency() -> None:
     """pyproject.toml 与 wvs.__init__ 的版本必须一致。"""
-    import tomllib
+    import re
 
-    pyproject = tomllib.loads((_project_root() / "pyproject.toml").read_text(encoding="utf-8"))
-    assert pyproject["project"]["version"] == __version__
+    text = (_project_root() / "pyproject.toml").read_text(encoding="utf-8")
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert m, "pyproject.toml 中未找到 version 字段"
+    assert m.group(1) == __version__
 
 
 def test_multi_dispatch_registered() -> None:

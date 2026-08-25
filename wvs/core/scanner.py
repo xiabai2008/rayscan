@@ -75,7 +75,8 @@ class WAVScanner(ScannerIntegrationsMixin):
         # 已加载的检测模块 {module_name -> module_instance}
         self._modules: Dict[str, Any] = {}
         self._loaded_module_names: List[str] = []
-        # dedup handled by self.dedup
+        # 漏洞去重器（_deduplicate / DedupStage 依赖）
+        self.dedup = ResultDeduplicator()
         self._global_baseline_cache: Dict[str, Dict[str, Any]] = {}  # Cross-module baseline cache
 
         # 去重集合（存储 Vulnerability 的去重签名）

@@ -5,6 +5,8 @@ All notable changes to RayScan (formerly WVS) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**259 collected**（2026-08-24）。
+
 ---
 
 ## [2.1.0] - 2026-08-07

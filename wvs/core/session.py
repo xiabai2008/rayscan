@@ -312,6 +312,9 @@ class HTTPPool:
                 headers={"User-Agent": self.user_agent},
                 http2=False,  # HTTP/1.1 (avoid HTTP/2 cookie handling differences)
                 limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
+                # 不读取系统代理（Windows 上 Clash 系统代理会把本地/内网请求转发到代理导致 502）
+                # 仅使用显式配置的 proxy_pool
+                trust_env=False,
             )
             if proxy_url:
                 client_kwargs["proxy"] = proxy_url

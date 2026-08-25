@@ -116,3 +116,10 @@ template_cache.db
 # Personal / local-only working files (kept out of the public repo)
 .workbuddy/
 delivery/
+
+# Local OA 靶场部署产物 / 临时文件（不入库）
+ZenTaoPMS*.exe
+zentao-16.5/
+rayscan-traffic-plan/
+.trae-html-share-packages/
+UsersHZRAppDataLocalTempcheck_installer.ps1

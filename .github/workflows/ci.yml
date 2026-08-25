@@ -37,11 +37,39 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests (coverage reported, non-blocking)
-        run: pytest tests/ -q --cov=wvs --cov-report=term-missing --tb=short
+      - name: Run tests (coverage gate >= 30%)
+        run: pytest tests/ -q --cov=wvs --cov-report=term-missing --cov-fail-under=30 --tb=short
 
       - name: Test import
         run: python -c "from wvs.core import WAVScanner, HTTPPool; print('✅ Import OK')"
+
+  audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit locked dependencies
+        run: pip-audit -r requirements.lock.txt
+
+  hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No tracked build artifacts / zombie entries / nested copies
+        run: |
+          BAD=$(git ls-files | grep -E '(__pycache__|\.pyc$|^\.coverage|scan_reports/|^full_scan\.py$|^quick_scan\.py$|^wvs_gui\.py$|^RayScan/)' || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Hygiene violations found:"
+            echo "$BAD"
+            exit 1
+          fi
 
   lint:
     name: Lint (ruff)
@@ -71,9 +99,8 @@ jobs:
         run: ruff format --check wvs/ tests/
 
   types:
-    name: Types (mypy, advisory)
+    name: Types (mypy budget)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -81,5 +108,14 @@ jobs:
           python-version: '3.12'
       - name: Install dependencies
         run: pip install -e ".[dev]"
-      - name: mypy (advisory, non-blocking)
+      - name: mypy budget (wvs/core must not exceed 250 errors)
+        # 基线 245（2026-08-24, win-local），只许降不许升；压降到 0 后改为硬门禁
+        run: |
+          ERRORS=$(mypy wvs/core/ 2>&1 | grep -c ": error:" || true)
+          echo "mypy errors in wvs/core/: $ERRORS (budget: 250)"
+          if [ "$ERRORS" -gt 250 ]; then
+            echo "::error::mypy error budget exceeded - fix new type errors before merging"
+            exit 1
+          fi
+      - name: mypy (full repo, advisory)
         run: mypy wvs/ || true

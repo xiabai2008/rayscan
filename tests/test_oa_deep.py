@@ -173,3 +173,199 @@ class TestNacosRuleIntegration:
         check = next(c for c in OA_RULES["Nacos"]["checks"] if "auth/users" in c["path"])
         assert OADetector._version_in_range(check, "2.2.3") is False
         assert OADetector._version_in_range(check, "1.4.0") is True
+
+
+# =====================================================================
+# Confluence 规则集成（S5）：指纹 / 版本 / CVE-2021-26084 检查项
+# =====================================================================
+
+
+class TestConfluenceFingerprint:
+    def test_title_fingerprint(self):
+        det = _detector()
+        html = "<html><head><title>Confluence</title></head><body></body></html>"
+        assert det._detect_oa_type("http://target.com/", html) == "Confluence"
+
+    def test_atlassian_html_fingerprint(self):
+        det = _detector()
+        html = "<html><body>Powered by Atlassian Confluence</body></html>"
+        assert det._detect_oa_type("http://target.com/", html) == "Confluence"
+
+
+class TestConfluenceVersion:
+    def test_ajs_version_meta(self):
+        det = _detector()
+        html = '<meta name="ajs-version-number" content="7.4.10">'
+        assert det._detect_oa_version("Confluence", html, {}) == "7.4.10"
+
+    def test_license_link_version_fallback(self):
+        det = _detector()
+        html = "product=Confluence&version=7.4.10&build=8402"
+        assert det._detect_oa_version("Confluence", html, {}) == "7.4.10"
+
+    def test_no_version_returns_none(self):
+        det = _detector()
+        assert det._detect_oa_version("Confluence", "<html>plain</html>", {}) is None
+
+
+class TestConfluenceRuleIntegration:
+    def test_cve_2021_26084_check_configured(self):
+        """CVE-2021-26084 检查项：POST body + OGNL payload + 结果证据"""
+        from wvs.modules.oa.detector import OA_RULES
+
+        checks = OA_RULES["Confluence"]["checks"]
+        rce_check = next(c for c in checks if "doenterpagevariables" in c["path"])
+        assert rce_check["type"] == "rce"
+        assert rce_check["severity"] == "critical"
+        assert rce_check["method"] == "POST"
+        assert rce_check["param_type"] == "body"
+        assert "queryString" in rce_check["params"]
+        assert rce_check["evidence"] == "54289"
+
+    def test_cve_2021_26084_evidence_hit(self):
+        """OGNL 233*233 结果 54289 回显 → 命中"""
+        det = _detector()
+        assert det._verify_evidence("rce", "<div class=\"error\">54289</div>", "text/html", "54289") is True
+
+    def test_cve_2021_26084_evidence_miss(self):
+        """无结果回显 → 不报（GET 探测/未安装页面）"""
+        det = _detector()
+        assert det._verify_evidence("rce", "<html>Page variables</html>", "text/html", "54289") is False
+
+
+# =====================================================================
+# 剩余 8 种 OA 规则集成（S5 续）：泛微/通达/金蝶/蓝凌/致远/用友/禅道/万户
+# =====================================================================
+
+
+class TestRemainingOARules:
+    """8 种 OA 新增/完善检测规则的配置与证据验证"""
+
+    def _check(self, oa_name, path_fragment):
+        from wvs.modules.oa.detector import OA_RULES
+
+        return next(c for c in OA_RULES[oa_name]["checks"] if path_fragment in c["path"])
+
+    # ── 泛微-Ecology ──
+    def test_weaver_lfi_evidence(self):
+        check = self._check("泛微-Ecology", "FileDownloadForOutDoc")
+        assert check["type"] == "lfi"
+        assert check["evidence"] == "root:"
+        assert "downloadFileId" in check["params"]
+
+    def test_weaver_lfi_evidence_hit(self):
+        det = _detector()
+        body = "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:"
+        assert det._verify_evidence("lfi", body, "text/plain", "root:") is True
+
+    def test_weaver_lfi_evidence_miss(self):
+        det = _detector()
+        assert det._verify_evidence("lfi", "<html>404 Not Found</html>", "text/html", "root:") is False
+
+    # ── 通达OA ──
+    def test_tongda_login_code_scan(self):
+        check = self._check("通达OA", "login_code_scan.php")
+        assert check["type"] == "auth_bypass"
+        assert check["method"] == "POST"
+        assert check["evidence"] == '"status":1'
+        assert check["params"]["uid"] == "1"
+
+    def test_tongda_auth_bypass_evidence_hit(self):
+        det = _detector()
+        assert det._verify_evidence("auth_bypass", '{"status":1,"msg":"success"}', "application/json", '"status":1') is True
+
+    def test_tongda_auth_bypass_evidence_miss(self):
+        det = _detector()
+        assert det._verify_evidence("auth_bypass", '{"status":0,"msg":"failed"}', "application/json", '"status":1') is False
+
+    # ── 金蝶-Kingdee ──
+    def test_kingdee_commonfileserver(self):
+        check = self._check("金蝶-Kingdee", "CommonFileServer")
+        assert check["type"] == "file_read"
+        assert check["evidence"] == "[fonts]"
+
+    def test_kingdee_winini_evidence_hit(self):
+        det = _detector()
+        body = "; for 16-bit app support\n[fonts]\n[extensions]\n[mci extensions]"
+        assert det._verify_evidence("file_read", body, "text/plain", "[fonts]") is True
+
+    def test_kingdee_winini_evidence_miss(self):
+        det = _detector()
+        assert det._verify_evidence("file_read", "<html>404</html>", "text/html", "[fonts]") is False
+
+    # ── 蓝凌-Landray ──
+    def test_landray_custom_jsp(self):
+        check = self._check("蓝凌-Landray", "custom.jsp")
+        assert check["type"] == "file_read"
+        assert check["method"] == "POST"
+        assert check["evidence"] == "root:"
+        assert "file:///etc/passwd" in check["params"]["var"]
+
+    def test_landray_file_read_evidence_hit(self):
+        det = _detector()
+        assert det._verify_evidence("file_read", "root:x:0:0:root:/root:", "text/plain", "root:") is True
+
+    # ── 致远-Seeyon ──
+    def test_seeyon_ajax_do(self):
+        check = self._check("致远-Seeyon", "ajax.do")
+        assert check["type"] == "file_upload"
+        assert check["method"] == "POST"
+        assert check["evidence"] == '"code":"08441'
+        assert check["status_codes"] == [500]
+
+    def test_seeyon_ajax_do_evidence_hit(self):
+        det = _detector()
+        body = '{"message":null,"code":"0844135702","details":null}'
+        assert det._verify_evidence("file_upload", body, "application/json", '"code":"08441') is True
+
+    def test_seeyon_ajax_do_evidence_miss(self):
+        det = _detector()
+        body = '{"message":"被迫下线","code":"-1","details":null}'
+        assert det._verify_evidence("file_upload", body, "application/json", '"code":"08441') is False
+
+    # ── 用友-Yonyou ──
+    def test_yonyou_portal_file(self):
+        check = self._check("用友-Yonyou", "portal/file")
+        assert check["type"] == "file_read"
+        assert check["evidence"] == "<web-app"
+        assert check["params"]["cmd"] == "getFileLocal"
+
+    def test_yonyou_webxml_evidence_hit(self):
+        det = _detector()
+        body = '<?xml version="1.0"?><web-app xmlns="http://java.sun.com/xml/ns/javaee">'
+        assert det._verify_evidence("file_read", body, "text/xml", "<web-app") is True
+
+    # ── 禅道-Zentao ──
+    def test_zentao_user_login_sqli(self):
+        check = self._check("禅道-Zentao", "user-login.html")
+        assert check["type"] == "sqli"
+        assert check["method"] == "POST"
+        assert check["evidence"] == "xpath syntax error"
+        assert "updatexml" in check["params"]["account"]
+
+    def test_zentao_sqli_evidence_hit(self):
+        det = _detector()
+        body = "SQLSTATE[HY000]: XPATH syntax error: '~root@localhost~'"
+        assert det._verify_evidence("sqli", body, "text/html", "xpath syntax error") is True
+
+    def test_zentao_sqli_evidence_miss(self):
+        det = _detector()
+        assert det._verify_evidence("sqli", "<html>login page</html>", "text/html", "xpath syntax error") is False
+
+    # ── 万户-Whir ──
+    def test_whir_evo_interface(self):
+        check = self._check("万户-Whir", "evoInterfaceServlet")
+        assert check["type"] == "unauth"
+        assert check["severity"] == "critical"
+        assert check["evidence"] == '"userList"'
+        assert check["params"]["paramType"] == "user"
+
+    def test_whir_unauth_evidence_hit(self):
+        det = _detector()
+        body = '{"userList":[{"userName":"admin","password":"e10adc3949ba59abbe56e057f20f883e"}]}'
+        assert det._verify_evidence("unauth", body, "application/json", '"userList"') is True
+
+    def test_whir_unauth_evidence_miss(self):
+        det = _detector()
+        assert det._verify_evidence("unauth", "<html>login</html>", "text/html", '"userList"') is False
+

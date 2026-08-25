@@ -289,13 +289,17 @@ class DetectionModule(ABC):
                 }
 
             # Normal query/body params
+            # 注意：params 为空时不要传 kwargs["params"]——httpx 空 dict 会清空
+            # URL 中已有的 query string（如检查项 URL 自带的 ?pageNo=1&pageSize=10），
+            # 导致 Nacos 等接口报 "Required int parameter missing" 500。
             if method.upper() == "GET":
-                kwargs["params"] = params
+                if params:
+                    kwargs["params"] = params
             else:
                 # POST: param_type decides whether to use body or query
                 if param_type == "body":
                     kwargs["data"] = params
-                else:
+                elif params:
                     kwargs["params"] = params
 
             response = await self._active_session.request(method.upper(), url, **kwargs)

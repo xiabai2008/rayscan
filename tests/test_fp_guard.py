@@ -88,7 +88,7 @@ class TestOADetectorEvidence:
         from wvs.modules.oa.detector import OADetector
 
         # 类级 patch 会绑定 self，故 fake_send 需接受 self 参数
-        async def fake_send(self, method, url, params):
+        async def fake_send(self, method, url, params, param_type="query"):
             return {"status_code": status, "text": body, "headers": {"content-type": content_type}}
 
         monkeypatch.setattr(OADetector, "_send_request", fake_send)
@@ -159,6 +159,16 @@ class TestOADetectorEvidence:
         }
         vuln = self._run_check(monkeypatch, 200, '{"success": true, "data": []}', "application/json", check)
         assert vuln is not None
+
+    def test_sqli_success_false_not_vuln(self, monkeypatch):
+        """S5 续：JSON success 为 false 不是注入成功证据 → 不报"""
+        check = {
+            "path": "/zentao/api-getModel-api-sql.json",
+            "params": {"sql": "select+1"},
+            "type": "sqli",
+            "severity": "critical",
+        }
+        assert self._run_check(monkeypatch, 200, '{"success": false, "error": "sql error"}', "application/json", check) is None
 
     def test_rce_octet_stream_is_vuln(self, monkeypatch):
         check = {"path": "/seeyon/htmlofficeservlet", "type": "rce", "severity": "critical"}

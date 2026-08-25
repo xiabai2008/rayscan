@@ -7,16 +7,19 @@
 ![Version](https://img.shields.io/badge/Version-2.1.0-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-190%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-259%20collected-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2008/rayscan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2008/rayscan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2008/rayscan)
 
-**🚀 全栈 Web 漏洞扫描器 | SQLi·XSS·OA·WebShell·弱口令·子域名 | Nuclei PoC 集成（12.5w 模板）**
+**🎯 中文 OA / 国产中间件专项 Web 漏洞检测器 | 三级检测链路 · 规则级证据 · 低误报 | 通用漏洞 Nuclei 兜底（12.5w 模板）**
 
-**已通过 190 个自动化测试 · Metasploitable 2 实战验证发现 83 个漏洞 · 12种OA系统专项检测**
+**259 个自动化测试（pytest 实测口径） · 靶机验证（Metasploitable 2 / DVWA） · 12 种 OA 系统专项检测**
 
-> 📈 **测试覆盖路线图**：当前 190 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
+> 📌 **项目定位**（[ADR-0001](docs/adr/0001-oa-focused-repositioning.md)）：中文 OA / 国产中间件专项检测器，一条命令出可复核报告。通用检测由内置 Nuclei 阶段兜底。
+> 领域术语见 [CONTEXT.md](CONTEXT.md)。
+
+> 📈 **测试覆盖路线图**：当前 259 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
 > v2.0 新特性：OA专项检测 / WebShell / 弱口令 / 子域名枚举 / Nuclei 模板集成
 > 规划中（roadmap）：多引擎聚合（AWVS/Nessus 集成层已实现，待接入主流程）、Metasploit 验证链、DOM XSS（需 headless 验证）
 > v1.2.0 目标：核心模块行覆盖 ≥ 80%。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
@@ -44,7 +47,7 @@ python web_ui/app.py
   <br><em>一条命令扫描靶机，实时查看检测过程</em>
 </p>
 
-[一分钟开始](#-快速开始) · [Web UI 演示](#-web-ui-模式推荐) · [实战报告](#-实战验证) · [功能列表](#-功能特性) · [Star 支持](https://github.com/xiabai2008/rayscan/stargazers)
+[一分钟开始](#-快速开始) · [Web UI 演示](#-web-ui-模式推荐) · [实战报告](#-靶机验证) · [功能列表](#-功能特性) · [Star 支持](https://github.com/xiabai2008/rayscan/stargazers)
 
 </div>
 
@@ -121,7 +124,7 @@ python -m wvs scan https://target.com --resume
 
 接入完成后将随版本发布启用，详见 [技术演进规划](docs/audit/rayscan-evolution-plan-2026-07-12.md)。
 
-## 🎯 实战验证
+## 🎯 靶机验证
 
 <p align="center">
   <img src="images/cli运行截图1.png" alt="RayScan CLI 扫描过程" width="80%">
@@ -233,43 +236,47 @@ python -m wvs list-modules
 ### 特定模块扫描
 
 ```bash
-# 配置文件修改：在 quick_scan.py 或 full_scan.py 中的
-# config.set("crawl_depth", 2) 等参数可按需调整
-```
+# 只跑指定模块（sqli/xss 为 core 默认加载，其余模块用 --all-modules 启用）
+python -m wvs scan http://example.com --all-modules
 
-> 💡 **tkinter GUI 已停止维护**，功能全部迁移到 Web UI。旧版 `wvs_gui.py` 保留供参考。
+# Profile 方式（内置 default / src-quick / pentest-full / sqli-only）
+python -m wvs profile list
+python -m wvs use src-quick -u http://example.com
+```
 
 ## 📖 详细使用说明
 
-### 🎯 快速扫描 (`quick_scan.py`)
-
-适合快速摸清目标安全状况。
+### 🎯 常用 CLI 参数（`python -m wvs scan`）
 
 | 参数 | 说明 | 默认值 |
 |------|------|:-----:|
-| `-u / --url` | 目标URL | 必填 |
-| 爬取深度 | 页面层级 | 2 层 |
-| 爬取上限 | 最大URL数 | 25 |
-| 超时 | 请求超时(s) | 15s |
-| 重试 | 失败重试次数 | 0次 |
+| `--rate` | 请求速率（req/s） | 10 |
+| `--all-modules` | 启用全部 Lite 模块（OA/WebShell/弱口令/子域名等） | 关 |
+| `--insecure` | 跳过 SSL 证书校验 | 关 |
+| `--no-nuclei` | 关闭 Nuclei 阶段 | 开（默认启用） |
+| `--resume` | 从上次 checkpoint 恢复 | 关 |
+| `-o / -f` | 报告输出路径 / 格式（json/html/csv/md） | json |
+| `--timeout` | 扫描总超时（分钟） | — |
 
-**输出：** 控制台打印漏洞列表 + JSON 报告文件
+### ⚙️ 核心配置（`wvs/config.py`）
 
----
+```python
+config.set("crawl_depth", 2)           # 爬取深度
+config.set("crawl_max_urls", 100)      # 最大爬取URL数（实战浅爬 / 靶机深爬自动分流）
+config.set("concurrent_endpoints", 10) # 并发检测数
+config.set("timeout", 15)              # 请求超时(s)
+config.set("verify_ssl", False)        # 是否验证SSL证书
+config.set("retry_count", 1)           # 失败重试次数
+```
 
-### 🌊 全量扫描 (`full_scan.py`)
+### 📁 Profile 扫描配置
 
-适合深度安全审计。
+```bash
+python -m wvs profile list     # 列出内置 Profile
+python -m wvs use src-quick -u http://example.com   # 按 Profile 扫描
+```
 
-| 参数 | 说明 | 默认值 |
-|------|------|:-----:|
-| 爬取深度 | 页面层级 | 3 层 |
-| 爬取上限 | 最大URL数 | 500 |
-| 并发端点 | 同时检测数 | 12 |
-| 模块 | 全部检测模块 | 全部启用 |
-| 报告格式 | 输出格式 | JSON / 控制台 |
-
-**输出：** 详细的漏洞清单，包含类型、严重等级、URL、置信度
+内置 Profile：`default` / `src-quick` / `pentest-full` / `sqli-only`。
 
 ---
 
@@ -298,8 +305,6 @@ cd web_ui && python app.py
 | 📐 响应式布局 | 手机/电脑自动适配 |
 | ⚡ 实时日志流 | 和 CLI 完全一致的输出 |
 | 📋 即时结果 | 发现漏洞立刻显示 |
-
-> ❌ **tkinter GUI (`wvs_gui.py`) 已停止维护**，请使用 Web UI。
 
 ---
 
@@ -330,7 +335,7 @@ config.set("retry_count", 1)           # 失败重试次数
 
 ### 🔧 自定义扫描脚本
 
-如果你需要自定义扫描目标，可以参考 `quick_scan.py` 的写法创建自己的脚本：
+如果需要把 RayScan 作为库嵌入自己的工作流，直接使用 `wvs` 包 API：
 
 ```python
 import asyncio
@@ -384,29 +389,27 @@ asyncio.run(my_scan())
 ```
 RayScan/
 ├── wvs/                       # 核心扫描库
-│   ├── core/                  # 扫描引擎（爬虫/scanner/会话/限速）
-│   ├── modules/               # 检测模块（sqli/xss/oa/webshell/weakpass…）
+│   ├── core/                  # 扫描引擎（scanner/orchestrator/stages/爬虫/会话/限速/OOB/被动代理）
+│   ├── modules/               # 18 个检测模块（sqli/xss/oa/webshell/weakpass/subdomain…）
 │   ├── integrations/          # 第三方集成（Nuclei/sqlmap/ffuf/AWVS…）
 │   ├── reporting/             # 报告（HTML/JSON/CSV/Markdown/Console）
 │   ├── profiles/              # 扫描配置 Profile
 │   └── plugins/               # 认证插件
 ├── web_ui/                    # Web UI（Flask）
+├── rules/                     # 检测规则
 ├── scripts/                   # 脚本
-├── scan_reports/              # 扫描报告
+├── scan_reports/              # 扫描报告输出（本地）
 ├── examples/                  # 示例代码
-├── docs/                      # 技术文档（含审计/规划）
-├── tools/                     # 工具脚本
+├── docs/                      # 技术文档（adr/ audit/ agents/）
 ├── tests/                     # 测试
-├── full_scan.py               # 全量扫描入口
-├── quick_scan.py              # 快速扫描入口
+├── CONTEXT.md                 # 领域词汇表
 ├── pyproject.toml             # 项目配置
-├── LICENSE                    # MIT 许可证
-└── RENAMED_TO_RAYSCAN.md      # 更名记
+└── LICENSE                    # MIT 许可证
 ```
 
 ## 📊 检测能力
 
-| 能力 | 状态 | 实战验证 |
+| 能力 | 状态 | 靶机验证 |
 |------|------|:--------:|
 | SQL 注入 | ✅ error-based / union / boolean-blind / time-based | ✅ Metasploitable 2 — UNION 注入提取 5 用户密码 |
 | XSS | ✅ 反射型 / 存储型 | ✅ 靶机验证通过（security=low） |
@@ -424,8 +427,8 @@ RayScan/
 
 | 版本 | 说明 |
 |------|------|
-| **RayScan 2.0** | **全域升级版 — OA 专项 / WebShell / 弱口令 / 子域名 / Nuclei PoC**（多引擎聚合与 MSF 验证链规划中，见 Roadmap）|
 | **RayScan 2.1** | **可解释检测 --explain / 被动扫描 passive / 一键演示 demo / 规则管理 rules / IDOR·越权·认证绕过 / gentle 合规预设 / ScanOrchestrator 编排层** |
+| **RayScan 2.0** | **全域升级版 — OA 专项 / WebShell / 弱口令 / 子域名 / Nuclei PoC**（多引擎聚合与 MSF 验证链规划中，见 Roadmap）|
 | **RayScan 1.0** | **正式开源版（基于 WVS v19.2）** |
 | WVS v19 / v19.2 | 扫描引擎重构，集成框架升级 |
 | WVS v18 / v18.4 | 高级检测模块 + 企业级扫描能力 |

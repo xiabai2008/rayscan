@@ -285,6 +285,9 @@ def cmd_scan(args):
     # 加载指定模块
     if hasattr(args, "all_modules") and args.all_modules:
         scanner._load_all_modules = True
+        # 重新解析启用模块列表：_enabled_modules 在 __init__ 时已按 core-only 解析，
+        # 直接 load_all_modules() 只会加载 core，需在此重算才能包含 lite 模块。
+        scanner._enabled_modules = scanner._resolve_enabled_modules()
         scanner.load_all_modules()
         console.print(f"[cyan][*] 加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
     elif args.modules:
@@ -1108,6 +1111,15 @@ def build_parser() -> argparse.ArgumentParser:
             "启用 wvs.exploit 自动利用模块（默认禁用）。"
             "同时需要环境变量 RAYSCAN_ENABLE_EXPLOIT=1。"
         ),
+    )
+
+    # 本地靶场选项（默认关闭，保持 SSRF 防护严格）
+    local_group = scan_parser.add_argument_group("本地靶场")
+    local_group.add_argument(
+        "--allow-loopback",
+        action="store_true",
+        dest="allow_loopback",
+        help="放行本地回环地址（127.0.0.1/localhost），仅供本地靶场/授权测试。默认关闭以保持 SSRF 防护",
     )
 
     # OOB 检测选项
