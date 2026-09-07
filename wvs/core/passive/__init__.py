@@ -10,5 +10,6 @@
 """
 
 from .proxy import PassiveProxy, PassiveScanResult, run_passive_proxy
+from .tls_intercept import CertAuthority
 
-__all__ = ["PassiveProxy", "PassiveScanResult", "run_passive_proxy"]
+__all__ = ["PassiveProxy", "PassiveScanResult", "run_passive_proxy", "CertAuthority"]

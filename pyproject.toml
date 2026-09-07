@@ -50,6 +50,7 @@ dev = [
     "pre-commit>=3.0.0",
     "types-requests",
     "types-PyYAML",
+    "cryptography>=42.0.0",
     "tomli; python_version < '3.11'",
 ]
 speedup = [
@@ -58,6 +59,9 @@ speedup = [
 ]
 nuclei = [
     "nuclei-python>=0.1.0",
+]
+tls = [
+    "cryptography>=42.0.0",
 ]
 integrations = [
     "python-Wappalyzer>=1.2.0",

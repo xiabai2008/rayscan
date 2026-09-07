@@ -33,17 +33,17 @@ import ipaddress
 import socket
 
 _SSRF_BLOCKED_NETS = [
-    ipaddress.ip_network('127.0.0.0/8'),
-    ipaddress.ip_network('10.0.0.0/8'),
-    ipaddress.ip_network('172.16.0.0/12'),
-    ipaddress.ip_network('192.168.0.0/16'),
-    ipaddress.ip_network('169.254.0.0/16'),  # includes 169.254.169.254 (cloud metadata)
-    ipaddress.ip_network('::1/128'),
-    ipaddress.ip_network('fc00::/7'),
-    ipaddress.ip_network('fe80::/10'),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),  # includes 169.254.169.254 (cloud metadata)
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
 ]
 
-_SSRF_ALLOWED_SCHEMES = {'http', 'https'}
+_SSRF_ALLOWED_SCHEMES = {"http", "https"}
 
 
 def _validate_target_url(url: str, allow_loopback: bool = False) -> None:
@@ -60,9 +60,7 @@ def _validate_target_url(url: str, allow_loopback: bool = False) -> None:
 
     parsed = urlparse(url)
     if parsed.scheme not in _SSRF_ALLOWED_SCHEMES:
-        raise ValueError(
-            f"Disallowed URL scheme: {parsed.scheme!r}. Only http/https are permitted."
-        )
+        raise ValueError(f"Disallowed URL scheme: {parsed.scheme!r}. Only http/https are permitted.")
 
     hostname = parsed.hostname
     if not hostname:
@@ -84,11 +82,7 @@ def _validate_target_url(url: str, allow_loopback: bool = False) -> None:
 
     for net in _SSRF_BLOCKED_NETS:
         if addr in net:
-            raise ValueError(
-                f"SSRF blocked: {hostname} resolves to {addr} which is in blocked range {net}"
-            )
-
-
+            raise ValueError(f"SSRF blocked: {hostname} resolves to {addr} which is in blocked range {net}")
 
 
 logger = logging.getLogger(__name__)
@@ -234,10 +228,14 @@ def cmd_scan(args):
         manager = ProfileManager()
         profile = manager.load_profile(args.preset)
         if profile is None:
-            console.print(f"[red]预设 '{args.preset}' 不存在（可用: default/gentle/src-quick/pentest-full/sqli-only）[/red]")
+            console.print(
+                f"[red]预设 '{args.preset}' 不存在（可用: default/gentle/src-quick/pentest-full/sqli-only）[/red]"
+            )
             return 1
         manager.apply_to_config(config, args.preset)
-        console.print(f"[cyan][*] 已应用预设 '{args.preset}': 速率 {config.get('rate', '?')} req/s, 深度 {config.get('crawl_depth', '?')}[/cyan]")
+        console.print(
+            f"[cyan][*] 已应用预设 '{args.preset}': 速率 {config.get('rate', '?')} req/s, 深度 {config.get('crawl_depth', '?')}[/cyan]"
+        )
         if args.preset == "gentle":
             console.print(
                 Panel.fit(
@@ -1034,12 +1032,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="目标域名/IP（仅检测该域的流量，其余透明转发；建议指定以避免误扫）",
     )
     passive_parser.add_argument("-o", "--output", help="输出报告文件路径（JSON）")
-    passive_parser.add_argument(
-        "--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块）"
-    )
+    passive_parser.add_argument("--all-modules", action="store_true", help="加载全部模块（含 lite 辅助模块）")
     passive_parser.add_argument("--modules", nargs="+", help="指定启用的模块（如 sqli xss）")
     passive_parser.add_argument("-v", "--verbose", action="store_true", help="详细输出")
     passive_parser.add_argument("--explain", action="store_true", help="可解释模式：输出证据链")
+    passive_parser.add_argument(
+        "--tls-intercept",
+        action="store_true",
+        help="解密 HTTPS 流量（MITM，客户端需先信任生成的 CA 证书，默认关闭）",
+    )
+    passive_parser.add_argument("--ca-dir", default=None, help="MITM CA 存放目录（默认 ~/.rayscan/ca）")
 
     # scan 命令
     scan_parser = sub.add_parser("scan", help="扫描单个目标")
@@ -1078,9 +1080,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     control_group.add_argument("--resume", action="store_true", help="从上次 checkpoint 恢复扫描")
     control_group.add_argument("--rate", type=int, default=10, help="每秒最大请求数（默认 10）")
-    control_group.add_argument(
-        "--concurrency", type=int, help="全局端点扫描并发数（默认 10，跨模块共享）"
-    )
+    control_group.add_argument("--concurrency", type=int, help="全局端点扫描并发数（默认 10，跨模块共享）")
     control_group.add_argument(
         "--rate-mode", choices=["burst", "uniform"], default="burst", help="速率限制模式：burst(突发) / uniform(均匀)"
     )
@@ -1240,8 +1240,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-
-
 def cmd_multi(args):
     """多引擎聚合扫描"""
     from .config import ConfigManager
@@ -1263,12 +1261,14 @@ def cmd_multi(args):
     scanner = WAVScanner(config, session)
     scanner.load_all_modules()
 
-    console.print(Panel.fit(
-        f"[bold cyan]RayScan Multi-Engine Scan[/bold cyan]\n"
-        f"目标: [bold]{target_url}[/bold]\n"
-        f"引擎: RayScan + Nuclei + AWVS + Nessus",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]RayScan Multi-Engine Scan[/bold cyan]\n"
+            f"目标: [bold]{target_url}[/bold]\n"
+            f"引擎: RayScan + Nuclei + AWVS + Nessus",
+            border_style="cyan",
+        )
+    )
 
     import asyncio
     import time
@@ -1294,6 +1294,7 @@ def cmd_multi(args):
     elapsed = time.perf_counter() - start
 
     from rich.table import Table
+
     table = Table(title=f"Multi-Engine Scan Results ({elapsed:.1f}s)")
     table.add_column("Severity", style="red")
     table.add_column("Type", style="cyan")
@@ -1313,7 +1314,9 @@ def cmd_multi(args):
         engines_str = ", ".join(sorted(engines))
         # 多引擎高可信:星标 + 高亮
         marker = "[bold green]★[/bold green] " if is_multi else ""
-        sev_text = f"[{'bold red' if is_multi else 'red'}]{v.severity.value.upper()}[/{'bold red' if is_multi else 'red'}]"
+        sev_text = (
+            f"[{'bold red' if is_multi else 'red'}]{v.severity.value.upper()}[/{'bold red' if is_multi else 'red'}]"
+        )
         table.add_row(f"{marker}{sev_text}", v.type.value, v.url or "-", v.confidence.value.upper(), engines_str)
 
     console.print(table)
@@ -1346,6 +1349,7 @@ def cmd_multi(args):
 
     return 0
 
+
 def cmd_check_engines(args):
     """检查外部引擎可用性"""
     from .config import ConfigManager
@@ -1361,16 +1365,17 @@ def cmd_check_engines(args):
 
     config = ConfigManager()
     engines = {
-        "AWVS":        AWVSIntegration(config),
-        "Nessus":      NessusIntegration(config),
-        "Nuclei":      NucleiIntegration(config),
-        "sqlmap":      SqlmapIntegration(config),
-        "ffuf":        FfufIntegration(config),
-        "Wappalyzer":  WappalyzerIntegration(config),
-        "Metasploit":  MetasploitIntegration(config),
+        "AWVS": AWVSIntegration(config),
+        "Nessus": NessusIntegration(config),
+        "Nuclei": NucleiIntegration(config),
+        "sqlmap": SqlmapIntegration(config),
+        "ffuf": FfufIntegration(config),
+        "Wappalyzer": WappalyzerIntegration(config),
+        "Metasploit": MetasploitIntegration(config),
     }
 
     from rich.table import Table
+
     table = Table(title="External Engine Health Check")
     table.add_column("Engine", style="cyan")
     table.add_column("Status", style="green")
@@ -1457,12 +1462,23 @@ def cmd_passive(args):
 
     from .core.passive import PassiveProxy
 
+    tls_intercept = bool(getattr(args, "tls_intercept", False))
     proxy = PassiveProxy(
         scan_callback=scan_callback,
         target_filter=target_filter,
         listen_host=args.listen,
         listen_port=args.port,
+        tls_intercept=tls_intercept,
+        ca_dir=getattr(args, "ca_dir", None),
     )
+    if tls_intercept:
+        console.print(
+            Panel.fit(
+                "[bold yellow]TLS 拦截已启用：首次使用请先信任 CA 证书后，再配置浏览器代理[/bold yellow]\n"
+                f"CA 目录: {proxy.ca_dir}",
+                border_style="yellow",
+            )
+        )
 
     try:
         asyncio.run(proxy.serve_forever())
@@ -1589,8 +1605,7 @@ def cmd_demo(args):
             console.print(f"[green]📄 {fmt.upper()} 报告已保存: {output_file.resolve()}[/green]")
         else:
             console.print(
-                f"[green]✓ Demo 完成: 发现 {len(result.vulnerabilities)} 个漏洞"
-                f"（可用 -o report.json 保存报告）[/green]"
+                f"[green]✓ Demo 完成: 发现 {len(result.vulnerabilities)} 个漏洞（可用 -o report.json 保存报告）[/green]"
             )
         return 0
     finally:

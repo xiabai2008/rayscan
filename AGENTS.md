@@ -21,6 +21,15 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-07 (被动代理 HTTPS 解密 + CI 门禁做实)
+- **TLS 拦截**：`passive --tls-intercept` 用 MITM CA 按需签发叶证书解密 HTTPS 进检测管线；新增 `wvs/core/passive/tls_intercept.py`（CA 生成/持久化/叶证书缓存/IP SAN/平台信任提示），解密连接支持 keep-alive（Content-Length/chunked/EOF 精确截断）；cryptography 缺失优雅回退隧道；pyproject 新增 `tls` extra，dev 补 cryptography
+- **修复 CONNECT 隧道回环 bug**：原 `_handle_connect` 把客户端数据回环给客户端、从未连上游（HTTPS 经代理必然卡死）；现真正连接目标双向转发 + 不可达 502；`_host_matches` 弃用 `lstrip("www.")` 改显式前缀判断（原会误剥 `web.`）
+- **CLI**：`passive` 子命令新增 `--tls-intercept` / `--ca-dir`
+- **CI 门禁做实**：测试 job 加 `--cov-fail-under=30`（实测 33.5%）；用 CI 锁定版 ruff 0.15.21 格式化 9 个历史遗留文件使 format 门禁转绿
+- **测试**：新增 `tests/test_passive_tls.py`（6 用例：CA 往返/叶证书 SAN+签发链/authority 解析/隧道回退/HTTPS 拦截端到端含 keep-alive）
+- 证实 `scan_reports/` 从未入库（探索误报），.gitignore 已覆盖
+- 影响文件：`wvs/core/passive/{proxy,tls_intercept,__init__}.py`、`wvs/cli.py`、`pyproject.toml`、`.github/workflows/ci.yml`、`tests/test_passive_tls.py`、CHANGELOG.md
+
 ### 2026-08-05 (S3 OA 专项深化 — 三级检测链路)
 - 三级检测链路：指纹识别（内容优先）→ 版本识别 → 漏洞验证（规则级证据优先）+ 版本过滤
 - 新增 `OA_CONTENT_FINGERPRINTS`（12 种 OA 内容指纹：title/正文/响应头/Set-Cookie 四类匹配）

@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added — 被动扫描 HTTPS 解密(TLS 拦截)
+
+- **`rayscan passive --tls-intercept`**:MITM 代理用按需生成的 CA 签发叶证书伪装目标站点,解密 HTTPS 流量进入检测管线(此前 HTTPS 仅隧道转发不检测)
+- 新增 `wvs/core/passive/tls_intercept.py`:`CertAuthority`(CA 生成/持久化 `~/.rayscan/ca/`、每主机叶证书签发与缓存、IP 字面量 SAN)、`trust_instructions`(各平台信任 CA 命令提示)
+- 解密连接支持 keep-alive:响应按 Content-Length/chunked/EOF 精确截断,`Connection: close` 正确收尾
+- 上游保持真实 TLS 校验,自签名/内网目标自动降级为不校验;`cryptography` 缺失时优雅回退纯隧道模式(新 optional extra `rayscan[tls]`)
+- 新增 `tests/test_passive_tls.py`(6 用例:CA 往返/叶证书 SAN 与签发链/authority 解析/隧道回退/HTTPS 拦截端到端含 keep-alive)
+
+### Fixed — 被动代理
+
+- **CONNECT 隧道回环 bug(历史缺陷)**:原 `_handle_connect` 响应 200 后把客户端数据原样回环给客户端、从未连接上游——任何 HTTPS 站点经代理均无法打开;现真正连接目标后双向转发,目标不可达返回 502
+- `_host_matches` 的 `lstrip("www.")` 会误剥 `web.`/`ww.` 等前缀,改为显式 `www.` 前缀判断
+
+### Changed — CI 门禁做实
+
+- 测试 job 增加 `--cov-fail-under=30` 覆盖率门禁(当前实测 33.5%,此前 CHANGELOG 声称门禁但 CI 实际 non-blocking)
+- 用 CI 锁定版 ruff 0.15.21 修复 9 个历史遗留文件格式偏差(`ruff format --check` 门禁转绿)
+
+---
+
 ## [2.1.0] - 2026-08-07
 
 ### 🚀 升级亮点
