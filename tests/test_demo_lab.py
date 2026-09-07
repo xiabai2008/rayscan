@@ -35,9 +35,7 @@ def test_demo_cli_registered() -> None:
     assert "demo" in proc.stdout
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 9), reason="Flask 最新版要求 Python 3.9+"
-)
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="Flask 最新版要求 Python 3.9+")
 def test_demo_lab_start_and_health() -> None:
     lab = DemoLab(host="127.0.0.1", port=0)
     try:

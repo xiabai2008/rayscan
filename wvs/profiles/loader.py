@@ -7,16 +7,13 @@ import yaml
 from .builtin import BUILTIN_PROFILES
 
 # Profile name whitelist: alphanumeric + dash/underscore only, max 64 chars
-_PROFILE_NAME_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+_PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _validate_profile_name(name: str) -> None:
     """Validate profile name to prevent path traversal (P0 security fix)."""
     if not _PROFILE_NAME_RE.match(name):
-        raise ValueError(
-            f"Invalid profile name: {name!r}. "
-            f"Must match ^[A-Za-z0-9_-]{{1,64}}$"
-        )
+        raise ValueError(f"Invalid profile name: {name!r}. Must match ^[A-Za-z0-9_-]{{1,64}}$")
 
 
 class ProfileManager:
@@ -34,24 +31,28 @@ class ProfileManager:
         profiles = []
 
         for name, data in BUILTIN_PROFILES.items():
-            profiles.append({
-                "name": name,
-                "description": data["description"],
-                "builtin": True,
-                "path": None,
-            })
+            profiles.append(
+                {
+                    "name": name,
+                    "description": data["description"],
+                    "builtin": True,
+                    "path": None,
+                }
+            )
 
         for path in self.profiles_dir.glob("*.yaml"):
             name = path.stem
             if name not in BUILTIN_PROFILES:
                 try:
                     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-                    profiles.append({
-                        "name": data.get("name", name),
-                        "description": data.get("description", ""),
-                        "builtin": False,
-                        "path": str(path),
-                    })
+                    profiles.append(
+                        {
+                            "name": data.get("name", name),
+                            "description": data.get("description", ""),
+                            "builtin": False,
+                            "path": str(path),
+                        }
+                    )
                 except Exception:
                     pass
 
