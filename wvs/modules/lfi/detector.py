@@ -71,6 +71,7 @@ GENERIC_FILE_MARKERS = [
 class LFIDetector(DetectionModule):
     @classmethod
     def get_info(cls) -> ModuleInfo:
+        """返回模块元数据（ID/严重级别/CWE/描述/风险/缓解措施/参考链接）。"""
         return ModuleInfo(
             name="lfi",
             description="Detect Local File Inclusion vulnerabilities (LFI / /proc/ / PHP wrappers)",
@@ -81,12 +82,14 @@ class LFIDetector(DetectionModule):
         )
 
     def __init__(self, config=None, session: Optional[HTTPPool] = None):
+        """初始化 LFI 检测器（参数预算/超时）。"""
         super().__init__(config)
         self.session = session
         self._found_vulns: List[Vulnerability] = []
         self._checked_urls: set = set()
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
+        """LFI 主扫描逻辑：遍历端点，尝试文件包含探测。"""
         self._found_vulns = []
 
         # ── 1. Prefer target.params (from scanner/crawler, already with auth) ──
@@ -130,10 +133,23 @@ class LFIDetector(DetectionModule):
         method: str,
         param_type: str,
     ) -> None:
+        """对单个端点执行 LFI 探测（路径遍历 payload）。"""
         if not params:
             return
 
         await self._scan_endpoint_method(url, params, method, param_type)
+
+    @staticmethod
+    def _prioritize_params(params: Dict[str, str], limit: int = 5) -> List[str]:
+        """参数预算（第六轮）：每端点最多测 limit 个参数，file/path 类优先——
+        参数发现给无参数端点塞 20+ 个参数 × 每参数 30 payload = 请求爆炸（CI lfi 超时）。
+        高价值参数名优先，其余按字母序补齐。"""
+        high_value = ["file", "path", "include", "page", "doc", "document", "dir", "folder", "name", "f"]
+        ranked = sorted(
+            params.keys(),
+            key=lambda k: (0 if k.lower() in high_value else 1, k),
+        )
+        return ranked[:limit]
 
     async def _scan_endpoint_method(
         self,
@@ -153,8 +169,8 @@ class LFIDetector(DetectionModule):
 
         baseline_text = baseline.get("text", "")[:10000]
 
-        # Test each parameter
-        for param_name in params:
+        # Test each parameter (参数预算：防请求爆炸)
+        for param_name in self._prioritize_params(params):
             found = await self._test_lfi(url, params, param_name, method, param_type, baseline_text)
             if found:
                 # Only report one LFI per endpoint (avoid reporting multiple on same param)
@@ -461,6 +477,7 @@ class LFIDetector(DetectionModule):
         file_path: str,
         evidence: str,
     ) -> Vulnerability:
+        """创建 LFI 漏洞记录（带证据）。"""
         return Vulnerability(
             type=VulnerabilityType.LFI,
             title="Local File Inclusion / File Read",

@@ -1,4 +1,4 @@
-name: 🐛 Bug 报告
+﻿name: 🐛 Bug 报告
 description: 报告 RayScan 的异常行为
 labels: [bug]
 body:
@@ -11,7 +11,7 @@ body:
     attributes:
       label: RayScan 版本
       description: 运行 `python -m wvs version` 查看
-      placeholder: "1.0.2"
+      placeholder: "2.1.0"
     validations:
       required: true
   - type: input

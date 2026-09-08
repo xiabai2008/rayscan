@@ -44,6 +44,9 @@ class SensitiveDetector(DetectionModule):
         "/backup.sql",
         "/database.sql",
         "/backup.zip",
+        # 基准靶场驱动（2026-08-08）：常见备份路径补充
+        "/backup/backup.sql",
+        "/backup/database.sql",
         # Install directories (should not be accessible after installation)
         "/install/",
         "/install/index.php",
@@ -264,6 +267,12 @@ class SensitiveDetector(DetectionModule):
             r"(?i)(?:^\s*|[^{])(password|passwd|pwd|pass)\s*[:=]\s*['\"]([^'\"]{6,})['\"]",
             Severity.MEDIUM,
         ),
+        # 基准靶场驱动（2026-08-08）：.env 常见无引号格式 KEY=VALUE（DB_PASSWORD=secret）
+        # (?m) 逐行匹配——.env 文件多行键值对
+        "env_var_secret": (
+            r"(?im)^[A-Z_][A-Z0-9_]*(PASSWORD|PASSWD|PWD|SECRET|TOKEN|API[_-]?KEY|PRIVATE[_-]?KEY)\s*=\s*[^\s'\"]{4,}\s*$",
+            Severity.MEDIUM,
+        ),
         "connection_string": (r"(?i)(connection|conn|string)[\s:=]+['\"][^'\"]{10,}['\"]", Severity.MEDIUM),
         "jwt_token": (r"eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*", Severity.MEDIUM),
         "bearer_token": (r"Bearer\s+[a-zA-Z0-9_-]{20,}", Severity.MEDIUM),
@@ -391,7 +400,9 @@ class SensitiveDetector(DetectionModule):
 
                 if resp.status_code != 200:
                     continue
-                if len(resp.text) < 50:
+                # 基准靶场驱动（2026-08-08）：50 → 10——短小 .env（DB_PASSWORD=xxx 约 40 字符）
+                # 被阈值误杀导致漏报；10 仍能挡住空响应/占位页
+                if len(resp.text) < 10:
                     continue
 
                 # P5: Require content evidence — not just "path returned 200"

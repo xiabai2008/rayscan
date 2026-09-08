@@ -61,10 +61,12 @@ class MergedVulnerability:
 
     @property
     def engine_count(self) -> int:
+        """已注册引擎数量。"""
         return len(self.engines)
 
     @property
     def is_multi_engine(self) -> bool:
+        """是否为多引擎模式。"""
         return self.engine_count >= 2
 
 
@@ -72,7 +74,8 @@ class ResultMerger:
     """多引擎扫描结果合并器"""
 
     def __init__(self):
-        self._stats = {
+        """初始化结果合并器（去重策略/严重级别优先级）。"""
+        self._stats: Dict[str, Any] = {
             "total_input": 0,
             "total_output": 0,
             "merged_count": 0,
@@ -214,10 +217,11 @@ class ResultMerger:
         lines.append(f"  缩减率:      {self._stats.get('reduction_ratio', '0%')}")
         lines.append("")
         lines.append("  按引擎来源:")
-        for engine, count in sorted(self._stats.get("by_engine", {}).items()):
+        by_engine = self._stats.get("by_engine", {})
+        for engine, count in sorted(by_engine.items()):
             lines.append(f"    {engine}: {count}")
 
-        severity_count = defaultdict(int)
+        severity_count: Dict[str, int] = defaultdict(int)
         for v in merged:
             severity_count[v.severity.value] += 1
         lines.append("\n  按严重程度:")

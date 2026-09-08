@@ -34,16 +34,20 @@ DEFAULT_DELAY = 0.1  # Default request interval (seconds)
 # Time-based Detection Settings (upgraded with sqlmap statistical model)
 # ============================================================
 
-TIME_BASED_BASELINE_SAMPLES = 5  # Baseline sample count (sqlmap: minimum 30 for reliable model; we use 5 for speed)
-TIME_BASED_MAX_BASELINE_STD = 0.5  # Baseline standard deviation threshold — if higher, network too jittery
-TIME_BASED_MAX_BASELINE_AVG = 3.0  # Baseline average response time threshold (seconds), skip detection if exceeded
-TIME_BASED_STDEV_COEFF = 7.0  # sqlmap: 99.9999% confidence — actual_delay >= avg + 7*stdev
-TIME_BASED_MIN_VALID_DELAYED = 1.0  # sqlmap: minimum delay to be considered a valid delayed response
-TIME_BASED_TEST_DELAYS = [3, 5]  # Test delay list (seconds)
-TIME_BASED_DELAYS_LOCAL = [1, 2]  # Local network delay (seconds)
-TIME_BASED_DELAYS_REMOTE = [3, 5]  # Remote network delay (seconds)
-TIME_BASED_BATCH_TIMEOUT = 3.0  # Concurrent batch wait timeout (seconds)
-TIME_BASED_VERIFICATION_ATTEMPTS = 3  # Verification attempts count
+TIME_BASED_BASELINE_SAMPLES: int = (
+    5  # Baseline sample count (sqlmap: minimum 30 for reliable model; we use 5 for speed)
+)
+TIME_BASED_MAX_BASELINE_STD: float = 0.5  # Baseline standard deviation threshold — if higher, network too jittery
+TIME_BASED_MAX_BASELINE_AVG: float = (
+    3.0  # Baseline average response time threshold (seconds), skip detection if exceeded
+)
+TIME_BASED_STDEV_COEFF: float = 7.0  # sqlmap: 99.9999% confidence — actual_delay >= avg + 7*stdev
+TIME_BASED_MIN_VALID_DELAYED: float = 1.0  # sqlmap: minimum delay to be considered a valid delayed response
+TIME_BASED_TEST_DELAYS: list = [3, 5]  # Test delay list (seconds)
+TIME_BASED_DELAYS_LOCAL: list = [1, 2]  # Local network delay (seconds)
+TIME_BASED_DELAYS_REMOTE: list = [3, 5]  # Remote network delay (seconds)
+TIME_BASED_BATCH_TIMEOUT: float = 3.0  # Concurrent batch wait timeout (seconds)
+TIME_BASED_VERIFICATION_ATTEMPTS: int = 3  # Verification attempts count
 
 # ============================================================
 # Response Analysis Settings
