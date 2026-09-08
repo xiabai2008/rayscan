@@ -64,6 +64,10 @@ CI：`Golden Matrix (FP/FN gate)` job（workflow_dispatch 手动触发；per-pus
 - 主靶标按 `scan_groups` 分 4 批扫描（每批独立子进程+独立超时,实测全部有界通过,
   全矩阵单轮 ≈40 min/Windows）；CI job 手动触发；per-push 化需进一步缩小扫描面
   （per-module hub 页面）。
-- 尚未纳入矩阵的模块：api / waf / weakpass / webshell / jspathfinder / js_analysis /
-  authbypass / subdomain —— 各需专属靶标设计（authbypass 需认证态注入场景）。
+- v2.2 新增（2026-09-08 二批）：weakpass（/login 弱口令 vs /user/login 护栏）、webshell（/cmd.php）、
+  js_analysis（/static/app.js 密钥 + /jsapp-clean 护栏）、api（CORS/secret_key/.env）、
+  waf（/waf-protected CF 形态 + 主靶场零 WAF 护栏）、authbypass（/jwt/profile 弱密钥 JWT 链路）、
+  jspathfinder（JS 引用 → fuzz 发现 /.env）、domxss（/dom hash 注入 headless 真实执行 + /dom-safe
+  textContent 护栏，T2.3）、idor_confirmed（--second-auth 双账号确认，T2.5）。
+- 仍待靶标：subdomain（外网 DNS 依赖,不适合合成矩阵）。
 - lfi 的 must_detect 仅在 Linux（CI）断言，Windows 跳过（无 /etc/passwd）。

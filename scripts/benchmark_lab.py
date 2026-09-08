@@ -299,6 +299,8 @@ def index():
         "/api/debug-info",
         "/jsapp",
         "/jsapp-clean",
+        "/dom",
+        "/dom-safe",
     ]
     body = '<html><head><title>Benchmark Lab</title><script src="/static/app.js"></script></head><body><h1>Benchmark Lab</h1><ul>'
     for link in links:
@@ -549,6 +551,31 @@ def jsapp_clean():
 def clean_js():
     """无引号字符串/无路径/无密钥的纯逻辑 JS → 任何 pattern 都不应命中。"""
     return "var a = 1;\nvar b = 2;\nfunction add(x, y) { return x + y; }\n", 200
+
+
+# ── DOM XSS（headless 验证靶标） ──────────────────────────────────
+
+
+@app.route("/dom")
+@_hint()
+def dom_vuln():
+    """漏洞靶标：hash 经 decodeURIComponent 写入 innerHTML → domxss 应检出。"""
+    return (
+        '<html><head><title>DOM Page</title></head><body><div id="out"></div>'
+        '<script>document.getElementById("out").innerHTML = decodeURIComponent(location.hash.substring(1));</script>'
+        "</body></html>"
+    )
+
+
+@app.route("/dom-safe")
+@_hint()
+def dom_safe():
+    """误报护栏：hash 只写 textContent(无 HTML sink) → domxss 不应检出。"""
+    return (
+        '<html><head><title>DOM Safe</title></head><body><div id="out"></div>'
+        '<script>document.getElementById("out").textContent = location.hash.substring(1);</script>'
+        "</body></html>"
+    )
 
 
 # ── waf（WAF 指纹） ───────────────────────────────────────────────

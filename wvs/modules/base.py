@@ -512,6 +512,7 @@ class DetectionModule(ABC):
             "authbypass": VulnerabilityType.BROKEN_ACCESS,
             "js_analysis": VulnerabilityType.INFO_DISCLOSURE,
             "jspathfinder": VulnerabilityType.INFO_DISCLOSURE,
+            "domxss": VulnerabilityType.XSS,
             "webshell": VulnerabilityType.OTHER,
             "weakpass": VulnerabilityType.BROKEN_AUTH,
             "subdomain": VulnerabilityType.INFO_DISCLOSURE,

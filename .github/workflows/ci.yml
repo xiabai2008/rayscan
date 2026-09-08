@@ -11,6 +11,9 @@ on:
     branches: [master, main]
   # 手动触发（Benchmark 回归门禁等）：gh workflow run ci.yml 或 Actions 页面 Run workflow
   workflow_dispatch:
+  # nightly: Golden Matrix 检测可信度门禁每日定时回归(FP/FN 基线漂移 24h 内可见)
+  schedule:
+    - cron: "0 3 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -127,17 +130,20 @@ jobs:
     name: Golden Matrix (FP/FN gate)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # 手动触发（发版前/怀疑回归时）。per-push 化待靶场分 hub 缩面提速后启用
-    if: github.event_name == 'workflow_dispatch'
+    # nightly 定时 + 手动触发。per-push 化待靶场分 hub 缩面提速后启用
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e ".[dev,jsrender]"
+          python -m playwright install chromium --with-deps
       - name: Run golden matrix
         # 黄金靶场矩阵：must_detect 漏报 + must_not_flag 误报双门禁（scripts/golden_matrix.yaml）
+        # jsrender(playwright): domxss 模块 headless 验证依赖
         run: python scripts/run_golden_matrix.py
 
   benchmark:

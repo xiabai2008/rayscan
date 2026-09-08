@@ -45,6 +45,12 @@ targets:
     path: /api/invoice?id=1001
     modules: [idor]
     second_auth: "X-Account: account-b"  # T2.5 双账号验证:B 会话可读 A 对象 → 确认级 HIGH/HIGH
+  domxss_lab:
+    path: /dom
+    modules: [domxss]
+  dom_safe:
+    path: /dom-safe
+    modules: [domxss]
 
 expectations:
   main:
@@ -117,3 +123,11 @@ expectations:
     idor:
       must_detect: ["/api/invoice"]
       must_not_flag: []
+  domxss_lab:
+    domxss:
+      must_detect: ["/dom"]
+      must_not_flag: []
+  dom_safe:
+    domxss:
+      must_detect: []
+      must_not_flag: ["/dom-safe"]

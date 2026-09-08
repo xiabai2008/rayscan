@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 from .api import APIDetector
 from .authbypass import AuthBypassDetector
 from .cmdi import CMDInjectionDetector
+from .domxss import DOMXSSDetector
 from .graphql import GraphQLDetector
 from .idor import IDORDetector
 from .js_analysis import JSAnalysisDetector
@@ -42,6 +43,7 @@ __all__ = [
     "APIDetector",
     "AuthBypassDetector",
     "CMDInjectionDetector",
+    "DOMXSSDetector",
     "GraphQLDetector",
     "IDORDetector",
     "JSAnalysisDetector",
@@ -70,6 +72,7 @@ _ALL_DETECTOR_MODULES = [
     "api",
     "authbypass",
     "cmdi",
+    "domxss",
     "graphql",
     "idor",
     "js_analysis",
