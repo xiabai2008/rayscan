@@ -21,6 +21,18 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-08 (黄金靶场矩阵 — 检测可信度制度化 v2.2 T2.1/T2.2)
+- 合并远程 v2.2.0（27 提交：AI 复核/MCP/GraphQL/SPA 爬取/基准体系/S5 OA 闭环），冲突解决 ci.yml（取远程 pyproject fail_under=25 方案）/AGENTS.md（双方条目保留）/cli.py（--ai-verify 与 --concurrency 共存）
+- **黄金矩阵 runner** `scripts/run_golden_matrix.py`：机器可读期望清单驱动，must_detect（URL 子串级漏报门禁）+ must_not_flag（误报防线）双断言 + 清单外 WARN；单靶标批量扫描（--modules 多模块一次爬扫,按报告 module 字段归属,3 次扫描替代 10 次）
+- **期望清单** `scripts/golden_matrix.yaml`：9 主靶场模块 + OA 双靶标；实测驱动编码（先 --record 观察再固化）
+- **靶场扩展** `scripts/benchmark_lab.py`：OA Nacos 双实例（1.3.2 漏洞版检出 / 1.5.0 修复版同响应应被版本过滤跳过——版本过滤专项回归防线）；idor 三端点（/api/invoice 对象替换静态页不回显 id 防反射噪音、/api/users page=all 批量泄露、/api/secure-invoice 403 护栏）；/safe/api success:false 护栏
+- **踩坑记录**：扫描器对目录形端点补尾斜杠（/api/users → /api/users/ 404 → 批量探测失效），靶场需双路由注册；审计/调试时务必确认靶场进程存活（打空靶 = xxe 空耗 17min 且全 0 检出）
+- **顺带修复**：cli.py `_save_partial_results` 超时/异常兜底保存无视 `-o` 参数（写死 scan_reports/ 时间戳文件）→ 现优先写 `-o` 路径（矩阵超时抢救依赖此修复）；主靶标扫描拆 4 个有界分组（scan_groups,单批超时不受慢模块拖累）
+- **基线入库** `docs/BASELINES.md`（首次建线实测：9 模块 + OA 双靶标双向验证通过,主靶标批量 ≈30min/Windows）
+- **CI**：新增 Golden Matrix (FP/FN gate) job（workflow_dispatch 手动触发,timeout 60min；per-push 化待靶场分 hub 缩面提速）
+- 待办（v2.2 后续）：api/waf/weakpass/webshell/jspathfinder/js_analysis/authbypass/subdomain 8 模块靶标设计；lfi must_detect 待 CI Linux 复测
+- 影响文件：`scripts/{run_golden_matrix,benchmark_lab}.py`、`scripts/golden_matrix.yaml`、`.github/workflows/ci.yml`、`docs/BASELINES.md`、`CHANGELOG.md`
+
 ### 2026-09-07 (被动代理 HTTPS 解密 + CI 门禁做实)
 - **TLS 拦截**：`passive --tls-intercept` 用 MITM CA 按需签发叶证书解密 HTTPS 进检测管线；新增 `wvs/core/passive/tls_intercept.py`（CA 生成/持久化/叶证书缓存/IP SAN/平台信任提示），解密连接支持 keep-alive（Content-Length/chunked/EOF 精确截断）；cryptography 缺失优雅回退隧道；pyproject 新增 `tls` extra，dev 补 cryptography
 - **修复 CONNECT 隧道回环 bug**：原 `_handle_connect` 把客户端数据回环给客户端、从未连上游（HTTPS 经代理必然卡死）；现真正连接目标双向转发 + 不可达 502；`_host_matches` 弃用 `lstrip("www.")` 改显式前缀判断（原会误剥 `web.`）

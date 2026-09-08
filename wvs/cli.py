@@ -160,12 +160,17 @@ def _save_partial_results(
     partial_result.endpoints_found = 0
     partial_result.modules_run = len(scanner._modules)
 
-    # 兜底保存 JSON
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
-    reports_dir = Path("scan_reports")
-    reports_dir.mkdir(exist_ok=True)
-    output_file = reports_dir / f"report_{safe_name}_{timestamp}.json"
+    # 兜底保存 JSON：优先用户指定的 -o 路径（超时/异常时报告仍落在预期位置），
+    # 未指定 -o 时按时间戳写入 scan_reports/
+    if getattr(args, "output", None):
+        output_file = Path(args.output)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
+        reports_dir = Path("scan_reports")
+        reports_dir.mkdir(exist_ok=True)
+        output_file = reports_dir / f"report_{safe_name}_{timestamp}.json"
     output_file.write_text(
         json.dumps(partial_result.to_dict(), indent=2, ensure_ascii=False),
         encoding="utf-8",

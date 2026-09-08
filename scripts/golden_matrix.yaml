@@ -1,0 +1,67 @@
+# 黄金靶场矩阵期望清单 — docs/BASELINES.md 的机器可读版（单一事实源）
+#
+# 匹配语义:
+#   must_detect   条目为检出 URL 的子串；任一缺失 → FAIL（漏报回归）
+#   must_not_flag 条目命中任一检出 URL → FAIL（误报回归）
+#   清单外的发现仅告警（WARN），人工确认为真阳性后更新本清单
+# 修改本清单 = 修改检测基线，PR 描述中必须说明原因
+#
+# 靶标说明:
+#   main     scripts/benchmark_lab.py 主靶场（sqli/xss/cmdi/rce/xxe/ssrf/sensitive/idor
+#            + 误报护栏: /xss/reflected 反射端点 / /safe/api success:false / /api/secure-invoice 403）
+#   oa_vuln  Nacos 1.3.2 形态（CVE-2021-29441 用户列表未授权,应检出）
+#   oa_fixed Nacos 1.5.0 形态（同一漏洞响应,应被版本过滤 [min,1.4.1) 跳过）
+version: 1
+
+targets:
+  main:
+    modules: [sqli, xss, cmdi, rce, xxe, ssrf, sensitive, lfi, idor]
+    # 分批扫描：每批独立子进程+独立超时（时间型注入/外部 OOB 探测耗时不稳定,
+    # 单批全模块曾超 36min;分批后每批有界,慢模块不拖垮其他批次的产出）
+    scan_groups:
+      - [sqli]
+      - [cmdi, rce, lfi]
+      - [xss, xxe]
+      - [ssrf, sensitive, idor]
+  oa_vuln:
+    modules: [oa]
+  oa_fixed:
+    modules: [oa]
+
+expectations:
+  main:
+    sqli:
+      must_detect: ["/sqli/error", "/sqli/blind"]
+      must_not_flag: ["/xss/reflected", "/safe/api", "/api/invoice"]
+    xss:
+      must_detect: ["/xss/reflected"]
+      must_not_flag: ["/safe/api", "/api/invoice", "/api/secure-invoice"]
+    cmdi:
+      must_detect: ["/rce"]
+      must_not_flag: ["/xss/reflected", "/safe/api"]
+    rce:
+      must_detect: ["/ssti"]
+      must_not_flag: ["/xss/reflected"]
+    xxe:
+      must_detect: ["/xxe_get"]
+      must_not_flag: ["/xss/reflected", "/safe/api"]
+    ssrf:
+      must_detect: ["/ssrf"]
+      must_not_flag: ["/xss/reflected", "/safe/api"]
+    sensitive:
+      must_detect: ["/.env", "/backup/backup.sql"]
+      must_not_flag: []
+    lfi:
+      must_detect: ["/lfi"]
+      must_not_flag: ["/safe/api"]
+    idor:
+      must_detect: ["/api/invoice", "/api/users"]
+      must_not_flag: ["/api/secure-invoice"]
+  oa_vuln:
+    oa:
+      must_detect: ["/nacos/v1/auth/users"]
+      must_not_flag: ["/nacos/v1/cs/configs"]
+  oa_fixed:
+    oa:
+      must_detect: []
+      must_not_flag: ["/nacos/v1/auth/users", "/nacos/v1/cs/configs"]

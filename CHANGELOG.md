@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added — 黄金靶场矩阵（v2.2 T2.1/T2.2 检测可信度制度化）
+
+- **`scripts/run_golden_matrix.py`**：机器可读期望清单驱动的 FP/FN 双门禁——`must_detect` 精确到 URL 子串（漏报回归即 FAIL）、`must_not_flag` 误报防线（命中即 FAIL）、清单外发现 WARN 提示人工确认；单靶标批量扫描按报告 module 字段归属发现
+- **`scripts/golden_matrix.yaml`**：期望清单单一事实源（9 个主靶场模块 + OA 双靶标），修改基线必须登记原因
+- **靶场扩展（`scripts/benchmark_lab.py`）**：OA 三级链路靶标（Nacos 1.3.2 漏洞版 / 1.5.0 修复版双实例,响应相同仅版本号不同,专项检验版本过滤器）；idor 靶标（/api/invoice 对象替换 + /api/users page=all 批量泄露 + /api/secure-invoice 403 越权护栏）；误报护栏端点（/safe/api success:false JSON）
+- **`docs/BASELINES.md`**：首次建线实测记录（sqli/xss/cmdi/rce/xxe/ssrf/sensitive/idor/oa 全部双向验证通过）
+- **CI**：新增 `Golden Matrix (FP/FN gate)` job（workflow_dispatch；per-push 化待靶场分 hub 缩面提速）
+- 实测要点：oa_fixed 靶标（同一漏洞响应 + 版本号 1.5.0）0 检出 = 版本过滤 [min,1.4.1) 逻辑有专项回归防线；/api/users 批量泄露检出需靶场双路由注册（扫描器对目录形端点补尾斜杠）
+
 ## [2.2.0] - 2026-08-08
 
 ### Added

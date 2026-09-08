@@ -1,10 +1,14 @@
 """
 RayScan 基准靶场（benchmark lab）— 建立检测基线用的本地漏洞样本。
 
-- 仅绑定 127.0.0.1，随机端口，禁止外网访问（内置 403 拦截非本机来源）
-- 覆盖：sqli（error/union/blind/time）/ xss / cmdi / lfi / rce / xxe / ssrf / sensitive
+- 仅绑定 127.0.0.1，随机端口，禁止公网访问（内置 403 拦截非本机来源）
+- 主靶场覆盖：sqli（error/union/blind/time）/ xss / cmdi / lfi / rce / xxe / ssrf /
+  sensitive / idor(业务逻辑) / 误报护栏（反射端点、success:false JSON）
+- OA 靶标（--oa-port，独立端口）：Nacos 形态三级链路靶标 —— 指纹→版本→规则证据，
+  --oa-version 控制版本（<1.4.1 漏洞版应检出 / ≥1.4.1 修复版应被版本过滤跳过）
 - 用法：python scripts/benchmark_lab.py --port 18099
-- 基准记录见 docs/BENCHMARK.md
+        python scripts/benchmark_lab.py --oa-port 18101 --oa-version 1.3.2
+- 基准记录见 docs/BENCHMARK.md 与 docs/BASELINES.md（黄金靶场矩阵）
 
 安全注意：本靶场故意包含可利用漏洞，仅供本地检测基准测试，严禁部署到公网。
 """
@@ -19,12 +23,22 @@ from flask import Flask, Response, request
 
 app = Flask(__name__)
 
+# OA 靶标独立 Flask 实例（与主靶场互不污染指纹）
+oa_app = Flask("benchmark_lab_oa")
+OA_VERSION = "1.3.2"
+
 # 简单访问控制：仅允许本机来源
 _ALLOWED = {"127.0.0.1", "::1", "localhost"}
 
 
 @app.before_request
 def _guard():
+    if request.remote_addr not in _ALLOWED:
+        return Response("forbidden", status=403)
+
+
+@oa_app.before_request
+def _oa_guard():
     if request.remote_addr not in _ALLOWED:
         return Response("forbidden", status=403)
 
@@ -256,6 +270,10 @@ def index():
         "/.env",
         "/backup/backup.sql",
         "/spa",
+        "/api/invoice?id=1001",
+        "/api/secure-invoice?id=3001",
+        "/api/users",
+        "/safe/api?code=1",
     ]
     body = "<html><head><title>Benchmark Lab</title></head><body><h1>Benchmark Lab</h1><ul>"
     for link in links:
@@ -321,10 +339,132 @@ def backup_leak():
     return "INSERT INTO users VALUES (1,'admin','5f4dcc3b5aa765d61d8327deb882cf99');\n", 200
 
 
+# ── IDOR（业务逻辑，v2.2 黄金靶场） ──────────────────────────────
+
+
+@app.route("/api/invoice")
+@_hint()
+def idor_invoice():
+    """漏洞靶标：任意数字 id 均返回同结构发票页 → 对象替换(±1/+100)应检出。
+
+    页面满足判定条件：≥100 字节、HTML 标签结构 >5、两个替换值响应一致。
+    故意不回显 id（静态内容）：保持 idor 单一漏洞语义，不引入反射型
+    sqli/xss 噪音（黄金矩阵将本端点同时用作 sqli/xss 误报护栏）。
+    """
+    request.args.get("id", "1001")
+    body = (
+        "<html><head><title>Invoice Detail</title></head><body>"
+        "<h1>Invoice 1001</h1>"
+        "<p>customer: cust-1001</p><p>amount: 128.50</p><p>status: paid</p>"
+        "<table><tr><th>item</th><th>qty</th></tr><tr><td>license</td><td>1</td></tr></table>"
+        "</body></html>"
+    )
+    return body, 200
+
+
+@app.route("/api/secure-invoice")
+@_hint()
+def idor_secure_invoice():
+    """良性靶标：非属主 id 一律 403 → 对象替换不应检出（越权护栏）。"""
+    iid = request.args.get("id", "3001")
+    if iid != "3001":
+        return "<html><body>Access Denied</body></html>", 403
+    body = (
+        "<html><head><title>Invoice Detail</title></head><body>"
+        "<h1>Invoice 3001</h1><p>customer: cust-3001</p><p>amount: 88.00</p><p>status: open</p>"
+        "</body></html>"
+    )
+    return body, 200
+
+
+@app.route("/api/users")
+@app.route("/api/users/")
+@_hint()
+def idor_bulk_users():
+    """漏洞靶标：page=all 返回含敏感字段的批量数据 → 批量接口探测应检出。
+
+    双路由注册（含尾斜杠）：扫描器会对目录形端点补尾斜杠，缺省路由会 404。
+    """
+    if request.args.get("page") == "all" or request.args.get("export") == "all":
+        data = {
+            "users": [
+                {
+                    "id": i,
+                    "email": f"user{i}@corp.test",
+                    "phone": "1380000000%d" % i,
+                    "password_hash": "5f4dcc3b5aa765d61d8327deb882cf9%d" % i,
+                    "id_card": "11010119900101001%d" % i,
+                }
+                for i in range(5)
+            ]
+        }
+        return json.dumps(data), 200
+    return {"users": [{"id": 1, "email": "user1@corp.test"}]}, 200
+
+
+@app.route("/safe/api")
+@_hint()
+def safe_api():
+    """误报护栏：success:false JSON（sqli success 子串误报回归防线）。"""
+    return {"success": False, "message": "record not found"}, 200
+
+
+# ── OA 靶标（独立 oa_app，Nacos 形态） ────────────────────────────
+
+_NACOS_HOME = """<!DOCTYPE html>
+<html><head><title>Nacos console</title></head>
+<body><div id="root"></div>
+<script>window.nacos_version = "%(version)s";</script>
+<script>console.nacos = true;</script>
+</body></html>"""
+
+_NACOS_USERS = (
+    '{"code":200,"message":null,"data":null,'
+    '"pageItems":[{"username":"nacos","password":"$2a$10$EuWPZHzz32dJN7jexM34MOeYirDdFAZm2kuWj7VEOJhhZkDrxfvUu",'
+    '"enabled":true}],"totalCount":1}'
+)
+
+
+@oa_app.route("/")
+@_hint()
+def oa_index():
+    return _NACOS_HOME % {"version": OA_VERSION}, 200
+
+
+@oa_app.route("/nacos/v1/auth/users")
+@_hint()
+def oa_users():
+    """漏洞响应：与版本无关地返回 pageItems（修复版靠版本过滤跳过，检验过滤器本身）。"""
+    return _NACOS_USERS, 200
+
+
+@oa_app.route("/nacos/v1/cs/configs")
+@_hint()
+def oa_configs():
+    """无 evidence 的通用检查项：404 JSON → 不应报（防通用检查项误报）。"""
+    return {"code": 404, "message": "config not found"}, 404
+
+
+@oa_app.route("/nacos/v1/console/server/state")
+@_hint()
+def oa_state():
+    return {"version": OA_VERSION}, 200
+
+
 def main():
     parser = argparse.ArgumentParser(description="RayScan benchmark lab")
     parser.add_argument("--port", type=int, default=18099)
+    parser.add_argument("--oa-port", type=int, default=None, help="OA 靶标端口（指定则只运行 OA 应用）")
+    parser.add_argument("--oa-version", default="1.3.2", help="OA 靶标 Nacos 版本号（默认 1.3.2 漏洞版）")
     args = parser.parse_args()
+
+    if args.oa_port:
+        global OA_VERSION
+        OA_VERSION = args.oa_version
+        print(f"[BenchmarkLab] OA 靶标 http://127.0.0.1:{args.oa_port}/  (Nacos {OA_VERSION} 形态, 仅本机访问)")
+        oa_app.run(host="127.0.0.1", port=args.oa_port, debug=False, use_reloader=False)
+        return
+
     print(f"[BenchmarkLab] http://127.0.0.1:{args.port}/  (仅本机访问)")
     app.run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False)
 
