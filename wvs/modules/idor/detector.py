@@ -211,10 +211,24 @@ class IDORDetector(DetectionModule):
                     f"对象替换 {param_name}: {orig_value}→{alt1}/{alt2} 均返回 200 且 HTML 结构一致",
                     {"alt1_len": len(text1), "alt2_len": len(text2), "orig_len": len(text0)},
                 )
-                self._explain(
-                    "decision",
-                    "两个不同偏移的替换值返回相同结构资源 — 疑似水平越权(需人工复核确认数据归属)",
+                # T2.5 双账号验证:配置了 B 账号凭据时,用 B 会话实际读取 A 的对象
+                second_headers = self._get_second_auth_headers()
+                confirmed = False
+                if second_headers:
+                    confirmed = await self._verify_second_account(base_url, params, p1, second_headers)
+                if confirmed:
+                    self._explain("decision", "双账号验证通过:B 账号会话成功读取 A 账号对象 — 确认水平越权")
+                else:
+                    self._explain(
+                        "decision",
+                        "疑似水平越权(两个偏移替换值响应一致;配置 --second-auth 可自动确认数据归属)",
+                    )
+                evidence = (
+                    f"Replacing {param_name} from {orig_value} to {alt1}/{alt2} "
+                    f"both returned 200 with identical HTML structure — possible IDOR"
                 )
+                if confirmed:
+                    evidence += "; second-account verification: account B session retrieved account A's object"
                 vuln = self._create_vuln(
                     url=target.url,
                     param=param_name,
@@ -222,13 +236,11 @@ class IDORDetector(DetectionModule):
                     method=method,
                     payload=f"{param_name}={orig_value} → {alt1}/{alt2}",
                     vuln_type="idor-object-replacement",
-                    severity=Severity.MEDIUM,
-                    confidence=Confidence.MEDIUM,
-                    evidence=(
-                        f"Replacing {param_name} from {orig_value} to {alt1}/{alt2} "
-                        f"both returned 200 with identical HTML structure — possible IDOR"
-                    ),
-                    description="Replaceable object ID may allow unauthorized access to other users' resources",
+                    severity=Severity.HIGH if confirmed else Severity.MEDIUM,
+                    confidence=Confidence.HIGH if confirmed else Confidence.MEDIUM,
+                    evidence=evidence,
+                    description="Replaceable object ID may allow unauthorized access to other users' resources"
+                    + (" (confirmed via second account)" if confirmed else ""),
                     recommendation=(
                         "Enforce server-side authorization checks: verify the current user owns the requested "
                         "object (not only that they are authenticated). Use UUIDs/opaque tokens where possible."
@@ -239,6 +251,35 @@ class IDORDetector(DetectionModule):
                 break  # 每个参数只报一个
 
         return vulns
+
+    def _get_second_auth_headers(self) -> Dict[str, str]:
+        """读取 B 账号凭据头配置(modules.idor.second_auth_headers,由 --second-auth 写入)。"""
+        cfg = self.config.get("modules.idor.second_auth_headers")
+        if not isinstance(cfg, dict) or not cfg:
+            return {}
+        return {str(k): str(v) for k, v in cfg.items()}
+
+    async def _verify_second_account(
+        self, base_url: str, orig_params: Dict[str, str], own_params: Dict[str, str], second_headers: Dict[str, str]
+    ) -> bool:
+        """双账号验证:以 B 账号身份请求 A 的对象(原始参数)与 B 自己的对象(替换参数)。
+
+        判定:B 自己的对象 200(B 会话有效)且 A 的对象也 200 且内容 ≥100 字节
+        → B 可跨账号读取 → 确认水平越权。使用独立 httpx client(trust_env=False),
+        避免与主会话 cookie 混叠。
+        """
+        import httpx
+
+        try:
+            async with httpx.AsyncClient(trust_env=False, timeout=15, follow_redirects=True) as client:
+                resp_own = await client.request("GET", base_url, params=own_params, headers=second_headers)
+                if resp_own.status_code != 200:
+                    return False  # B 会话无效或其对象不可达,无法判定
+                resp_foreign = await client.request("GET", base_url, params=orig_params, headers=second_headers)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("[IDOR] 双账号验证请求失败: %s", e)
+            return False
+        return resp_foreign.status_code == 200 and len(resp_foreign.text or "") >= 100
 
     async def _detect_bulk_params(self, target: ScanTarget) -> List[Vulnerability]:
         """批量/导出接口探测。"""

@@ -51,15 +51,30 @@ def _match(entry: str, findings: list) -> list:
     return [url for url in findings if entry in url]
 
 
-def scan_batch(port: int, modules: list, timeout: int = 2400) -> dict:
+def _weak_jwt(secret: str = "secret") -> str:
+    """生成弱密钥(HS256/secret)签发的 JWT,供 authbypass 靶标注入。"""
+    import base64
+    import hashlib
+    import hmac
+
+    def b64(data: bytes) -> str:
+        return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+    header = b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    payload = b64(json.dumps({"sub": "golden-lab", "role": "member"}).encode())
+    sig = b64(hmac.new(secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+    return f"{header}.{payload}.{sig}"
+
+
+def scan_batch(port: int, modules: list, path: str = "/", extra_args=None, timeout: int = 2400) -> dict:
     """单次批量扫描多模块,按报告中的 module 字段归属发现。"""
-    out = ROOT / f"bench_golden_{port}.json"
+    out = ROOT / f"bench_golden_{port}_{abs(hash(path)) % 10000}.json"
     cmd = [
         sys.executable,
         "-m",
         "wvs",
         "scan",
-        f"http://127.0.0.1:{port}/",
+        f"http://127.0.0.1:{port}{path}",
         "--modules",
         *modules,
         "--no-nuclei",
@@ -71,6 +86,8 @@ def scan_batch(port: int, modules: list, timeout: int = 2400) -> dict:
         "-o",
         str(out),
     ]
+    if extra_args:
+        cmd.extend(extra_args)
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
     if not out.exists():
         raise RuntimeError(f"扫描未产出报告(端口 {port}): {proc.stdout[-500:] if proc.stdout else proc.stderr[-500:]}")
@@ -120,6 +137,12 @@ def run_matrix(only=None, record=False) -> int:
             groups = [g for g in groups if g]
             if not groups:
                 continue
+            path = cfg.get("path", "/")
+            extra_args: list = []
+            if cfg.get("auth") == "bearer-weak-jwt":
+                extra_args = ["--auth-type", "bearer", "--token", _weak_jwt()]
+            if cfg.get("second_auth"):
+                extra_args += ["--second-auth", cfg["second_auth"]]
 
             by_module: dict = {}
             target_failed = False
@@ -133,7 +156,7 @@ def run_matrix(only=None, record=False) -> int:
                     continue
                 print(f"  [{target} 批次 {gi}/{len(groups)}]: {', '.join(scan_modules)}")
                 try:
-                    part = scan_batch(port_of[target], scan_modules)
+                    part = scan_batch(port_of.get(target, main_port), scan_modules, path=path, extra_args=extra_args)
                 except RuntimeError as e:
                     print(f"  [FAIL] {target}: {e}")
                     scan_failed = True
@@ -176,11 +199,15 @@ def run_matrix(only=None, record=False) -> int:
                 findings = results.get(key, [])
                 exp = expectations.get(target, {}).get(module, {})
                 must_detect = exp.get("must_detect", [])
+                # any-of:平台差异场景(Win/Linux shell 语义不同)下,一组条目命中任一即可
+                must_detect_any = exp.get("must_detect_any", [])
                 must_not = exp.get("must_not_flag", [])
 
                 missed = [e for e in must_detect if not _match(e, findings)]
+                if must_detect_any and not any(_match(e, findings) for e in must_detect_any):
+                    missed.append(" / ".join(must_detect_any) + " (any-of 任一命中)")
                 fps = sorted({url for e in must_not for url in _match(e, findings)})
-                known = set(must_detect) | set(must_not)
+                known = set(must_detect) | set(must_not) | set(must_detect_any)
                 extras = sorted(u for u in findings if not any(k in u for k in known))
 
                 ok = not missed and not fps

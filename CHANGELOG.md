@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v2.2 T2.4/T2.5 + 检测器真实性修复 + 新模块靶标
+
+- **T2.4 登录态维持**：HTTPPool 会话失效检测（401/重定向到登录页）→ 自动重登回调 → 刷新凭据并重放当前请求；10s 冷却防模块主动 401 探测引发反复登录；重登成功清空 GET 去重缓存；CLI 认证后自动注册回调（`--auth-type` 全类型生效）；新增 `tests/test_session_reauth.py`（3 用例含真实本地服务全链路）
+- **T2.5 双账号 IDOR**：`--second-auth "Header: Value"` 注入 B 账号凭据，idor 对象替换命中后用 B 会话实际读取 A 的对象（独立 httpx client 防 cookie 混叠）——确认则升级 HIGH/HIGH，未确认保持 MEDIUM 疑似语义；新增 `tests/test_idor_second_auth.py`（3 用例）；黄金矩阵新增 `idor_confirmed` 靶标
+- **黄金矩阵新模块靶标（7 个）**：weakpass（/login 弱口令 + /user/login 强口令护栏）、webshell（/cmd.php 一句话木马）、js_analysis（app.js 密钥泄露 + /jsapp-clean 零发现护栏）、api（CORS 开放 + secret_key 泄露 + /.env）、waf（/waf-protected Cloudflare 形态 + 主靶场零 WAF 护栏）、authbypass（/jwt/profile 弱密钥 JWT 注入链路）、jspathfinder（JS 引用 → fuzz 发现 /.env）
+- **黄金矩阵 any-of 语义**：`must_detect_any`（任一命中即过）——cmdi 检出端点随平台 shell 语义不同（Win→/rce、Linux→/cmdi），CI 首跑由此暴露
+- **CI Golden Matrix 首跑**：11/12 绿，lfi Linux 漏报门禁 ✓、oa_fixed 版本过滤 ✓
+
+### Fixed — 黄金矩阵暴露的 6 个真实缺陷
+
+- **HTTPPool GET 去重缓存忽略请求头**：缓存键只含 method|url|params——CORS 检测（Origin 头差异）拿到 info 检查的旧响应永远看不到 ACAO（漏检）；authbypass 认证头移除重放同样会命中缓存（误报隐患）；语义头（除 UA 轮换外）现参与缓存键
+- **rce Java EL leak 反射误报**：指示词计数未排除"指示词本身来自载荷回显"——反射端点回显载荷里的 org.apache 等词即被计为泄露；现排除载荷内指示词，仅计服务侧新出现的指示词（求值语义）
+- **waf 签名管道断裂**：`_match_all_signatures` 读 baseline 的 `cookies`/`status` 键，但 `_send_request` 返回 `status_code` 且不含 cookies——所有 Cookie 型 WAF 签名（__cfduid/AWSALB 等）从未生效；现从 Set-Cookie 头解析 cookie 名；Cloudflare 签名补真实 body 标记（Attention Required）
+- **js_analysis 全模块崩溃**：统计行访问不存在的 `vuln_type` 属性 → 单端点扫描抛异常 → 该模块所有发现被静默丢弃（模块自发布以来从未产出过结果）；改用 tags 判定
+- **base.py vuln_type_map 缺 5 模块**（js_analysis/jspathfinder/webshell/weakpass/subdomain）→ 每次创建漏洞都走 OTHER 回退告警
+- **--modules jspathfinder 静默空转**：config 默认 `enabled: False` + enabled 合成属性（_enabled AND module_config.enabled）→ 显式加载也不执行；`load_module` 现强制启用（用户显式意图优先）
+- **weakpass 凭据走 query 而非 body**：`_send_request` 默认 param_type=query，真实登录端点读 body → 改 param_type=body
+- **benchmark_lab Werkzeug 版本头**：开发服务器在 WSGI 层后强制覆写 Server 头 → api 模块版本泄露全站刷屏 + waf 的 server:cloudflare 签名被覆盖；自定义 request_handler 隐藏版本串；`strict_slashes=False` 解决扫描器补尾斜杠 404；`_hint` 装饰器透传 Response（修 CORS 端点 500）
+- **weakpass/webshell O(N²) 探测**：固定路径探测对每个爬取端点重复执行（30 端点 × 160 请求），补每基址一次守卫
+
 ### Added — 黄金靶场矩阵（v2.2 T2.1/T2.2 检测可信度制度化）
 
 - **`scripts/run_golden_matrix.py`**：机器可读期望清单驱动的 FP/FN 双门禁——`must_detect` 精确到 URL 子串（漏报回归即 FAIL）、`must_not_flag` 误报防线（命中即 FAIL）、清单外发现 WARN 提示人工确认；单靶标批量扫描按报告 module 字段归属发现

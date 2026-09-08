@@ -510,6 +510,11 @@ class DetectionModule(ABC):
             "graphql": VulnerabilityType.API_SECURITY,
             "idor": VulnerabilityType.BROKEN_ACCESS,
             "authbypass": VulnerabilityType.BROKEN_ACCESS,
+            "js_analysis": VulnerabilityType.INFO_DISCLOSURE,
+            "jspathfinder": VulnerabilityType.INFO_DISCLOSURE,
+            "webshell": VulnerabilityType.OTHER,
+            "weakpass": VulnerabilityType.BROKEN_AUTH,
+            "subdomain": VulnerabilityType.INFO_DISCLOSURE,
         }
 
         module_name = self.info.name.lower()

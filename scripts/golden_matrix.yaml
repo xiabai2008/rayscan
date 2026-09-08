@@ -3,30 +3,48 @@
 # 匹配语义:
 #   must_detect   条目为检出 URL 的子串；任一缺失 → FAIL（漏报回归）
 #   must_not_flag 条目命中任一检出 URL → FAIL（误报回归）
+#   must_not_flag: ["//"] 表示零发现护栏（任何 URL 都含 "//"）
 #   清单外的发现仅告警（WARN），人工确认为真阳性后更新本清单
 # 修改本清单 = 修改检测基线，PR 描述中必须说明原因
 #
 # 靶标说明:
-#   main     scripts/benchmark_lab.py 主靶场（sqli/xss/cmdi/rce/xxe/ssrf/sensitive/idor
-#            + 误报护栏: /xss/reflected 反射端点 / /safe/api success:false / /api/secure-invoice 403）
-#   oa_vuln  Nacos 1.3.2 形态（CVE-2021-29441 用户列表未授权,应检出）
-#   oa_fixed Nacos 1.5.0 形态（同一漏洞响应,应被版本过滤 [min,1.4.1) 跳过）
+#   main            benchmark_lab.py 主靶场（根路径,全模块 + 误报护栏）
+#   oa_vuln         Nacos 1.3.2 形态（CVE-2021-29441,应检出）
+#   oa_fixed        Nacos 1.5.0 形态（同一漏洞响应,应被版本过滤 [min,1.4.1) 跳过）
+#   waf_positive    主靶场 /waf-protected（Cloudflare 形态拦截页,应识别 WAF）
+#   authbypass_lab  主靶场 /jwt/profile + 注入弱密钥 JWT（HS256/secret → 应检出 jwt-weak-secret）
+#   js_clean        主靶场 /jsapp-clean（无敏感信息的 clean.js → js_analysis 零发现护栏）
+#   注:oa_* 之外的靶标都挂主靶场端口,通过 path 区分
 version: 1
 
 targets:
   main:
-    modules: [sqli, xss, cmdi, rce, xxe, ssrf, sensitive, lfi, idor]
-    # 分批扫描：每批独立子进程+独立超时（时间型注入/外部 OOB 探测耗时不稳定,
-    # 单批全模块曾超 36min;分批后每批有界,慢模块不拖垮其他批次的产出）
+    modules: [sqli, xss, cmdi, rce, xxe, ssrf, sensitive, lfi, idor, waf, webshell, weakpass, js_analysis, jspathfinder, api]
     scan_groups:
       - [sqli]
       - [cmdi, rce, lfi]
       - [xss, xxe]
       - [ssrf, sensitive, idor]
+      - [waf, webshell, weakpass]
+      - [js_analysis, jspathfinder, api]
   oa_vuln:
     modules: [oa]
   oa_fixed:
     modules: [oa]
+  waf_positive:
+    path: /waf-protected
+    modules: [waf]
+  authbypass_lab:
+    path: /jwt/profile
+    modules: [authbypass]
+    auth: bearer-weak-jwt
+  js_clean:
+    path: /jsapp-clean
+    modules: [js_analysis]
+  idor_confirmed:
+    path: /api/invoice?id=1001
+    modules: [idor]
+    second_auth: "X-Account: account-b"  # T2.5 双账号验证:B 会话可读 A 对象 → 确认级 HIGH/HIGH
 
 expectations:
   main:
@@ -37,7 +55,7 @@ expectations:
       must_detect: ["/xss/reflected"]
       must_not_flag: ["/safe/api", "/api/invoice", "/api/secure-invoice"]
     cmdi:
-      must_detect: ["/rce"]
+      must_detect_any: ["/rce", "/cmdi"]  # cmdi 检出端点随平台 shell 语义不同(Win→/rce, Linux→/cmdi)
       must_not_flag: ["/xss/reflected", "/safe/api"]
     rce:
       must_detect: ["/ssti"]
@@ -57,6 +75,24 @@ expectations:
     idor:
       must_detect: ["/api/invoice", "/api/users"]
       must_not_flag: ["/api/secure-invoice"]
+    waf:
+      must_detect: []
+      must_not_flag: ["//"]  # 主靶场无 WAF → 零发现护栏
+    webshell:
+      must_detect: ["/cmd.php"]
+      must_not_flag: []
+    weakpass:
+      must_detect: ["/login"]
+      must_not_flag: ["/user/login"]
+    js_analysis:
+      must_detect: ["/static/app.js"]
+      must_not_flag: []
+    jspathfinder:
+      must_detect: ["/.env"]  # app.js 引用 → fuzz 链路发现(带点路径 /backup/backup.sql 不入 fuzz 字典)
+      must_not_flag: []
+    api:
+      must_detect: ["/api/cors-open", "/api/debug-info", "/.env"]
+      must_not_flag: ["/api/cors-strict"]
   oa_vuln:
     oa:
       must_detect: ["/nacos/v1/auth/users"]
@@ -65,3 +101,19 @@ expectations:
     oa:
       must_detect: []
       must_not_flag: ["/nacos/v1/auth/users", "/nacos/v1/cs/configs"]
+  waf_positive:
+    waf:
+      must_detect: ["/waf-protected"]
+      must_not_flag: []
+  authbypass_lab:
+    authbypass:
+      must_detect: ["/jwt/profile"]
+      must_not_flag: []
+  js_clean:
+    js_analysis:
+      must_detect: []
+      must_not_flag: ["/jsapp-clean", "/static/clean.js"]
+  idor_confirmed:
+    idor:
+      must_detect: ["/api/invoice"]
+      must_not_flag: []

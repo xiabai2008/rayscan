@@ -276,8 +276,38 @@ class HTTPPool:
             "total_retries": 0,
         }
 
+        # T2.4 登录态维持：会话失效(401/重定向到登录页)时的重登回调
+        # handler: async () -> bool(成功后自行通过 set_cookie/set_header 刷新凭据)
+        self._reauth_handler = None
+        self._reauth_lock = None  # 惰性创建:py3.9 下 asyncio.Lock() 会在无事件循环时绑定错误 loop
+        self._reauth_last = 0.0
+        self._reauth_cooldown = 10.0  # 重登冷却,避免模块主动探测的 401 触发反复登录
+
         # Load saved Cookies
         self._load_cookies()
+
+    def set_reauth_handler(self, handler) -> None:
+        """注册会话失效重登回调(传 None 取消)。
+
+        触发条件:响应 401,或 301/302 重定向到含 login/signin/auth 的地址。
+        成功重登后自动清空 GET 去重缓存(凭据已变,旧响应不可信)并重放当前请求。
+        """
+        self._reauth_handler = handler
+
+    @staticmethod
+    def _looks_like_session_loss(resp: httpx.Response) -> bool:
+        """判断响应是否表明登录态已失效。"""
+        if resp.status_code == 401:
+            return True
+        if resp.status_code in (301, 302):
+            location = (resp.headers.get("location") or resp.headers.get("Location") or "").lower()
+            return any(kw in location for kw in ("login", "signin", "auth"))
+        return False
+
+    @property
+    def reauth_count(self) -> int:
+        """本次扫描已执行的自动重登次数(可观测性/测试断言)。"""
+        return int(self._stats.get("reauths", 0))
 
     def mark_bad_proxy(self, proxy_url: str) -> None:
         """Mark a proxy as failed (from smart-crawler concept).
@@ -465,11 +495,20 @@ class HTTPPool:
             RateLimitError: Rate limited (429)
         """
         # P8: GET request dedup cache — skip identical requests across modules
+        # 缓存键包含语义请求头(除 UA 轮换外):Origin/Authorization/Cookie 等差异化探测
+        # (CORS 反射/认证头移除重放)若共用缓存会拿到旧响应,导致漏检/误报
+        cache_key = None
         if method.upper() == "GET":
             cache_key_parts = [method.upper(), url]
             if kwargs.get("params"):
                 sorted_params = tuple(sorted(kwargs["params"].items()))
                 cache_key_parts.append(str(sorted_params))
+            if kwargs.get("headers"):
+                semantic_headers = tuple(
+                    sorted((k.lower(), v) for k, v in kwargs["headers"].items() if k.lower() != "user-agent")
+                )
+                if semantic_headers:
+                    cache_key_parts.append(str(semantic_headers))
             cache_key = "|".join(cache_key_parts)
             if cache_key in self._request_cache:
                 self._cache_hits += 1
@@ -519,6 +558,35 @@ class HTTPPool:
                 response_time = time.perf_counter() - request_start_time
                 self._rate_limiter.update_metrics(resp.status_code, response_time)
 
+                # T2.4 登录态维持:检测到会话失效 → 触发重登一次并重放当前请求。
+                # 冷却期内不重复触发(模块的 401 探测不会引起反复登录);
+                # 重登进行中时其他请求直接放行原响应,由当次重登修复后续请求。
+                if (
+                    self._reauth_handler is not None
+                    and self._looks_like_session_loss(resp)
+                    and (self._reauth_lock is None or not self._reauth_lock.locked())
+                    and (time.monotonic() - self._reauth_last) > self._reauth_cooldown
+                ):
+                    reauth_ok = False
+                    if self._reauth_lock is None:
+                        self._reauth_lock = asyncio.Lock()
+                    await self._reauth_lock.acquire()
+                    try:
+                        self._stats["reauths"] = self._stats.get("reauths", 0) + 1
+                        reauth_ok = bool(await self._reauth_handler())
+                        self._reauth_last = time.monotonic()
+                        if reauth_ok:
+                            self._request_cache.clear()
+                    except Exception as e:  # noqa: BLE001
+                        logger.debug(f"[HTTPPool] 自动重登回调异常: {e}")
+                        reauth_ok = False
+                    finally:
+                        self._reauth_lock.release()
+                    if reauth_ok:
+                        logger.info(f"[HTTPPool] 会话失效已重登,重放: {method} {url}")
+                        kwargs = self._merge_headers(url, kwargs)
+                        continue
+
                 # Handle redirects manually (same host only)
                 if should_follow and resp.status_code in (301, 302, 303, 307, 308):
                     loc = resp.headers.get("location") or resp.headers.get("Location")
@@ -560,13 +628,9 @@ class HTTPPool:
                         continue
                     raise last_exc
 
-                # Success — cache GET responses for cross-module dedup
-                if method.upper() == "GET" and resp.status_code < 400:
-                    cache_key_parts = [method.upper(), url]
-                    if kwargs.get("params"):
-                        sorted_params = tuple(sorted(kwargs["params"].items()))
-                        cache_key_parts.append(str(sorted_params))
-                    self._request_cache["|".join(cache_key_parts)] = resp
+                # Success — cache GET responses for cross-module dedup (键含语义头,见函数入口)
+                if method.upper() == "GET" and resp.status_code < 400 and cache_key:
+                    self._request_cache[cache_key] = resp
                 return resp
 
             except httpx.TimeoutException:

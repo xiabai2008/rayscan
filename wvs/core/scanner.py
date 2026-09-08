@@ -276,6 +276,11 @@ class WAVScanner(ScannerIntegrationsMixin):
             return False
 
         self._modules[module_name] = instance
+        # 显式 --modules 加载即视为启用:覆盖 config 默认(如 jspathfinder 默认 enabled=False)。
+        # enabled 是合成属性 _enabled AND module_config.enabled,两处都要打开,
+        # 否则模块加载成功却静默空转(--modules jspathfinder 曾因此完全不执行)
+        instance._enabled = True
+        instance.module_config.enabled = True
         self._loaded_module_names.append(module_name)
         logger.info(f"[Scanner] 已加载模块: {module_name} (session: {id(self.session)})")
         return True

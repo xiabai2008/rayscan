@@ -564,10 +564,14 @@ class RCEDetector(DetectionModule):
                     el_leak_count = 0
                     first_indicator = None
                     for indicator in el_leak_indicators:
-                        if indicator in resp_text and indicator not in baseline_text:
-                            el_leak_count += 1
-                            if first_indicator is None:
-                                first_indicator = indicator
+                        if indicator not in resp_text or indicator in baseline_text:
+                            continue
+                        if indicator in payload:
+                            # 指示词来自载荷本身被回显(反射端点)——只证明反射,不证明执行
+                            continue
+                        el_leak_count += 1
+                        if first_indicator is None:
+                            first_indicator = indicator
                     if el_leak_count >= 2:
                         vulns.append(
                             self._create_vulnerability(

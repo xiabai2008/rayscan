@@ -21,6 +21,16 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-08 (v2.2 T2.4/T2.5 + 矩阵新模块靶标 + 6 真实缺陷修复)
+- **T2.4 登录态维持**：HTTPPool 检测会话失效（401/登录重定向）→ 自动重登回调（CLI 认证后注册,全 auth 类型）→ 刷新凭据重放当前请求；10s 冷却防 401 探测引发反复登录；成功后清 GET 去重缓存；`tests/test_session_reauth.py` 3 用例（真实本地服务全链路）
+- **T2.5 双账号 IDOR**：`--second-auth "Header: Value"` → idor 对象替换命中后用 B 会话（独立 httpx client 防 cookie 混叠）实际读取 A 对象,确认升级 HIGH/HIGH,未确认保持 MEDIUM；`tests/test_idor_second_auth.py` 3 用例；矩阵新增 idor_confirmed 靶标
+- **矩阵 7 个新模块靶标**：weakpass(/login 弱口令+/user/login 护栏)、webshell(/cmd.php)、js_analysis(app.js 密钥+clean 护栏)、api(CORS/secret_key/.env)、waf(/waf-protected CF 形态+主靶场零 WAF 护栏)、authbypass(/jwt/profile 弱密钥 JWT 链路)、jspathfinder(JS 引用→fuzz 发现 /.env)
+- **must_detect_any**：any-of 语义,cmdi 检出端点随平台 shell 不同（Win→/rce、Linux→/cmdi）,CI 首跑暴露
+- **6 真实缺陷修复**：①HTTPPool GET 去重缓存键不含请求头→CORS 检测拿旧响应漏检/authbypass 重放误报隐患（语义头现参与键）②rce Java EL leak 指示词计数未排除载荷回显→反射端点必误报（现排除载荷内指示词）③waf 签名管道断裂（baseline 无 cookies 键,status 键名不符→Cookie 型签名从未生效,现从 Set-Cookie 解析+CF 补 body 标记）④js_analysis 统计行访问不存在属性→全模块发现静默丢弃（从未工作过）⑤vuln_type_map 缺 5 模块+--modules jspathfinder 因 config 默认 enabled:False+合成属性静默空转（load_module 现强制启用）⑥weakpass 凭据走 query 改 body+benchmark_lab Werkzeug 版本头覆写（api 刷屏+waf 签名被盖）+strict_slashes+_hint Response 透传+weakpass/webshell O(N²) 探测补每基址守卫
+- **⑧ rate_limiter 单测**：8 用例（突发/均匀窗口、429 退避恢复、WAF 规避头、Intelligent 装配）
+- CI Golden Matrix 首跑：11/12 绿（lfi Linux ✓、oa_fixed 版本过滤 ✓）,唯一 FAIL=cmdi 平台差异已修
+- 影响文件：`wvs/core/{session,scanner}.py`、`wvs/modules/{idor,weakpass,waf,js_analysis}/detector.py`、`wvs/modules/base.py`、`wvs/cli.py`、`scripts/{run_golden_matrix,benchmark_lab}.py`、`scripts/golden_matrix.yaml`、`tests/{test_session_reauth,test_idor_second_auth,test_rate_limiter}.py`、`CHANGELOG.md`
+
 ### 2026-09-08 (黄金靶场矩阵 — 检测可信度制度化 v2.2 T2.1/T2.2)
 - 合并远程 v2.2.0（27 提交：AI 复核/MCP/GraphQL/SPA 爬取/基准体系/S5 OA 闭环），冲突解决 ci.yml（取远程 pyproject fail_under=25 方案）/AGENTS.md（双方条目保留）/cli.py（--ai-verify 与 --concurrency 共存）
 - **黄金矩阵 runner** `scripts/run_golden_matrix.py`：机器可读期望清单驱动，must_detect（URL 子串级漏报门禁）+ must_not_flag（误报防线）双断言 + 清单外 WARN；单靶标批量扫描（--modules 多模块一次爬扫,按报告 module 字段归属,3 次扫描替代 10 次）

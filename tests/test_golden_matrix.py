@@ -36,8 +36,8 @@ def test_expectation_fields_valid():
     m = _load()
     for target, modules in m.get("expectations", {}).items():
         for module, exp in modules.items():
-            assert set(exp.keys()) <= {"must_detect", "must_not_flag"}, (target, module)
-            for field in ("must_detect", "must_not_flag"):
+            assert set(exp.keys()) <= {"must_detect", "must_detect_any", "must_not_flag"}, (target, module)
+            for field in ("must_detect", "must_detect_any", "must_not_flag"):
                 assert isinstance(exp.get(field, []), list), (target, module, field)
                 assert all(isinstance(e, str) and e.startswith("/") for e in exp.get(field, [])), (
                     f"{target}/{module}/{field} 条目必须是 / 开头的路径子串"

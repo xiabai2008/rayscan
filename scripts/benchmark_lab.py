@@ -22,9 +22,11 @@ import time
 from flask import Flask, Response, request
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False  # 扫描器会把端点补尾斜杠,两种形态都必须可路由
 
 # OA 靶标独立 Flask 实例（与主靶场互不污染指纹）
 oa_app = Flask("benchmark_lab_oa")
+oa_app.url_map.strict_slashes = False
 OA_VERSION = "1.3.2"
 
 # 简单访问控制：仅允许本机来源
@@ -43,10 +45,26 @@ def _oa_guard():
         return Response("forbidden", status=403)
 
 
+@app.after_request
+def _strip_server(resp):
+    """剥离 Werkzeug 版本头：api 模块的 Server Version Disclosure 会在每个端点刷屏，
+    黄金矩阵的 api 期望保持精确（版本泄露能力由其单测覆盖）。"""
+    resp.headers.pop("Server", None)
+    return resp
+
+
+@oa_app.after_request
+def _oa_strip_server(resp):
+    resp.headers.pop("Server", None)
+    return resp
+
+
 def _hint(default_type="text/html; charset=utf-8"):
     def deco(fn):
         def wrapper(*a, **kw):
             resp = fn(*a, **kw)
+            if isinstance(resp, Response):
+                return resp  # 路由直接返回 Response(自定义头场景)时透传,避免嵌套 500
             if isinstance(resp, tuple):
                 body, code = resp
             else:
@@ -274,8 +292,15 @@ def index():
         "/api/secure-invoice?id=3001",
         "/api/users",
         "/safe/api?code=1",
+        "/login",
+        "/user/login",
+        "/api/cors-open",
+        "/api/cors-strict",
+        "/api/debug-info",
+        "/jsapp",
+        "/jsapp-clean",
     ]
-    body = "<html><head><title>Benchmark Lab</title></head><body><h1>Benchmark Lab</h1><ul>"
+    body = '<html><head><title>Benchmark Lab</title><script src="/static/app.js"></script></head><body><h1>Benchmark Lab</h1><ul>'
     for link in links:
         body += f'<li><a href="{link}">{link}</a></li>'
     body += "</ul></body></html>"
@@ -409,6 +434,176 @@ def safe_api():
     return {"success": False, "message": "record not found"}, 200
 
 
+# ── weakpass（弱口令） ────────────────────────────────────────────
+
+
+@app.route("/login", methods=["GET", "POST"])
+@_hint()
+def login_form():
+    """漏洞靶标：admin/admin123 可登录（weakpass 前 10 组合内）→ 弱口令应检出。
+
+    成功响应含 success 标记（welcome/dashboard/logout）且不含 fail 标记
+    （invalid/failed/error/incorrect/wrong）；失败响应含 fail 标记。
+    """
+    if request.method == "GET":
+        return (
+            "<html><head><title>Login</title></head><body><h1>Login</h1>"
+            '<form method="post"><input name="username"/><input name="password" type="password"/>'
+            '<button type="submit">Login</button></form></body></html>'
+        )
+    username = request.values.get("username") or request.values.get("log") or request.values.get("user_login") or ""
+    password = request.values.get("password") or request.values.get("pwd") or request.values.get("user_pass") or ""
+    if username == "admin" and password == "admin123":
+        return (
+            "<html><head><title>Dashboard</title></head><body>"
+            "<h1>Welcome admin</h1><p>dashboard ready</p>"
+            '<a href="/logout">logout</a></body></html>'
+        )
+    return "<html><body>Invalid username or password</body></html>", 200
+
+
+@app.route("/user/login", methods=["GET", "POST"])
+@_hint()
+def login_hardened():
+    """误报护栏：强口令端点，任何凭据都返回含 fail 标记的响应 → weakpass 不应报。"""
+    if request.method == "GET":
+        return "<html><body>Login</body></html>"
+    return "<html><body>Incorrect username or password, please retry</body></html>", 200
+
+
+# ── webshell ──────────────────────────────────────────────────────
+
+
+@app.route("/cmd.php")
+@_hint()
+def fake_webshell():
+    """漏洞靶标：一句话木马特征页（eval($_POST[)）→ webshell 路径探测应检出。"""
+    return "<?php @eval($_POST['cmd']); ?>", 200
+
+
+# ── api（CORS / 敏感信息） ────────────────────────────────────────
+
+
+@app.route("/api/cors-open")
+@_hint()
+def cors_open():
+    """漏洞靶标：任意 Origin 反射 + 允许凭据 → api 模块 CORS 配置错误应检出。"""
+    origin = request.headers.get("Origin", "*")
+    return Response(
+        json.dumps({"user": "alice", "role": "member"}),
+        status=200,
+        content_type="application/json",
+        headers={"Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true"},
+    )
+
+
+@app.route("/api/cors-strict")
+@_hint()
+def cors_strict():
+    """误报护栏：固定可信 Origin（不反射）→ CORS 不应报。"""
+    return Response(
+        json.dumps({"user": "alice"}),
+        status=200,
+        content_type="application/json",
+        headers={"Access-Control-Allow-Origin": "https://trusted.example"},
+    )
+
+
+@app.route("/api/debug-info")
+@_hint()
+def api_debug_info():
+    """漏洞靶标：响应含 secret_key（16+ 字符）→ api 敏感信息泄露应检出。"""
+    return {"debug": True, "secret_key": "supersecretkey12345678"}, 200
+
+
+# ── js_analysis / jspathfinder（JS 信息提取） ─────────────────────
+
+
+@app.route("/jsapp")
+@_hint()
+def jsapp():
+    """漏洞靶标：引用含敏感信息/隐藏路径的 app.js。"""
+    return '<html><head><title>JS App</title></head><body><script src="/static/app.js"></script></body></html>'
+
+
+@app.route("/static/app.js")
+@_hint(default_type="application/javascript")
+def app_js():
+    return (
+        'var api_key = "raylab1234567890abcdefgh";\n'
+        'var db_url = "mysql://admin:pw@10.0.0.5:3306/app";\n'
+        'var backup_path = "/backup/backup.sql";\n'
+        "fetch(backup_path);\n"
+    ), 200
+
+
+@app.route("/jsapp-clean")
+@_hint()
+def jsapp_clean():
+    """误报护栏：引用无敏感信息的 clean.js → js_analysis 不应报。"""
+    return '<html><head><title>Clean App</title></head><body><script src="/static/clean.js"></script></body></html>'
+
+
+@app.route("/static/clean.js")
+@_hint(default_type="application/javascript")
+def clean_js():
+    """无引号字符串/无路径/无密钥的纯逻辑 JS → 任何 pattern 都不应命中。"""
+    return "var a = 1;\nvar b = 2;\nfunction add(x, y) { return x + y; }\n", 200
+
+
+# ── waf（WAF 指纹） ───────────────────────────────────────────────
+
+
+@app.route("/waf-protected")
+def waf_protected():
+    """漏洞靶标：Cloudflare 形态拦截页（server: cloudflare + cf-ray）→ waf 应识别。"""
+    return Response(
+        "<html><head><title>Attention Required! | Cloudflare</title></head>"
+        "<body>Sorry, you have been blocked. Ray ID: 7abc123</body></html>",
+        status=403,
+        headers={
+            "Server": "cloudflare",
+            "cf-ray": "raylab-7abc123",
+            "Set-Cookie": "__cfduid=raylab1234567890; Path=/; HttpOnly",
+            "Content-Type": "text/html; charset=utf-8",
+        },
+    )
+
+
+# ── authbypass（JWT 弱密钥，独立靶标路径） ────────────────────────
+
+
+@app.route("/jwt/profile", methods=["GET"])
+@_hint()
+def jwt_profile():
+    """靶标：校验 Bearer JWT 的 HMAC-SHA256 签名（弱密钥 "secret"）。
+
+    扫描器注入弱密钥签发的 token → 200（弱密钥可伪造,authbypass 应检出
+    jwt-weak-secret）；无/坏 token → 401（认证头移除重放路径因此不误报）。
+    """
+    import base64
+    import hashlib
+    import hmac as _hmac
+
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return {"error": "unauthorized"}, 401
+    token = auth[7:].strip()
+    parts = token.split(".")
+    if len(parts) != 3:
+        return {"error": "unauthorized"}, 401
+    try:
+        signing_input = f"{parts[0]}.{parts[1]}".encode()
+        expected = (
+            base64.urlsafe_b64encode(_hmac.new(b"secret", signing_input, hashlib.sha256).digest()).rstrip(b"=").decode()
+        )
+        if not _hmac.compare_digest(expected, parts[2]):
+            return {"error": "unauthorized"}, 401
+    except Exception:
+        return {"error": "unauthorized"}, 401
+    return {"profile": "lab-user", "role": "member"}, 200
+
+
 # ── OA 靶标（独立 oa_app，Nacos 形态） ────────────────────────────
 
 _NACOS_HOME = """<!DOCTYPE html>
@@ -452,6 +647,19 @@ def oa_state():
 
 
 def main():
+    from werkzeug.serving import WSGIRequestHandler
+
+    class _LabRequestHandler(WSGIRequestHandler):
+        """隐藏 Werkzeug/Python 版本串。
+
+        Werkzeug 开发服务器会在 WSGI 层之后覆写 Server 头,导致:
+        1) api 模块 Server Version Disclosure 在每个端点刷屏
+        2) /waf-protected 的 Server: cloudflare 签名被覆盖 → waf 永不匹配
+        """
+
+        def version_string(self) -> str:
+            return "benchmark-lab"
+
     parser = argparse.ArgumentParser(description="RayScan benchmark lab")
     parser.add_argument("--port", type=int, default=18099)
     parser.add_argument("--oa-port", type=int, default=None, help="OA 靶标端口（指定则只运行 OA 应用）")
@@ -462,11 +670,13 @@ def main():
         global OA_VERSION
         OA_VERSION = args.oa_version
         print(f"[BenchmarkLab] OA 靶标 http://127.0.0.1:{args.oa_port}/  (Nacos {OA_VERSION} 形态, 仅本机访问)")
-        oa_app.run(host="127.0.0.1", port=args.oa_port, debug=False, use_reloader=False)
+        oa_app.run(
+            host="127.0.0.1", port=args.oa_port, debug=False, use_reloader=False, request_handler=_LabRequestHandler
+        )
         return
 
     print(f"[BenchmarkLab] http://127.0.0.1:{args.port}/  (仅本机访问)")
-    app.run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False)
+    app.run(host="127.0.0.1", port=args.port, debug=False, use_reloader=False, request_handler=_LabRequestHandler)
 
 
 if __name__ == "__main__":

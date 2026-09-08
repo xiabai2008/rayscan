@@ -130,8 +130,8 @@ class JSAnalysisDetector(DetectionModule):
             if isinstance(result, list):
                 findings.extend(result)
 
-        sensitive_count = sum(1 for f in findings if f.vuln_type == "sensitive_info")
-        endpoint_count = sum(1 for f in findings if f.vuln_type == "hidden_endpoint")
+        sensitive_count = sum(1 for f in findings if "sensitive_info" in (f.tags or []))
+        endpoint_count = sum(1 for f in findings if "hidden_endpoint" in (f.tags or []))
         logger.info(
             f"[JS Analysis] Done: {sensitive_count} sensitive infos, "
             f"{endpoint_count} hidden endpoints from {len(script_urls)} JS files"

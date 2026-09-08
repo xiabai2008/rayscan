@@ -222,6 +222,13 @@ def cmd_scan(args):
         config.set("rate_mode", args.rate_mode)
     if hasattr(args, "concurrency") and args.concurrency:
         config.set("concurrent_endpoints", max(1, args.concurrency))
+    if getattr(args, "second_auth", None):
+        _hname, _sep, _hval = args.second_auth.partition(":")
+        if _hname.strip() and _hval.strip():
+            config.set("modules.idor.second_auth_headers", {_hname.strip(): _hval.strip()})
+            console.print(f"[cyan][*] 双账号越权验证已启用（idor 命中将用 B 会话确认: {_hname.strip()} 头）[/cyan]")
+        else:
+            console.print('[yellow]--second-auth 格式应为 "Header: Value"，已忽略[/yellow]')
     if hasattr(args, "explain") and args.explain:
         config.set("explain", True)
         console.print("[cyan][*] 可解释模式已启用（--explain）[/cyan]")
@@ -413,6 +420,21 @@ def cmd_scan(args):
         for name, value in target.cookies.items():
             session.set_cookie(target_url, name, value)
         console.print(f"[cyan]  已同步 {len(target.cookies)} 个 cookie 到扫描 session[/cyan]")
+
+        # T2.4 登录态维持：注册自动重登回调（扫描中检测到 401/登录重定向时重新认证并重放）
+        async def _reauth_handler() -> bool:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
+                result = await auth_manager.authenticate(tmp_client)
+            if not result.get("authenticated"):
+                return False
+            for name, value in (result.get("cookies") or {}).items():
+                session.set_cookie(target_url, name, value)
+            for name, value in (result.get("headers") or {}).items():
+                session.set_header(name, value)
+            return True
+
+        session.set_reauth_handler(_reauth_handler)
+        console.print("[cyan]  已启用登录态维持（会话失效自动重登）[/cyan]")
 
     # ── 利用引擎开关校验（默认禁用） ──
     exploit_enabled = False
@@ -1275,6 +1297,12 @@ def build_parser() -> argparse.ArgumentParser:
     auth_group.add_argument("--username", help="认证用户名")
     auth_group.add_argument("--password", help="认证密码")
     auth_group.add_argument("--token", help="Bearer Token / API Token")
+    auth_group.add_argument(
+        "--second-auth",
+        default=None,
+        help='双账号越权验证：B 账号凭据头（格式 "Header: Value"，如 "Cookie: session=USER_B"）'
+        "— idor 对象替换命中后自动用 B 会话确认，确认项升级为 HIGH/HIGH",
+    )
     auth_group.add_argument("--cookies", help="直接注入 Cookie（格式：name=value; name2=value2）")
     auth_group.add_argument("--api-key", help="API Key")
     auth_group.add_argument("--api-key-header", default="X-API-Key", help="API Key Header 名称（默认 X-API-Key）")

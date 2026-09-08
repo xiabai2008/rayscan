@@ -124,6 +124,13 @@ class WebShellDetector(DetectionModule):
         parsed = urlparse(base)
         root = f"{parsed.scheme}://{parsed.netloc}"
 
+        # 每个基址只探测一次(固定 WebShell 路径与端点无关,避免逐端点重复探测 O(N²))
+        if not hasattr(self, "_scanned_roots"):
+            self._scanned_roots: set = set()
+        if root in self._scanned_roots:
+            return []
+        self._scanned_roots.add(root)
+
         checked = set()
         for shell_path in WEBSHELL_PATHS:
             full_url = root.rstrip("/") + shell_path

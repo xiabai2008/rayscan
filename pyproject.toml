@@ -127,7 +127,7 @@ branch = true
 
 # T4 (TD-006): 覆盖率门禁 — 分支覆盖基线 ~27%（2026-08-08），随测试补齐逐步上调
 [tool.coverage.report]
-fail_under = 25
+fail_under = 30
 show_missing = true
 
 [tool.mypy]

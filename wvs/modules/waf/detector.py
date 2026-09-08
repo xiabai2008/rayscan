@@ -25,7 +25,11 @@ WAF_SIGNATURES: List[Tuple[str, Dict]] = [
     # ── Cloud / CDN WAFs ──
     (
         "Cloudflare",
-        {"headers": {"server": r"cloudflare", "cf-ray": r".+"}, "cookies": {"__cfduid": None, "cf_clearance": None}},
+        {
+            "headers": {"server": r"cloudflare", "cf-ray": r".+"},
+            "cookies": {"__cfduid": None, "cf_clearance": None},
+            "body": [r"attention required.*cloudflare", r"checking your browser.*cloudflare"],
+        },
     ),
     (
         "AWS WAF / ELB",
@@ -270,13 +274,20 @@ class WAFDetector(DetectionModule):
     def _match_all_signatures(self, baseline: dict) -> List[str]:
         """Match all 80+ WAF signatures against response."""
         headers = baseline.get("headers", {}) or {}
-        cookies = baseline.get("cookies", {}) or {}
         body = baseline.get("text", "")[:5000]
-        status = baseline.get("status", 0)
+        status = baseline.get("status_code", baseline.get("status", 0))
+
+        # 从 Set-Cookie 头解析 cookie 名(_send_request 基线无 cookies 键;
+        # WAF cookie 签名(__cfduid/cf_clearance/AWSALB 等)依赖此解析,否则永不生效)
+        cookie_map: Dict[str, str] = dict(baseline.get("cookies", {}) or {})
+        for h_key, h_val in headers.items():
+            if h_key.lower() == "set-cookie" and h_val:
+                for m in re.finditer(r"([^\s=;,]+)\s*=", str(h_val)):
+                    cookie_map.setdefault(m.group(1), "")
 
         matches = []
         for waf_name, sig in WAF_SIGNATURES:
-            if self._match_one(headers, cookies, body, status, sig):
+            if self._match_one(headers, cookie_map, body, status, sig):
                 matches.append(waf_name)
 
         return matches

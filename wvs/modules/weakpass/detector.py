@@ -101,6 +101,13 @@ class WeakPasswordDetector(DetectionModule):
         parsed = url.split("://")[-1] if "://" in url else url
         base = f"{url.split('://')[0]}://{parsed.split('/')[0]}" if "://" in url else f"http://{parsed.split('/')[0]}"
 
+        # 每个基址只探测一次(固定登录路径与端点无关,避免逐端点重复探测 O(N²))
+        if not hasattr(self, "_scanned_bases"):
+            self._scanned_bases: set = set()
+        if base in self._scanned_bases:
+            return []
+        self._scanned_bases.add(base)
+
         # 检查常见登录路径
         for path in LOGIN_PATHS:
             login_url = urljoin(base, path)
@@ -137,6 +144,7 @@ class WeakPasswordDetector(DetectionModule):
                         "user_login": username,
                         "user_pass": password,
                     },
+                    param_type="body",
                 )
                 if resp:
                     body = resp.get("text", "").lower()
@@ -176,6 +184,7 @@ class WeakPasswordDetector(DetectionModule):
                         "server": "1",
                         "lang": "en",
                     },
+                    param_type="body",
                 )
                 if resp:
                     body = resp.get("text", "").lower()
