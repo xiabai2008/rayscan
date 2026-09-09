@@ -42,6 +42,12 @@ CI：`Golden Matrix (FP/FN gate)` job（workflow_dispatch 手动触发；per-pus
 
 **复核运行（2026-09-08，分批模式 scan_groups×4 + OA 双靶标）：10/10 全部 PASS，0 缺失 0 误报。**
 
+**v2.3 复跑（2026-09-09，T3.3 OA 规则外部化 + T3.4 Nuclei 模板策展后）：22/22 全部 PASS，0 缺失 0 误报。**
+oa_vuln 检出 1 / oa_fixed 检出 0——检测矩阵改存 `rules/oa/*.yaml`（加载器 + 硬编码回退）后
+检测行为不变，版本过滤门禁（oa_fixed）保持有效；main 14 模块 + waf_positive/authbypass_lab/
+js_clean/idor_confirmed/domxss_lab/dom_safe 六专项靶标全绿。清单外 WARN 与 §3 已登记项一致
+（idor /dom/ 等 4 条 + xss 反射类 10 条），维持观察队列，不入门禁。lfi 按设计 Windows SKIP（CI Linux 复测）。
+
 ## 3. 已知清单外发现（WARN，人工确认为真阳性）
 
 - xss：/rest/products/search?q=（JSON 反射,SPA mock,真阳性）
