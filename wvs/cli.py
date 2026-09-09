@@ -187,6 +187,101 @@ def _save_partial_results(
 # ─────────────────────────────────────────────────────────────────
 
 
+def _apply_gentle_rate_cap(config: ConfigManager) -> int:
+    """--from-proxy 联动扫描的速率上限取 gentle 预设（被动流量授权面,强制低速）。
+
+    用户显式给出的更低速率先于上限生效(取 min);gentle 预设不可用时回退
+    当前默认上限并告警。返回生效速率。
+    """
+    from .profiles import ProfileManager
+
+    gentle_rate = None
+    try:
+        profile = ProfileManager().load_profile("gentle")
+        if profile:
+            gentle_rate = (profile.get("params") or {}).get("rate")
+    except Exception as e:  # noqa: BLE001
+        logger.debug("gentle 预设读取失败: %s", e)
+    try:
+        gentle_rate = int(gentle_rate)
+    except (TypeError, ValueError):
+        gentle_rate = 0
+    if gentle_rate <= 0:
+        gentle_rate = int(config.get("max_requests_per_second", 10) or 10)
+        console.print(f"[yellow][!] gentle 预设不可用,联动速率回退默认上限 {gentle_rate} req/s[/yellow]")
+    current = int(config.get("rate", 10) or 10)
+    effective = min(current, gentle_rate)
+    config.set("rate", effective)
+    config.set("max_requests_per_second", effective)
+    return effective
+
+
+def _queue_endpoint_to_target(ep) -> ScanTarget:
+    """队列端点 → ScanTarget（按参数类型分流：query→params、body/json→data、cookie→cookies）。"""
+    params = {}
+    data = {}
+    cookies = {}
+    ptypes = getattr(ep, "param_types", None) or {}
+    for k, v in (getattr(ep, "parameters", None) or {}).items():
+        t = ptypes.get(k, "query")
+        if t == "cookie":
+            cookies[k] = v
+        elif t == "query":
+            params[k] = v
+        else:  # body / json
+            data[k] = v
+    method = (getattr(ep, "method", None) or "GET").upper()
+    return ScanTarget(
+        url=getattr(ep, "url", ""),
+        methods=[method],
+        params=params or None,
+        data=data or None,
+        cookies=cookies or None,
+        param_types=dict(ptypes) or None,
+    )
+
+
+async def _scan_proxy_queue(scanner, session, endpoints, target_url: str, concurrency: int, queue_result):
+    """--from-proxy 定向主动验证：队列端点逐个交给已加载模块（不爬取,复用现有模块）。
+
+    限速由 HTTPPool 内置 RateLimiter 统一执行（联动模式速率上限=gentle 预设）;
+    端点间并发由 semaphore 控制（与主动扫描 concurrent_endpoints 同源）。
+    发现随做随写入 queue_result（超时/中断可抢救）,返回前去重。
+    """
+    sem = asyncio.Semaphore(max(1, int(concurrency)))
+
+    async def verify_one(ep):
+        async with sem:
+            ep_target = _queue_endpoint_to_target(ep)
+            for mod_name, module in list(scanner._modules.items()):
+                try:
+                    vulns = await module.scan(ep_target)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[FromProxy] 模块 %s 对 %s 检测失败: %s", mod_name, getattr(ep, "url", ep), e)
+                    continue
+                for v in vulns or []:
+                    if not v.module:
+                        v.module = mod_name
+                    if isinstance(getattr(v, "context", None), dict):
+                        v.context.setdefault("source", "proxy_queue")
+                    queue_result.vulnerabilities.append(v)
+
+    await asyncio.gather(*(verify_one(ep) for ep in endpoints))
+
+    seen = set()
+    unique = []
+    for v in queue_result.vulnerabilities:
+        sig = f"{v.type.value}|{v.url or ''}|{v.parameter or ''}|{v.payload or ''}".lower()
+        if sig not in seen:
+            seen.add(sig)
+            unique.append(v)
+    queue_result.vulnerabilities = unique
+    queue_result.requests_made = session.get_stats().get("total_requests", 0)
+    queue_result.modules_run = len(scanner._modules)
+    queue_result.endpoints_found = len(endpoints)
+    return queue_result
+
+
 def cmd_scan(args):
     """执行单目标扫描"""
     target_url = args.url
@@ -283,6 +378,38 @@ def cmd_scan(args):
     # 处理 --no-nuclei（默认启用 Nuclei 阶段）
     if hasattr(args, "no_nuclei") and args.no_nuclei:
         config.set("nuclei.enabled", False)
+
+    # ── v2.3 T3.1: --from-proxy 被动→主动联动（队列加载 + 目标域过滤 + gentle 速率上限）──
+    from_proxy_queue = None
+    queue_endpoints: list = []
+    if getattr(args, "from_proxy", None):
+        from .core.passive import ProxyCaptureQueue
+
+        queue_file = Path(args.from_proxy)
+        if not queue_file.exists():
+            console.print(f"[red]--from-proxy 队列文件不存在: {queue_file.resolve()}[/red]")
+            return 1
+        try:
+            from_proxy_queue = ProxyCaptureQueue.load(queue_file)
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[red]--from-proxy 队列文件解析失败: {e}[/red]")
+            return 1
+        # 目标域过滤语义延续:与被动代理 --target 同一 host_matches(子域匹配)
+        queue_endpoints = from_proxy_queue.filter_for_target(target_url)
+        console.print(
+            Panel.fit(
+                f"[bold cyan]被动→主动联动 (--from-proxy)[/bold cyan]\n"
+                f"队列: {queue_file.resolve()}（捕获 {len(from_proxy_queue)} 端点）\n"
+                f"目标域过滤后: [bold]{len(queue_endpoints)}[/bold] 端点\n"
+                f"模式: 定向主动验证（不爬取,仅扫捕获参数面）",
+                border_style="cyan",
+            )
+        )
+        if not queue_endpoints:
+            console.print("[yellow]队列中没有属于该目标域的端点,无需联动扫描。[/yellow]")
+            return 0
+        effective_rate = _apply_gentle_rate_cap(config)
+        console.print(f"[cyan][*] 联动速率上限: {effective_rate} req/s（gentle 预设）[/cyan]")
 
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
@@ -476,6 +603,9 @@ def cmd_scan(args):
 
     start = time.perf_counter()
 
+    # v2.3 T3.1: 联动扫描的结果容器（随做随写,超时/中断可抢救部分发现）
+    queue_result = ScanResult(target=ScanTarget(url=target_url)) if from_proxy_queue is not None else None
+
     async def run_scan():
         # 初始化 OOB 管理器
         if oob_manager:
@@ -485,6 +615,15 @@ def cmd_scan(args):
             # 支持全局超时
             # 保存 max_time 到 scanner（超时抢救用）
             scanner._scan_max_time = max_time
+            if queue_result is not None:
+                # 联动模式:定向验证队列端点(不爬取,复用模块与 RateLimiter)
+                concurrency = config.get("concurrent_endpoints", 6)
+                if max_time and max_time > 0:
+                    return await asyncio.wait_for(
+                        _scan_proxy_queue(scanner, session, queue_endpoints, target_url, concurrency, queue_result),
+                        timeout=max_time,
+                    )
+                return await _scan_proxy_queue(scanner, session, queue_endpoints, target_url, concurrency, queue_result)
             if max_time and max_time > 0:
                 result = await asyncio.wait_for(scanner.scan(target), timeout=max_time)
             else:
@@ -502,7 +641,11 @@ def cmd_scan(args):
         return 130
     except asyncio.TimeoutError:
         console.print(f"\n[yellow]扫描超时（>{max_time}秒），正在保存部分结果...[/yellow]")
-        partial_vulns = _collect_partial_vulns(scanner)
+        # 联动模式的发现随做随写在 queue_result 里,优先抢救
+        if queue_result is not None and queue_result.vulnerabilities:
+            partial_vulns = queue_result.vulnerabilities
+        else:
+            partial_vulns = _collect_partial_vulns(scanner)
         _save_partial_results(partial_vulns, target_url, max_time, session, scanner, args)
         return 124
     except Exception as e:
@@ -532,7 +675,6 @@ def cmd_scan(args):
         # 兜底：手动保存 JSON
         try:
             from datetime import datetime
-            from pathlib import Path
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_name = re.sub(r"[^\w\-.]", "_", target_url.split("//")[-1].rstrip("/"))
@@ -1197,6 +1339,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="解密 HTTPS 流量（MITM，客户端需先信任生成的 CA 证书，默认关闭）",
     )
     passive_parser.add_argument("--ca-dir", default=None, help="MITM CA 存放目录（默认 ~/.rayscan/ca）")
+    passive_parser.add_argument(
+        "--queue-out",
+        default=None,
+        metavar="PATH",
+        help="捕获端点队列输出路径（默认 scan_reports/proxy_queue.json；"
+        "停止后可用 `scan <url> --from-proxy <该文件>` 做定向主动验证）",
+    )
+    passive_parser.add_argument(
+        "--no-live-scan",
+        action="store_true",
+        dest="no_live_scan",
+        help="只捕获不入检（配合 --from-proxy 联动工作流：浏览时零干扰，验证交给 scan --from-proxy）",
+    )
 
     # scan 命令
     scan_parser = sub.add_parser("scan", help="扫描单个目标")
@@ -1226,6 +1381,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--explain",
         action="store_true",
         help="深度检测可解释模式：输出每个漏洞判定的信号证据链（baseline 差异/命中特征/置信度依据）",
+    )
+    scan_parser.add_argument(
+        "--from-proxy",
+        default=None,
+        metavar="QUEUE_JSON",
+        help="v2.3 被动→主动联动：对被动代理捕获队列（passive --queue-out 产物）做定向主动验证"
+        "——不爬取,仅扫捕获的参数面;速率上限自动压到 gentle 预设",
     )
 
     # 扫描控制选项
@@ -1630,34 +1792,43 @@ def cmd_passive(args):
 
     base_target = ScanTarget(url=f"http://{target_filter or '127.0.0.1'}")
 
-    async def scan_callback(endpoint: DiscoveredEndpoint) -> list:
-        """对捕获端点执行全部已加载模块的检测。"""
-        if not endpoint.parameters:
-            return []
-        ep_target = ScanTarget(
-            url=endpoint.url,
-            methods=[endpoint.method],
-            params=endpoint.parameters if endpoint.method.upper() == "GET" else None,
-            data=endpoint.parameters if endpoint.method.upper() == "POST" else None,
-        )
-        found: list = []
-        for mod_name, module in scanner._modules.items():
-            try:
-                vulns = await module.scan(ep_target)
-                for v in vulns:
-                    v.module = mod_name
-                    v.parameter = list(endpoint.parameters.keys())[0] if endpoint.parameters else None
-                    v.parameter_type = endpoint.param_types.get(v.parameter or "", "query")
-                    if hasattr(v, "context") and isinstance(v.context, dict):
-                        v.context["source"] = "passive"
-                    found.append(v)
-            except Exception as e:  # noqa: BLE001
-                logger.debug("[Passive] 模块 %s 检测失败: %s", mod_name, e)
-        return found
+    if getattr(args, "no_live_scan", False):
+        console.print("[cyan][*] 只捕获不入检(--no-live-scan):浏览零干扰,主动验证交给 scan --from-proxy[/cyan]")
+        scan_callback = None
+    else:
+
+        async def scan_callback(endpoint: DiscoveredEndpoint) -> list:
+            """对捕获端点执行全部已加载模块的检测。"""
+            if not endpoint.parameters:
+                return []
+            ep_target = ScanTarget(
+                url=endpoint.url,
+                methods=[endpoint.method],
+                params=endpoint.parameters if endpoint.method.upper() == "GET" else None,
+                data=endpoint.parameters if endpoint.method.upper() == "POST" else None,
+            )
+            found: list = []
+            for mod_name, module in scanner._modules.items():
+                try:
+                    vulns = await module.scan(ep_target)
+                    for v in vulns:
+                        v.module = mod_name
+                        v.parameter = list(endpoint.parameters.keys())[0] if endpoint.parameters else None
+                        v.parameter_type = endpoint.param_types.get(v.parameter or "", "query")
+                        if hasattr(v, "context") and isinstance(v.context, dict):
+                            v.context["source"] = "passive"
+                        found.append(v)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[Passive] 模块 %s 检测失败: %s", mod_name, e)
+            return found
 
     from .core.passive import PassiveProxy
 
     tls_intercept = bool(getattr(args, "tls_intercept", False))
+    # 队列持续落盘路径(每入队新端点即写,进程被杀队列不丢;停止时最终覆盖)
+    queue_out_path = (
+        Path(args.queue_out) if getattr(args, "queue_out", None) else Path("scan_reports") / "proxy_queue.json"
+    )
     proxy = PassiveProxy(
         scan_callback=scan_callback,
         target_filter=target_filter,
@@ -1665,6 +1836,7 @@ def cmd_passive(args):
         listen_port=args.port,
         tls_intercept=tls_intercept,
         ca_dir=getattr(args, "ca_dir", None),
+        queue_path=queue_out_path,
     )
     if tls_intercept:
         console.print(
@@ -1688,6 +1860,7 @@ def cmd_passive(args):
             f"[bold cyan]被动扫描统计[/bold cyan]\n"
             f"捕获请求: {result.requests_captured}\n"
             f"发现端点: {result.endpoints_discovered}\n"
+            f"入队端点(去重): {len(proxy.queue)}\n"
             f"检测请求: {result.requests_scanned}\n"
             f"发现漏洞: [bold red]{len(result.vulnerabilities)}[/bold red]",
             border_style="cyan",
@@ -1695,6 +1868,14 @@ def cmd_passive(args):
     )
     for v in result.vulnerabilities:
         console.print(f"  [red][{v.severity.value.upper()}][/red] {v.type.value} @ {v.url}")
+
+    # v2.3 T3.1: 捕获队列最终落盘(增量落盘已在捕获时进行,此处覆盖为最终态)
+    try:
+        proxy.queue.save(queue_out_path)
+        console.print(f"[green]🧭 捕获队列已保存({len(proxy.queue)} 端点): {queue_out_path.resolve()}[/green]")
+        console.print(f'[cyan]   联动扫描: rayscan scan <目标URL> --from-proxy "{queue_out_path}"[/cyan]')
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[yellow]捕获队列保存失败: {e}[/yellow]")
 
     # 保存报告
     if result.vulnerabilities and (hasattr(args, "output") and args.output):

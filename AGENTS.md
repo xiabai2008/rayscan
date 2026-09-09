@@ -21,6 +21,15 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-09 (v2.3 T3.1 passive→active 联动)
+- **被动捕获队列**：`PassiveProxy._capture_and_scan` 在目标域过滤通过后将端点入内存队列（`wvs/core/passive/queue.py::ProxyCaptureQueue`，去重键 = method+路径+排序参数名/类型面，参数值不参与——值变化属同一参数面，首见值作基线；hits 计数）；`_host_matches` 委托给 `queue.host_matches` 共享实现（联动扫描同语义）
+- **队列落盘**：`passive --queue-out PATH`（默认 `scan_reports/proxy_queue.json`）；每入队新端点即增量落盘（Windows 下代理被强杀也不丢队列），停止时覆盖最终态；schema `rayscan-proxy-queue-v1`
+- **`--no-live-scan`**：passive 只捕获不内联检测——联动工作流浏览零干扰，主动验证统一交给 `scan --from-proxy`（避免与内联检测重复做功）
+- **`scan --from-proxy QUEUE_JSON`**：加载队列 → `filter_for_target`（与代理 --target 同 host_matches 语义）→ 速率上限压到 gentle 预设（`_apply_gentle_rate_cap`：ProfileManager 读 gentle.rate=3，用户更低速率优先，gentle 缺失回退默认+告警）→ `_scan_proxy_queue` 定向验证（不爬取，复用模块与 HTTPPool RateLimiter，端点并发 concurrent_endpoints，`_queue_endpoint_to_target` 按 query/body/json/cookie 分流构造 ScanTarget）→ 常规报告管线
+- **可靠性**：结果随做随写（超时/中断可抢救）、同签名去重、`context.source=proxy_queue`；队列文件缺失/坏 schema/过滤后为空均快速失败并提示
+- **测试**：`tests/test_from_proxy.py` 9 用例（去重/序列化 round-trip/域过滤/代理入队与第三方排除/桩模块定向扫描/gentle 限速/参数分流）；`debug_from_proxy_e2e.py`（本地工具，gitignored）端到端验收：Playwright Chromium 经代理浏览 1.7s 捕获 9 端点 → from-proxy 200.5s 检出 10 项全部来自捕获面，未访问的 /ssti /rce /xxe_get /lfi /cmdi 零触碰（全量爬扫下均可检出 → 缺席即证明未被扫描）
+- 影响文件：`wvs/core/passive/{queue.py(新增),proxy.py,__init__.py}`、`wvs/cli.py`、`tests/test_from_proxy.py(新增)`
+
 ### 2026-09-09 (v2.2 工程伴随⑩ — scan() 内联爬扫循环/checkpoint/resume 迁入编排器 Stage)
 - **单趟编排流水线**：`WAVScanner.scan()` 收敛为 facade（模块加载 + header + cookie 注入 + 编排器单趟流水线 + 报告统计段）；流水线 WAF→LabAuth→OA→Resume→CrawlDetect→Dedup→Nuclei→AIVerify→Checkpoint，单 stage 失败告警不阻断语义保持不变
 - **新增 Stage（5 个）**：ResumeStage（--resume 恢复:checkpoint 漏洞并入 ctx.raw_vulns + 已完成模块跳过,恢复时序仍在 WAF/OA 检测之后）；CrawlDetectStage（Phase 1/2 整块:分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder;每批限流 checkpoint、超时预算、T0 兜底 seed 原样保留）；NucleiStage（Phase 3.5,含 T3.4 策展审计字段透传:ctx.result → result.template_selection）；AIVerifyStage（Phase 3.6）；CheckpointStage（最终落盘——checkpoint 需含 Nuclei 合并结果,故与 Dedup 同趟顺序执行）

@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v2.3 T3.1 passive→active 联动
+
+- **被动捕获队列**：`PassiveProxy` 把目标域过滤通过的端点送入内存队列（`ProxyCaptureQueue`，按 method+路径+参数名/类型面去重——浏览产生的参数值变化合并为同一端点，首见值留作基线）；`passive --queue-out` 落盘（默认 `scan_reports/proxy_queue.json`），且**捕获即增量落盘**（进程被杀队列不丢）；`passive --no-live-scan` 只捕获不入检（联动工作流浏览零干扰，避免与 from-proxy 重复做功）
+- **`scan <url> --from-proxy <queue.json>` 定向主动验证**：读队列 → `host_matches` 域名过滤（与代理 `--target` 完全同语义：主域/子域/www 剥离，队列文件缺失/格式错误/过滤后为空均快速失败）→ **速率上限自动压到 gentle 预设**（ProfileManager 读取 gentle.yaml 的 rate；gentle 缺失回退当前默认并告警；用户显式更低速率先于上限生效）→ 对队列端点逐个交给已加载模块（不爬取、不跑 Nuclei/OA 链路，复用现有模块与 HTTPPool RateLimiter；端点并发 concurrent_endpoints）→ 走常规报告管线（-o/-f/display_result）
+- **参数正确分流**：query→params、body/json→data、cookie→cookies（旧 passive 内联回调把 cookie 参数混进 query 发送，联动路径按类型分流；json 提交点经 `param_types` 正确走 JSON body）
+- **可靠性**：发现随做随写入结果容器（`--max-time` 超时可抢救部分结果）；同 `(type|url|param|payload)` 签名去重；`context.source="proxy_queue"` 标注来源
+- **测试**：`tests/test_from_proxy.py` 9 用例（去重语义/schema 校验/域过滤/代理入队含第三方排除/定向扫描桩模块/gentle 限速与用户低速率优先/参数分流）；`debug_from_proxy_e2e.py` 端到端验收（Playwright Chromium 经代理浏览靶场 1.7s 捕获 9 端点 → from-proxy 200.5s 检出 10 项全部来自捕获面；故意不访问的 /ssti /rce /xxe_get /lfi /cmdi 零触碰，/safe/api 无误报——全量爬扫基线 ≈30min）
+
 ### Refactored — v2.2 工程伴随⑩：scan() 内联爬扫循环/checkpoint/resume 迁入编排器 Stage
 
 - **单趟编排流水线**：`WAVScanner.scan()` 收敛为 facade（模块加载 + header + cookie 注入 + 单趟编排器流水线 + 报告统计段），内联的爬取-检测循环、checkpoint 落盘、--resume 恢复全部消失；顺序：WAF→LabAuth→OA→Resume→CrawlDetect→Dedup→Nuclei→AIVerify→Checkpoint，单 stage 失败告警不阻断语义保持不变

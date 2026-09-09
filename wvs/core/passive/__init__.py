@@ -10,6 +10,14 @@
 """
 
 from .proxy import PassiveProxy, PassiveScanResult, run_passive_proxy
+from .queue import ProxyCaptureQueue, host_matches
 from .tls_intercept import CertAuthority
 
-__all__ = ["PassiveProxy", "PassiveScanResult", "run_passive_proxy", "CertAuthority"]
+__all__ = [
+    "PassiveProxy",
+    "PassiveScanResult",
+    "ProxyCaptureQueue",
+    "host_matches",
+    "run_passive_proxy",
+    "CertAuthority",
+]

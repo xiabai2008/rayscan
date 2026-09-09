@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
+from .queue import ProxyCaptureQueue, host_matches
 from .tls_intercept import CA_CERT_NAME, default_ca_dir, trust_instructions
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class PassiveScanResult:
 
     requests_captured: int = 0
     endpoints_discovered: int = 0
+    queued_endpoints: int = 0
     requests_scanned: int = 0
     vulnerabilities: List[Any] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
@@ -42,6 +44,7 @@ class PassiveScanResult:
         return {
             "requests_captured": self.requests_captured,
             "endpoints_discovered": self.endpoints_discovered,
+            "queued_endpoints": self.queued_endpoints,
             "requests_scanned": self.requests_scanned,
             "vulnerabilities": [v.to_dict() if hasattr(v, "to_dict") else str(v) for v in self.vulnerabilities],
             "errors": self.errors,
@@ -68,6 +71,7 @@ class PassiveProxy:
         buffer_size: int = 65536,
         tls_intercept: bool = False,
         ca_dir: Optional[str] = None,
+        queue_path: Optional[Path] = None,
     ):
         self.scan_callback = scan_callback  # async callable(endpoint_dict) -> List[vuln]
         self.target_filter = target_filter
@@ -78,6 +82,10 @@ class PassiveProxy:
         self.ca_dir = ca_dir or str(default_ca_dir())
         self._cert_authority: Any = None
         self.result = PassiveScanResult()
+        # v2.3 T3.1: 捕获队列(去重)——供 scan --from-proxy 定向主动验证
+        self.queue = ProxyCaptureQueue(target_filter=target_filter)
+        # queue_path 非空时,每入队新端点即增量落盘(进程被杀队列不丢)
+        self.queue_path = Path(queue_path) if queue_path else None
         self._server: Optional[asyncio.AbstractServer] = None
 
     # ─────────────────────────────────────────────────────────────
@@ -419,6 +427,14 @@ class PassiveProxy:
         endpoint = self._build_endpoint(method, full_url, parsed, body, headers)
         if not endpoint:
             return
+        # v2.3 T3.1: 过滤通过的端点进入捕获队列(去重),供 --from-proxy 联动扫描
+        if self.queue.enqueue(endpoint):
+            self.result.queued_endpoints = len(self.queue)
+            if self.queue_path:
+                try:
+                    self.queue.save(self.queue_path)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("[Passive] 队列增量落盘失败: %s", e)
         self.result.endpoints_discovered += 1
         if self.scan_callback:
             try:
@@ -489,14 +505,8 @@ class PassiveProxy:
 
     @staticmethod
     def _host_matches(host: str, target: str) -> bool:
-        """判断请求 Host 是否属于目标域(支持子域)。"""
-        target = target.lower().rstrip(".")
-        if target.startswith("www."):
-            target = target[4:]
-        h = host.lower().split(":")[0].rstrip(".")
-        if h.startswith("www."):
-            h = h[4:]
-        return h == target or h.endswith("." + target)
+        """判断请求 Host 是否属于目标域(支持子域;实现在 queue.host_matches,联动扫描共用)。"""
+        return host_matches(host, target)
 
     def _build_endpoint(self, method: str, full_url: str, parsed, body: bytes, headers: Dict[str, str]):
         """从捕获请求构造检测端点(与 crawler 的 DiscoveredEndpoint 同构)。"""
@@ -559,6 +569,7 @@ async def run_passive_proxy(
     listen_port: int = 8081,
     tls_intercept: bool = False,
     ca_dir: Optional[str] = None,
+    queue_path: Optional[Path] = None,
 ) -> PassiveScanResult:
     """运行被动代理直到被中断,返回捕获统计。"""
     proxy = PassiveProxy(
@@ -568,6 +579,7 @@ async def run_passive_proxy(
         listen_port=listen_port,
         tls_intercept=tls_intercept,
         ca_dir=ca_dir,
+        queue_path=queue_path,
     )
     try:
         await proxy.serve_forever()
