@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v2.3 T3.3 OA 规则外部化
+
+- **规则包**：`rules/oa/*.yaml`（12 文件 × 12 种 OA，每文件一种 OA）——`name/paths/keywords/fingerprints/checks` 完整迁移，检查项含 `path/method/params/param_type/type/severity/evidence/min_version/max_version/status_codes` 全部元数据；由一次性脚本从硬编码机械转录 + round-trip 逐字段校验
+- **加载器** `wvs/modules/oa/rules_loader.py`：目录优先级 `~/.rayscan/rules/oa/`（用户覆盖，同名 OA 整体替换）> 仓库 `rules/oa/`；校验失败（缺 path/type/severity、未知字段笔误如 evidince）丢弃该检查项并告警（宁漏报不弱化验证语义）；数字形标量（evidence: 54289）自动转 str；`SEVERITY_MAP`/`VULN_TYPE_MAP` 词表移至加载器（schema 与执行共用），detector re-export 保持兼容
+- **detector.py 改为执行器**：`OA_RULES`/`OA_CONTENT_FINGERPRINTS` 变为加载结果（保留原名，测试兼容），新增 `OA_RULE_SOURCES`（每 OA 规则来源审计字段）；内置硬编码改名 `BUILTIN_OA_RULES`/`BUILTIN_OA_CONTENT_FINGERPRINTS` 仅作回退——**两个规则目录都无 YAML 时行为与外部化前完全一致**
+- **rules 管理**：`DEFAULT_POC_CONFIG` 新增 `oa` 来源（`~/.rayscan/rules/oa/`，`rules status/update` 可见，支持用户放独立 git 仓库增量同步）
+- **验收**：新增测试 `tests/test_oa_rules_loader.py`（16 用例：YAML↔内置 parity、缺失回退、纯 YAML 新增 OA、用户覆盖、损坏文件跳过、校验丢弃/类型纠正、header 指纹 null 保留）；黄金矩阵 `--only oa` 双靶标 PASS（oa_vuln 检出 1 / oa_fixed 0 误报，20/20 基线不变）——改的是规则存放处，不是检测行为
+
 ### Added — v2.2 T2.4/T2.5 + 检测器真实性修复 + 新模块靶标
 
 - **T2.4 登录态维持**：HTTPPool 会话失效检测（401/重定向到登录页）→ 自动重登回调 → 刷新凭据并重放当前请求；10s 冷却防模块主动 401 探测引发反复登录；重登成功清空 GET 去重缓存；CLI 认证后自动注册回调（`--auth-type` 全类型生效）；新增 `tests/test_session_reauth.py`（3 用例含真实本地服务全链路）

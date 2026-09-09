@@ -1,0 +1,26 @@
+# RayScan OA 检测规则 — Nacos
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: Nacos
+paths:
+- /nacos/
+keywords:
+- nacos
+fingerprints:
+- match: title
+  value: nacos
+- match: html
+  value: nacos
+- match: html
+  value: console.nacos
+checks:
+- path: /nacos/v1/auth/users?pageNo=1&pageSize=10
+  type: unauth
+  severity: critical
+  evidence: pageItems
+  max_version: 1.4.1
+- path: /nacos/v1/cs/configs?dataId=&group=&appName=&config_tags=&pageNo=1&pageSize=10
+  type: unauth
+  severity: high

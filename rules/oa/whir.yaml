@@ -1,0 +1,24 @@
+# RayScan OA 检测规则 — 万户-Whir
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 万户-Whir
+paths:
+- /whir/
+- /defaultroot/
+keywords:
+- whir
+- 万户
+fingerprints:
+- match: title
+  value: 万户
+- match: html
+  value: whir
+checks:
+- path: /defaultroot/evoInterfaceServlet
+  params:
+    paramType: user
+  type: unauth
+  severity: critical
+  evidence: '"userList"'

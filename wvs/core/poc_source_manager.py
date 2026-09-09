@@ -63,11 +63,21 @@ DEFAULT_POC_CONFIG: Dict[str, dict] = {
     },
     "bugscan": {
         "enabled": False,
-        "label": "BugScan PoC",
+        "label": "BugScan 社区 PoC 库",
         "description": "BugScan 社区 PoC 库",
         "dir": "bugscan-pocs",
         "ext": ".php",
         "priority": 4,
+    },
+    # T3.3 OA 规则外部化：用户侧 OA 检测规则包（~/.rayscan/rules/oa/*.yaml，
+    # 同名 OA 覆盖仓库内置 rules/oa/；可 init 后放独立 git 仓库用 rules update 增量同步）
+    "oa": {
+        "enabled": True,
+        "label": "OA 检测规则包",
+        "description": "国产 OA/中间件检测矩阵（YAML 规则，新增 OA 只需加规则文件）",
+        "dir": "rules/oa",
+        "ext": ".yaml",
+        "priority": 5,
     },
 }
 

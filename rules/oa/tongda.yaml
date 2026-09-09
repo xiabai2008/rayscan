@@ -1,0 +1,45 @@
+# RayScan OA 检测规则 — 通达OA
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 通达OA
+paths:
+- /ispirit/
+- /mac/
+- /general/
+- /templates/
+keywords:
+- tongda
+- 通达
+- td_
+- /general/
+fingerprints:
+- match: title
+  value: 通达oa
+- match: html
+  value: tongda
+- match: html
+  value: ispirit
+- match: html
+  value: td_
+checks:
+- path: /ispirit/login_code_scan.php
+  method: POST
+  params:
+    codeuid: rayscan
+    uid: '1'
+    source: pc
+    type: confirm
+    username: admin
+  type: auth_bypass
+  severity: critical
+  evidence: '"status":1'
+- path: /mac/gateway.php
+  params:
+    json: '{"id":"1'' AND 1=1--"}'
+  type: sqli
+  severity: high
+- path: /general/document/index.php
+  type: sqli
+  severity: medium

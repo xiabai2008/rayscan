@@ -1,0 +1,37 @@
+# RayScan OA 检测规则 — 致远-Seeyon
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 致远-Seeyon
+paths:
+- /seeyon/
+- /yyoa/
+keywords:
+- seeyon
+- 致远
+- yyoa
+fingerprints:
+- match: title
+  value: 致远
+- match: html
+  value: seeyon
+- match: html
+  value: yyoa
+checks:
+- path: /seeyon/htmlofficeservlet
+  type: rce
+  severity: critical
+- path: /seeyon/thirdpartyController.do
+  type: rce
+  severity: critical
+- path: /seeyon/ajax.do
+  method: POST
+  params:
+    method: uploadPageLayoutAttachment
+    managerName: portalDesignerManager
+  type: file_upload
+  severity: high
+  evidence: '"code":"08441'
+  status_codes:
+  - 500

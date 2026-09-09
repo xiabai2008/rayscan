@@ -21,6 +21,14 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-09 (v2.3 T3.3 OA 规则外部化 — rules/oa YAML 规则包)
+- **规则包**：`rules/oa/*.yaml` 12 文件（每文件一种 OA）,从 `OA_RULES`/`OA_CONTENT_FINGERPRINTS` 机械转录（一次性脚本生成 + round-trip 逐字段校验）,检查项含 path/method/params/param_type/type/severity/evidence/min_version/max_version/status_codes 全部元数据
+- **加载器**：新增 `wvs/modules/oa/rules_loader.py`——目录优先级 `~/.rayscan/rules/oa/`（用户覆盖,同名 OA 整体替换）> 仓库 `rules/oa/`;校验失败（缺 path/type/severity、未知字段笔误）丢弃该检查项并告警（宁漏报不弱化验证语义）;数字形标量自动转 str;`SEVERITY_MAP`/`VULN_TYPE_MAP` 移至加载器,detector re-export 兼容
+- **detector.py 改为执行器**：`OA_RULES`/`OA_CONTENT_FINGERPRINTS` = 加载结果（保留原名,测试兼容）,新增 `OA_RULE_SOURCES` 来源审计;硬编码改名 `BUILTIN_*` 仅作回退（两个规则目录都无 YAML → 行为与外部化前一致）
+- **rules 管理打通**：`DEFAULT_POC_CONFIG` 新增 `oa` 来源（`~/.rayscan/rules/oa/`,rules status/update 可见,可放独立 git 仓库增量同步）
+- **验收**：`tests/test_oa_rules_loader.py` 16 用例（parity/回退/纯 YAML 新增 OA/覆盖/损坏跳过/校验）;黄金矩阵 `--only oa` 双靶标 PASS（oa_vuln 检出 1 / oa_fixed 0 误报）——20/20 基线不变
+- 影响文件：`rules/oa/*.yaml`、`rules/README.md`、`wvs/modules/oa/{rules_loader,detector}.py`、`wvs/core/poc_source_manager.py`、`tests/test_oa_rules_loader.py`、`docs/OA_RULES.md`、`CHANGELOG.md`
+
 ### 2026-09-08 (v2.2 T2.4/T2.5 + 矩阵新模块靶标 + 6 真实缺陷修复)
 - **T2.4 登录态维持**：HTTPPool 检测会话失效（401/登录重定向）→ 自动重登回调（CLI 认证后注册,全 auth 类型）→ 刷新凭据重放当前请求；10s 冷却防 401 探测引发反复登录；成功后清 GET 去重缓存；`tests/test_session_reauth.py` 3 用例（真实本地服务全链路）
 - **T2.5 双账号 IDOR**：`--second-auth "Header: Value"` → idor 对象替换命中后用 B 会话（独立 httpx client 防 cookie 混叠）实际读取 A 对象,确认升级 HIGH/HIGH,未确认保持 MEDIUM；`tests/test_idor_second_auth.py` 3 用例；矩阵新增 idor_confirmed 靶标

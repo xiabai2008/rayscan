@@ -1,7 +1,9 @@
 # RayScan OA 专项检测规则文档
 
-> 版本：v1.0 ｜ 2026-08-05（S3 三级链路深化后）
-> 代码位置：`wvs/modules/oa/detector.py`（OA_RULES / OA_CONTENT_FINGERPRINTS）
+> 版本：v1.1 ｜ 2026-09-09（T3.3 规则外部化后）
+> 规则单一事实源：**`rules/oa/*.yaml`**（每文件一种 OA，含 path/method/evidence/max_version/status_codes 元数据；新增 OA 只需加 YAML）
+> 加载器：`wvs/modules/oa/rules_loader.py`（用户覆盖包 `~/.rayscan/rules/oa/` 同名整体覆盖内置；YAML 包缺失时回退 `wvs/modules/oa/detector.py` 的 `BUILTIN_OA_RULES` 硬编码，行为不变）
+> 执行器：`wvs/modules/oa/detector.py`（三级链路逻辑，只执行不定义规则）
 > 误报治理基线：S1（2026-08-05）起，所有检查项仅 **HTTP 200 + 响应证据验证** 通过才报漏洞。
 
 ---

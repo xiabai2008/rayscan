@@ -1,0 +1,29 @@
+# RayScan OA 检测规则 — 金蝶-Kingdee
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 金蝶-Kingdee
+paths:
+- /kingdee/
+- /k3cloud/
+- /k3/
+keywords:
+- kingdee
+- 金蝶
+- k3cloud
+fingerprints:
+- match: title
+  value: 金蝶
+- match: html
+  value: kingdee
+- match: html
+  value: k3cloud
+checks:
+- path: /k3cloud/Kingdee.BOS.ServiceFacade.ServicesStub.InstallService.CommonInstallService.commoninstallService.commoninstallServiceHttpFlowService
+  type: rce
+  severity: critical
+- path: /CommonFileServer/c:/windows/win.ini
+  type: file_read
+  severity: high
+  evidence: '[fonts]'
