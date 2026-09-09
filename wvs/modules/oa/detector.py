@@ -22,6 +22,7 @@ from typing import Dict, List, Optional
 
 from ...models import Confidence, ScanTarget, Severity, Vulnerability, VulnerabilityType
 from ..base import DetectionModule, ModuleInfo, register_module
+from .rules_loader import SEVERITY_MAP, VULN_TYPE_MAP, load_oa_pack  # noqa: F401 (re-export)
 
 logger = logging.getLogger("wvs.module.oa")
 
@@ -39,10 +40,11 @@ _OA_ALIASES = {
     "万户": "万户-Whir",
 }
 
-# ── OA 系统指纹与检测规则 ──────────────────────────────────────
-# 每个 OA 系统的识别路径、关键词、检测端点
-
-OA_RULES: Dict[str, dict] = {
+# ── OA 系统检测规则（内置硬编码回退） ─────────────────────────
+# T3.3 规则外部化后，检测矩阵的单一事实源是 rules/oa/*.yaml；
+# 下面的 BUILTIN_OA_RULES 仅在规则包缺失/无效时兜底（保证 YAML 缺失时
+# 检测行为与外部化前完全一致）。新增一种 OA 只需在 rules/oa/ 加 YAML。
+BUILTIN_OA_RULES: Dict[str, dict] = {
     "泛微-Ecology": {
         "paths": ["/weaver/", "/ecology/", "/wui/"],
         "keywords": ["weaver", "ecology", "e-cology", "eoffice"],
@@ -257,35 +259,17 @@ OA_RULES: Dict[str, dict] = {
     },
 }
 
-# ── 严重程度映射 ──────────────────────────────────────────────
-SEVERITY_MAP = {
-    "critical": Severity.CRITICAL,
-    "high": Severity.HIGH,
-    "medium": Severity.MEDIUM,
-    "low": Severity.LOW,
-    "info": Severity.INFO,
-}
+# ── 严重程度 / 漏洞类型词表 ──────────────────────────────────
+# T3.3 起定义移至 rules_loader.py（规则 schema 与执行共用一份词表），此处 re-export
+# 保持 `from wvs.modules.oa.detector import SEVERITY_MAP, VULN_TYPE_MAP` 兼容。
 
-# ── 漏洞类型映射 ──────────────────────────────────────────────
-VULN_TYPE_MAP = {
-    "sqli": VulnerabilityType.SQL_INJECTION,
-    "rce": VulnerabilityType.REMOTE_CODE_EXECUTION,
-    "lfi": VulnerabilityType.LFI,
-    "file_read": VulnerabilityType.LFI,
-    "file_upload": VulnerabilityType.REMOTE_CODE_EXECUTION,
-    "auth_bypass": VulnerabilityType.BROKEN_AUTH,
-    "unauth": VulnerabilityType.BROKEN_AUTH,
-    "info_disclosure": VulnerabilityType.INFO_DISCLOSURE,
-    "info": VulnerabilityType.INFO_DISCLOSURE,
-}
-
-# ── 响应内容指纹（S3 三级链路第 1 级） ─────────────────────────
+# ── 响应内容指纹（内置硬编码回退，S3 三级链路第 1 级） ─────────
 # 从首页 HTML/响应头识别 OA 类型（URL 匹配之外的第二通道）。
 # match 类型:
 #   html   — 响应正文小写子串
 #   title  — <title> 标签内容
 #   header — 响应头（name 必填；value 为 None 表示头存在即命中）
-OA_CONTENT_FINGERPRINTS: Dict[str, List[Dict[str, str]]] = {
+BUILTIN_OA_CONTENT_FINGERPRINTS: Dict[str, List[Dict[str, str]]] = {
     "泛微-Ecology": [
         {"match": "html", "value": "ecology"},
         {"match": "html", "value": "e-cology"},
@@ -350,6 +334,49 @@ OA_CONTENT_FINGERPRINTS: Dict[str, List[Dict[str, str]]] = {
         {"match": "html", "value": "confluence"},
     ],
 }
+
+# ── T3.3 规则外部化：加载 YAML 规则包，内置硬编码兜底 ──────────
+# 单一事实源 = rules/oa/*.yaml（含 path/method/evidence/max_version/status_codes
+# 元数据）；两个规则目录都不存在 YAML 时，下面的 OA_RULES 等于 BUILTIN_*，
+# 检测行为与外部化前完全一致。
+_oa_pack = load_oa_pack(
+    fallback_rules=BUILTIN_OA_RULES,
+    fallback_fingerprints=BUILTIN_OA_CONTENT_FINGERPRINTS,
+)
+OA_RULES: Dict[str, dict] = _oa_pack.rules
+OA_CONTENT_FINGERPRINTS: Dict[str, List[Dict[str, str]]] = _oa_pack.fingerprints
+# 每个 OA 规则的实际来源（YAML 路径 / "builtin"），供审计与调试
+OA_RULE_SOURCES: Dict[str, str] = _oa_pack.sources
+
+
+# ── OA 名 → Nuclei tech_stack 标签（T3.4 模板策展共用映射） ────
+# keys 需覆盖 OA_RULES 的全部内置名；YAML 新增的 OA 未映射时策展退回通用选择。
+OA_TO_TECH: Dict[str, str] = {
+    "泛微-Ecology": "weaver",
+    "通达OA": "tongda",
+    "金蝶-Kingdee": "kingdee",
+    "蓝凌-Landray": "landray",
+    "致远-Seeyon": "seeyon",
+    "用友-Yonyou": "yonyou",
+    "禅道-Zentao": "zentao",
+    "万户-Whir": "whir",
+    "Nacos": "nacos",
+    "Spring": "spring",
+    "Jenkins": "jenkins",
+    "Confluence": "confluence",
+}
+
+
+def oa_tech_stack_for(oa_name: Optional[str]) -> List[str]:
+    """OA 名（规则全名或 scanner 注入的短名）→ Nuclei 模板策展的 tech 标签列表。
+
+    未知名（如纯 YAML 新增、尚无 tech 映射的 OA）返回 []，调用方应退回通用模板选择。
+    """
+    if not oa_name:
+        return []
+    name = _OA_ALIASES.get(oa_name, oa_name)
+    tech = OA_TO_TECH.get(name)
+    return [tech] if tech else []
 
 
 @register_module
@@ -858,7 +885,7 @@ class OADetector(DetectionModule):
         return vulns
 
     async def _load_oa_templates(self, oa_name: str) -> List[str]:
-        """加载 OA 对应的 Nuclei 模板（通过模板管理器）"""
+        """加载 OA 对应的 Nuclei 模板（通过模板管理器，按 tech 标签精筛）"""
         try:
             from ...core.nuclei_template_manager import get_template_manager
 
@@ -866,28 +893,12 @@ class OADetector(DetectionModule):
             if not tm.is_ready:
                 return []
 
-            # OA 名称转 tech_stack 标签
-            oa_to_tech = {
-                "泛微-Ecology": "weaver",
-                "通达OA": "tongda",
-                "金蝶-Kingdee": "kingdee",
-                "蓝凌-Landray": "landray",
-                "致远-Seeyon": "seeyon",
-                "用友-Yonyou": "yonyou",
-                "禅道-Zentao": "zentao",
-                "万户-Whir": "whir",
-                "Nacos": "nacos",
-                "Spring": "spring",
-                "Jenkins": "jenkins",
-                "Confluence": "confluence",
-            }
-
-            tech = oa_to_tech.get(oa_name)
-            if not tech:
+            tech_list = oa_tech_stack_for(oa_name)
+            if not tech_list:
                 return []
 
             templates = tm.get_templates_for_target(
-                tech_stack=[tech],
+                tech_stack=tech_list,
                 severities=["critical", "high", "medium"],
                 max_templates=200,
             )

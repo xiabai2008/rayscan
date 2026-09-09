@@ -23,12 +23,27 @@ All code changes must be logged in this file. Each entry should include:
 
 ### 2026-09-09 (v2.2 工程伴随⑩ — scan() 内联爬扫循环/checkpoint/resume 迁入编排器 Stage)
 - **单趟编排流水线**：`WAVScanner.scan()` 收敛为 facade（模块加载 + header + cookie 注入 + 编排器单趟流水线 + 报告统计段）；流水线 WAF→LabAuth→OA→Resume→CrawlDetect→Dedup→Nuclei→AIVerify→Checkpoint，单 stage 失败告警不阻断语义保持不变
-- **新增 Stage（5 个）**：ResumeStage（--resume 恢复:checkpoint 漏洞并入 ctx.raw_vulns + 已完成模块跳过,恢复时序仍在 WAF/OA 检测之后）；CrawlDetectStage（Phase 1/2 整块:分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder;每批限流 checkpoint、超时预算、T0 兜底 seed 原样保留）；NucleiStage（Phase 3.5）；AIVerifyStage（Phase 3.6）；CheckpointStage（最终落盘——checkpoint 需含 Nuclei 合并结果,故与 Dedup 同趟顺序执行）
+- **新增 Stage（5 个）**：ResumeStage（--resume 恢复:checkpoint 漏洞并入 ctx.raw_vulns + 已完成模块跳过,恢复时序仍在 WAF/OA 检测之后）；CrawlDetectStage（Phase 1/2 整块:分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder;每批限流 checkpoint、超时预算、T0 兜底 seed 原样保留）；NucleiStage（Phase 3.5,含 T3.4 策展审计字段透传:ctx.result → result.template_selection）；AIVerifyStage（Phase 3.6）；CheckpointStage（最终落盘——checkpoint 需含 Nuclei 合并结果,故与 Dedup 同趟顺序执行）
 - **编排层吞异常收紧为可观测**：stage 失败 = WARNING(带 exc_info 堆栈) + 结构化记录 `ctx.stage_failures`；facade 转入 `result.errors`（随 JSON 报告落盘,scan() docstring "错误记录到 result.errors" 首次成真）+ `_stats["errors"]` 计数
 - **纯结构迁移**：检测行为零变化（CLI/报告格式/参数零变化）；报告统计/排序段保留在 facade——该段异常需向上传播（CLI 超时/异常抢救依赖），不走 stage 失败不阻断语义
-- **验证**：410 collected 全绿（新增 11 项编排单测,含流水线顺序锁与 facade 端到端）；黄金矩阵 `--only sqli,idor` 冒烟通过
-- 影响文件：`wvs/core/{scanner,stages,orchestrator}.py`、`tests/test_orchestrator.py`、`CHANGELOG.md`、`docs/rayscan-upgrade-roadmap-2026-09-07.md`
-- 注意：本迁移在并发会话冲突下经独立 worktree 分支 `feat/v22-orchestrator-stages` 完成（小步 4 提交）
+- **验证**：合并 master(T3.3/T3.4) 后全量测试全绿；黄金矩阵 `--only sqli,idor` 冒烟通过（与迁移前 HEAD 基线逐字节一致,含 idor 静态页 4 项 WARN extras——已登记 BASELINES §3）
+- 影响文件：`wvs/core/{scanner,stages,orchestrator}.py`、`tests/test_orchestrator.py`、`CHANGELOG.md`、`docs/rayscan-upgrade-roadmap-2026-09-07.md`、`docs/BASELINES.md`
+- 注意：本迁移在并发会话冲突下经独立 worktree 分支 `feat/v22-orchestrator-stages` 完成（小步 4 提交 + 1 merge）
+
+### 2026-09-09 (v2.3 T3.4 Nuclei 模板策展 — 按 OA 指纹精选模板 + 审计字段)
+- **策展模式**：`get_templates_for_target(..., curated=True)`——指纹命中技术栈只取 tech/CVE 匹配模板,淘汰泛匹配(severity 兜底/misconfig 补充不再注入);tech 模板全量保留(检出不丢失);未命中指纹走原通用选择(行为不变)
+- **接线**：detector 导出 `OA_TO_TECH`/`oa_tech_stack_for()`(兼容注入短名;纯 YAML 新增 OA 无映射安全退通用);scanner `_oa_tech_hints()`(getattr 防御读 `_modules`,兼容 bare 实例)→ `_run_nuclei` 传 `tech_stack` → `NucleiIntegration.scan()` CLI 分支策展(max 200)
+- **审计字段**：`NucleiTemplateManager.last_selection`/`NucleiIntegration.last_selection`(mode/tech_stack/candidates/selected/truncated/templates≤50;builtin-fallback/template-dir/none 模式)→ `ScanResult.template_selection` 新字段 + JSON 报告 `template_selection` 键(Nuclei 未跑则省略)
+- **测试**：`tests/test_nuclei_curation.py` 17 用例(策展精选/数量下降+检出不丢失/空命中/通用不回归/审计/integration 透传/scanner 接线/报告两态);`test_s2_resume.py` FakeNuclei 签名补 `tech_stack=None`;全量 441 通过
+- 影响文件：`wvs/core/{nuclei_template_manager,scanner}.py`、`wvs/integrations/nuclei_integration.py`、`wvs/modules/oa/detector.py`、`wvs/models.py`、`wvs/reporting/json_reporter.py`、`tests/{test_nuclei_curation,test_s2_resume}.py`、`CHANGELOG.md`
+
+### 2026-09-09 (v2.3 T3.3 OA 规则外部化 — rules/oa YAML 规则包)
+- **规则包**：`rules/oa/*.yaml` 12 文件（每文件一种 OA）,从 `OA_RULES`/`OA_CONTENT_FINGERPRINTS` 机械转录（一次性脚本生成 + round-trip 逐字段校验）,检查项含 path/method/params/param_type/type/severity/evidence/min_version/max_version/status_codes 全部元数据
+- **加载器**：新增 `wvs/modules/oa/rules_loader.py`——目录优先级 `~/.rayscan/rules/oa/`（用户覆盖,同名 OA 整体替换）> 仓库 `rules/oa/`;校验失败（缺 path/type/severity、未知字段笔误）丢弃该检查项并告警（宁漏报不弱化验证语义）;数字形标量自动转 str;`SEVERITY_MAP`/`VULN_TYPE_MAP` 移至加载器,detector re-export 兼容
+- **detector.py 改为执行器**：`OA_RULES`/`OA_CONTENT_FINGERPRINTS` = 加载结果（保留原名,测试兼容）,新增 `OA_RULE_SOURCES` 来源审计;硬编码改名 `BUILTIN_*` 仅作回退（两个规则目录都无 YAML → 行为与外部化前一致）
+- **rules 管理打通**：`DEFAULT_POC_CONFIG` 新增 `oa` 来源（`~/.rayscan/rules/oa/`,rules status/update 可见,可放独立 git 仓库增量同步）
+- **验收**：`tests/test_oa_rules_loader.py` 16 用例（parity/回退/纯 YAML 新增 OA/覆盖/损坏跳过/校验）;黄金矩阵 `--only oa` 双靶标 PASS（oa_vuln 检出 1 / oa_fixed 0 误报）——20/20 基线不变
+- 影响文件：`rules/oa/*.yaml`、`rules/README.md`、`wvs/modules/oa/{rules_loader,detector}.py`、`wvs/core/poc_source_manager.py`、`tests/test_oa_rules_loader.py`、`docs/OA_RULES.md`、`CHANGELOG.md`
 
 ### 2026-09-08 (v2.2 T2.4/T2.5 + 矩阵新模块靶标 + 6 真实缺陷修复)
 - **T2.4 登录态维持**：HTTPPool 检测会话失效（401/登录重定向）→ 自动重登回调（CLI 认证后注册,全 auth 类型）→ 刷新凭据重放当前请求；10s 冷却防 401 探测引发反复登录；成功后清 GET 去重缓存；`tests/test_session_reauth.py` 3 用例（真实本地服务全链路）

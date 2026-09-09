@@ -54,6 +54,7 @@ class ScanContext:
         self.config = scanner.config
         self.session = scanner.session
         self.target = None  # 当前扫描目标(ScanTarget)
+        self.result = None  # 当前 ScanResult(NucleiStage 写入 template_selection 审计字段)
         self.endpoints: List[Any] = []  # 爬取发现的端点
         self.raw_vulns: List[Any] = []  # 去重前的原始漏洞
         self.unique_vulns: List[Any] = []  # 去重后的漏洞

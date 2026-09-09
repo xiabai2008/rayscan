@@ -83,6 +83,8 @@ class NucleiIntegration:
             except Exception as e:
                 logger.debug(f"[Nuclei] Template manager init skipped: {e}")
         self.timeout = self.config.get("timeout", 60)
+        # T3.4 模板策展审计：最近一次扫描的模板选择记录（随报告输出）
+        self.last_selection: Optional[Dict[str, Any]] = None
         self._stats = {
             "total_scanned": 0,
             "vulnerabilities_found": 0,
@@ -118,6 +120,7 @@ class NucleiIntegration:
         cookies: Optional[Dict[str, str]] = None,
         headers: Optional[Dict[str, str]] = None,
         severities: Optional[List[str]] = None,
+        tech_stack: Optional[List[str]] = None,
     ) -> List[Vulnerability]:
         """
         Scan the target URL using Nuclei
@@ -127,6 +130,8 @@ class NucleiIntegration:
             cookies: Cookie dictionary
             headers: HTTP headers
             severities: Severity levels to check (default all)
+            tech_stack: 已确认的目标技术栈（T3.4 模板策展——OA 指纹命中的 tech 标签；
+                提供时启用策展模式，淘汰泛匹配模板）
 
         Returns:
             List of discovered security issues (converted to Vulnerability objects)
@@ -135,7 +140,7 @@ class NucleiIntegration:
             severities = DEFAULT_SEVERITIES
 
         if self.is_available:
-            return await self._cli_scan_async(url, cookies, headers, severities)
+            return await self._cli_scan_async(url, cookies, headers, severities, tech_stack)
         else:
             return await self._fallback_scan(url, severities)
 
@@ -185,6 +190,7 @@ class NucleiIntegration:
         cookies: Optional[Dict[str, str]],
         headers: Optional[Dict[str, str]],
         severities: List[str],
+        tech_stack: Optional[List[str]] = None,
     ) -> List[Vulnerability]:
         """
         Actually invoke nuclei.exe
@@ -203,11 +209,16 @@ class NucleiIntegration:
             cmd.extend(["-severity", sev])
 
         # Template selection - use smart selection when available
+        # T3.4 策展模式：目标指纹命中技术栈（如 OA）时只用 tech/CVE 匹配模板，
+        # 淘汰泛匹配；未命中技术栈时保持通用选择。
         templates_used = False
         if self.use_template_manager and self.template_manager and self.template_manager.is_ready:
+            curated = bool(tech_stack)
             selected = self.template_manager.get_templates_for_target(
+                tech_stack=tech_stack or None,
                 severities=["critical", "high", "medium"],
-                max_templates=500,
+                max_templates=200 if curated else 500,
+                curated=curated,
             )
             if selected:
                 # S2 修复：直接传模板文件列表（nuclei -t 接受逗号分隔），
@@ -219,8 +230,15 @@ class NucleiIntegration:
                     cmd.extend(["-t", ",".join(picked)])
                     templates_used = True
                     logger.info(f"[Nuclei] Smart-selected {len(picked)} templates (of {len(selected)} selected)")
-        if not templates_used and self.templates_dir and os.path.exists(self.templates_dir):
-            cmd.extend(["-t", self.templates_dir])
+            if self.template_manager.last_selection:
+                self.last_selection = dict(self.template_manager.last_selection)
+                if templates_used and len(picked) < len(selected):
+                    self.last_selection["cli_picked"] = len(picked)
+        if not templates_used:
+            self.last_selection = {"mode": "template-dir" if self.templates_dir else "none"}
+            if self.templates_dir and os.path.exists(self.templates_dir):
+                cmd.extend(["-t", self.templates_dir])
+                self.last_selection = {"mode": "template-dir", "dir": self.templates_dir}
 
         # Timeout
         cmd.extend(["-timeout", str(self.timeout)])
@@ -382,6 +400,7 @@ class NucleiIntegration:
         """
         logger.info(f"[Nuclei] Scanning with built-in fallback templates: {url}")
         self._stats["fallback_used"] = True
+        self.last_selection = {"mode": "builtin-fallback", "reason": "nuclei CLI 不可用或执行失败"}
 
         vulnerabilities = []
         base_url = url.rstrip("/")

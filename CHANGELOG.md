@@ -5,7 +5,7 @@ All notable changes to RayScan (formerly WVS) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**410 collected**（2026-09-09）。
+> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**443 collected**（2026-09-09，Orchestrator 迁移分支合并 master T3.3/T3.4 后）。
 
 ---
 
@@ -14,10 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Refactored — v2.2 工程伴随⑩：scan() 内联爬扫循环/checkpoint/resume 迁入编排器 Stage
 
 - **单趟编排流水线**：`WAVScanner.scan()` 收敛为 facade（模块加载 + header + cookie 注入 + 单趟编排器流水线 + 报告统计段），内联的爬取-检测循环、checkpoint 落盘、--resume 恢复全部消失；顺序：WAF→LabAuth→OA→Resume→CrawlDetect→Dedup→Nuclei→AIVerify→Checkpoint，单 stage 失败告警不阻断语义保持不变
-- **新增 Stage（5 个）**：`ResumeStage`（checkpoint 漏洞合并到 ctx.raw_vulns + 已完成模块跳过，恢复时序保持在 WAF/OA 检测之后）；`CrawlDetectStage`（Phase 1/2 整块：分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder，每批限流 checkpoint 与 T0 兜底 seed 原样保留）；`NucleiStage`（Phase 3.5）；`AIVerifyStage`（Phase 3.6）；`CheckpointStage`（最终落盘——为使 checkpoint 包含 Nuclei 合并结果，三阶段与 Dedup 同趟顺序执行）
+- **新增 Stage（5 个）**：`ResumeStage`（checkpoint 漏洞合并到 ctx.raw_vulns + 已完成模块跳过，恢复时序保持在 WAF/OA 检测之后）；`CrawlDetectStage`（Phase 1/2 整块：分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder，每批限流 checkpoint 与 T0 兜底 seed 原样保留）；`NucleiStage`（Phase 3.5，含 T3.4 策展审计字段透传）；`AIVerifyStage`（Phase 3.6）；`CheckpointStage`（最终落盘——为使 checkpoint 包含 Nuclei 合并结果，三阶段与 Dedup 同趟顺序执行）
 - **编排层吞异常收紧为可观测**：stage 失败由"仅一行 WARNING"升级为 WARNING 带 exc_info 堆栈 + 结构化记录 `ctx.stage_failures`；facade 将失败转入 `result.errors`（随 JSON 报告落盘，scan() docstring 的"错误记录到 result.errors"首次成真）与 `_stats["errors"]` 计数
 - **纯结构迁移**：检测行为零变化（CLI/报告格式/参数零变化）；报告统计/排序段保留在 facade——该段异常需向上传播（CLI 超时/异常抢救依赖），不走 stage 失败不阻断语义
-- **测试**：新增 11 项编排单测（ResumeStage 2 + CrawlDetectStage 2 + 新 Stage/facade 7，含流水线顺序锁与 facade 端到端），410 collected 全绿；黄金矩阵 `--only sqli,idor` 冒烟通过
+- **测试**：新增 11 项编排单测（ResumeStage 2 + CrawlDetectStage 2 + 新 Stage/facade 7，含流水线顺序锁与 facade 端到端）；黄金矩阵 `--only sqli,idor` 冒烟通过（与迁移前 HEAD 基线逐字节一致）
+
+### Added — v2.3 T3.4 Nuclei 模板策展
+
+- **策展模式**：`get_templates_for_target(..., curated=True)`——目标指纹命中技术栈时只用 tech 匹配 + CVE 命中的模板，淘汰泛匹配（severity 兜底/misconfig 补充不再注入）；tech 匹配模板全量保留（检出不丢失）；未命中指纹保持通用选择（行为不变）
+- **指纹→模板接线**：detector 导出 `OA_TO_TECH` 映射与 `oa_tech_stack_for()`（兼容 scanner 注入短名，纯 YAML 新增 OA 无映射时安全退回通用选择）；scanner `_run_nuclei` 读取 oa 模块 `_detected_oa` → 传 `tech_stack` 给 `NucleiIntegration.scan()`；CLI 分支 tech 命中时走策展（max 200）
+- **可审计字段**：`NucleiTemplateManager.last_selection` 记录 `{mode: curated/generic, tech_stack, severities, candidates, selected, truncated, templates[≤50]}`；`NucleiIntegration.last_selection` 透传（含 `builtin-fallback`/`template-dir`/`none` 模式）；`ScanResult.template_selection` 新字段随 `to_dict()` 落盘，JSON 报告 `_build_standard` 输出 `template_selection` 键（未运行 Nuclei 阶段时省略）
+- **验收**：新增 `tests/test_nuclei_curation.py`（17 用例：策展只选 tech 模板、数量下降且检出不丢失（策展⊆通用且无泛匹配混入）、无 tech 命中返回空、通用模式不回归、审计字段、integration 透传/回退记录、scanner 接线（含短名/未知名/无 oa 模块）、报告字段有无两态）；全量测试 441 通过
+
+### Added — v2.3 T3.3 OA 规则外部化
+
+- **规则包**：`rules/oa/*.yaml`（12 文件 × 12 种 OA，每文件一种 OA）——`name/paths/keywords/fingerprints/checks` 完整迁移，检查项含 `path/method/params/param_type/type/severity/evidence/min_version/max_version/status_codes` 全部元数据；由一次性脚本从硬编码机械转录 + round-trip 逐字段校验
+- **加载器** `wvs/modules/oa/rules_loader.py`：目录优先级 `~/.rayscan/rules/oa/`（用户覆盖，同名 OA 整体替换）> 仓库 `rules/oa/`；校验失败（缺 path/type/severity、未知字段笔误如 evidince）丢弃该检查项并告警（宁漏报不弱化验证语义）；数字形标量（evidence: 54289）自动转 str；`SEVERITY_MAP`/`VULN_TYPE_MAP` 词表移至加载器（schema 与执行共用），detector re-export 保持兼容
+- **detector.py 改为执行器**：`OA_RULES`/`OA_CONTENT_FINGERPRINTS` 变为加载结果（保留原名，测试兼容），新增 `OA_RULE_SOURCES`（每 OA 规则来源审计字段）；内置硬编码改名 `BUILTIN_OA_RULES`/`BUILTIN_OA_CONTENT_FINGERPRINTS` 仅作回退——**两个规则目录都无 YAML 时行为与外部化前完全一致**
+- **rules 管理**：`DEFAULT_POC_CONFIG` 新增 `oa` 来源（`~/.rayscan/rules/oa/`，`rules status/update` 可见，支持用户放独立 git 仓库增量同步）
+- **验收**：新增测试 `tests/test_oa_rules_loader.py`（16 用例：YAML↔内置 parity、缺失回退、纯 YAML 新增 OA、用户覆盖、损坏文件跳过、校验丢弃/类型纠正、header 指纹 null 保留）；黄金矩阵 `--only oa` 双靶标 PASS（oa_vuln 检出 1 / oa_fixed 0 误报，20/20 基线不变）——改的是规则存放处，不是检测行为
 
 ### Added — v2.2 T2.4/T2.5 + 检测器真实性修复 + 新模块靶标
 

@@ -1,0 +1,26 @@
+# RayScan OA 检测规则 — Jenkins
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: Jenkins
+paths:
+- /jenkins/
+- /jenkins
+keywords:
+- jenkins
+fingerprints:
+- match: header
+  name: x-jenkins
+  value: null
+- match: title
+  value: jenkins
+- match: html
+  value: jenkins
+checks:
+- path: /jenkins/script
+  type: rce
+  severity: critical
+- path: /script
+  type: rce
+  severity: critical

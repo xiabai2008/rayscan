@@ -344,6 +344,10 @@ class NucleiStage(ScanStage):
             return
         try:
             nuclei_vulns = await self.scanner._run_nuclei(ctx.target)
+            # T3.4 模板策展审计:选择过程随报告输出(可审计字段)
+            result = ctx.result
+            if result is not None and self.scanner._nuclei_integration is not None:
+                result.template_selection = getattr(self.scanner._nuclei_integration, "last_selection", None)
             if nuclei_vulns:
                 logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings(已合并)")
                 ctx.unique_vulns = self.scanner._deduplicate(ctx.unique_vulns + nuclei_vulns)

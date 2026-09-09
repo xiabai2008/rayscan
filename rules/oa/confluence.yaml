@@ -1,0 +1,30 @@
+# RayScan OA 检测规则 — Confluence
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: Confluence
+paths:
+- /confluence/
+keywords:
+- confluence
+- atlassian
+fingerprints:
+- match: title
+  value: confluence
+- match: html
+  value: atlassian
+- match: html
+  value: confluence
+checks:
+- path: /confluence/
+  type: info
+  severity: info
+- path: /pages/doenterpagevariables.action
+  type: rce
+  severity: critical
+  method: POST
+  param_type: body
+  params:
+    queryString: '%5cu0027%2b%7b233*233%7d%2b%5cu0027'
+  evidence: '54289'

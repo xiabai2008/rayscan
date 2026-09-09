@@ -1,0 +1,35 @@
+# RayScan OA 检测规则 — 用友-Yonyou
+# 由 T3.3 规则外部化生成，加载器: wvs/modules/oa/rules_loader.py
+# 字段说明见 rules/README.md 与 docs/OA_RULES.md
+# 注意: evidence/max_version 等字符串值必须加引号（防止 YAML 解析成数字）
+
+name: 用友-Yonyou
+paths:
+- /yonyou/
+- /ufida/
+- /nc/
+keywords:
+- yonyou
+- 用友
+- ufida
+- nccloud
+fingerprints:
+- match: title
+  value: 用友
+- match: html
+  value: yonyou
+- match: html
+  value: ufida
+- match: html
+  value: nc cloud
+checks:
+- path: /servlet/~uapss/uploadServlet
+  type: rce
+  severity: critical
+- path: /portal/file
+  params:
+    cmd: getFileLocal
+    fileid: ..%2F..%2F..%2F..%2Fwebapps%2Fnc_web%2FWEB-INF%2Fweb.xml
+  type: file_read
+  severity: high
+  evidence: <web-app

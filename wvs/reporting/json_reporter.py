@@ -51,7 +51,7 @@ class JSONReporter:
 
     def _build_standard(self, result: ScanResult) -> Dict[str, Any]:
         """Build standard JSON format"""
-        return {
+        data = {
             "schema": "wvs-report-v1",
             "generated_at": datetime.now().isoformat(),
             "scanner": {"name": "WVS", "version": __version__, "vendor": "OpenClaw"},
@@ -72,6 +72,10 @@ class JSONReporter:
             "vulnerabilities": [self._vuln_to_dict(v) for v in result.vulnerabilities],
             "errors": result.errors if result.errors else [],
         }
+        # T3.4 Nuclei 模板策展审计：模板选择过程可审计（未运行 Nuclei 阶段时省略）
+        if getattr(result, "template_selection", None):
+            data["template_selection"] = result.template_selection
+        return data
 
     def _vuln_to_dict(self, v: Vulnerability) -> Dict[str, Any]:
         """Convert vulnerability to dictionary"""
