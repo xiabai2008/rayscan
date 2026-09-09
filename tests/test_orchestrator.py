@@ -87,17 +87,31 @@ def test_orchestrator_continues_after_stage_failure() -> None:
 def test_scanner_has_default_orchestrator() -> None:
     scanner = _make_scanner()
     assert scanner._orchestrator is not None
-    assert len(scanner._orchestrator.stages) >= 4  # WAF/Lab/OA/Dedup
+    names = [s.name for s in scanner._orchestrator.stages]
+    assert names == [
+        "waf-detection",
+        "lab-auth",
+        "oa-detection",
+        "resume",
+        "crawl-detect",
+        "dedup",
+        "nuclei",
+        "ai-verify",
+        "checkpoint",
+    ]
 
 
 def test_prebuilt_stages_importable() -> None:
-    from wvs.core.stages import LabAuthStage, OADetectionStage, ResumeStage
+    from wvs.core.stages import AIVerifyStage, CheckpointStage, LabAuthStage, NucleiStage, OADetectionStage, ResumeStage
 
     scanner = _make_scanner()
     assert WAFDetectionStage(scanner).name == "waf-detection"
     assert LabAuthStage(scanner).name == "lab-auth"
     assert OADetectionStage(scanner).name == "oa-detection"
     assert ResumeStage(scanner).name == "resume"
+    assert NucleiStage(scanner).name == "nuclei"
+    assert AIVerifyStage(scanner).name == "ai-verify"
+    assert CheckpointStage(scanner).name == "checkpoint"
     assert DedupStage(scanner).name == "dedup"
 
 
@@ -218,6 +232,182 @@ def test_crawl_detect_stage_empty_crawl_seeds_fallback_endpoint() -> None:
     asyncio.run(_run())
     assert len(ctx.endpoints) == 1
     assert ctx.endpoints[0].url == "http://example.com/"
+
+
+def test_nuclei_stage_merges_findings_into_unique() -> None:
+    """NucleiStage:外部引擎发现与主流程发现合并去重。"""
+    from wvs.core.stages import NucleiStage
+    from wvs.models import ScanTarget, Severity, Vulnerability, VulnerabilityType
+
+    scanner = _make_scanner()
+    main_v = Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        url="http://example.com/a?id=1",
+        severity=Severity.HIGH,
+        title="t1",
+        description="d",
+    )
+    nuclei_v = Vulnerability(
+        type=VulnerabilityType.INFO_DISCLOSURE,
+        url="http://example.com/.git/config",
+        severity=Severity.MEDIUM,
+        title="t2",
+        description="d",
+    )
+
+    async def fake_nuclei(target):
+        return [nuclei_v]
+
+    scanner._run_nuclei = fake_nuclei
+
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+    ctx.unique_vulns = [main_v]
+
+    async def _run():
+        await NucleiStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert {v.url for v in ctx.unique_vulns} == {"http://example.com/a?id=1", "http://example.com/.git/config"}
+
+
+def test_nuclei_stage_skipped_when_disabled() -> None:
+    from wvs.core.stages import NucleiStage
+    from wvs.models import ScanTarget
+
+    scanner = _make_scanner()
+    scanner.config.set("nuclei.enabled", False)
+
+    async def fake_nuclei(target):
+        raise AssertionError("nuclei.enabled=False 时不应调用 _run_nuclei")
+
+    scanner._run_nuclei = fake_nuclei
+
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+
+    async def _run():
+        await NucleiStage(scanner).run(ctx)
+
+    asyncio.run(_run())  # 不抛异常即通过
+
+
+def test_ai_verify_stage_noop_when_disabled() -> None:
+    """ai.verify 默认关:AIVerifyStage 不改写 unique_vulns。"""
+    from wvs.core.stages import AIVerifyStage
+    from wvs.models import ScanTarget, Severity, Vulnerability, VulnerabilityType
+
+    scanner = _make_scanner()
+    v = Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        url="http://example.com/?id=1",
+        severity=Severity.HIGH,
+        title="t",
+        description="d",
+    )
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+    ctx.unique_vulns = [v]
+
+    async def _run():
+        await AIVerifyStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert ctx.unique_vulns == [v]
+
+
+def test_checkpoint_stage_saves_final_state() -> None:
+    """CheckpointStage:最终 checkpoint 落盘(URL/去重后漏洞/定型端点表)。"""
+    from wvs.core.stages import CheckpointStage
+    from wvs.models import ScanTarget, Severity, Vulnerability, VulnerabilityType
+
+    scanner = _make_scanner()
+    v = Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        url="http://example.com/?id=1",
+        severity=Severity.HIGH,
+        title="t",
+        description="d",
+    )
+    saved = {}
+
+    def fake_save(url, vulns, endpoints):
+        saved["url"] = url
+        saved["vulns"] = list(vulns)
+        saved["endpoints"] = list(endpoints)
+
+    scanner._save_checkpoint = fake_save
+
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+    ctx.unique_vulns = [v]
+    ep = ScanTarget(url="http://example.com/")  # 端点形态不限,透传即可
+    ctx.endpoints = [ep]
+
+    async def _run():
+        await CheckpointStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert saved["url"] == "http://example.com/"
+    assert saved["vulns"] == [v]
+    assert saved["endpoints"] == [ep]
+
+
+def test_scan_facade_runs_single_pipeline() -> None:
+    """facade 端到端:scan() 单趟流水线 → 爬取+检测+Nuclei 合并+checkpoint 落盘+报告。"""
+    from wvs.core.crawler import DiscoveredEndpoint
+    from wvs.models import ScanTarget, Severity, Vulnerability, VulnerabilityType
+
+    scanner = _make_scanner()
+    ep = DiscoveredEndpoint(url="http://example.com/", method="GET", source_url="http://example.com/", source_depth=1)
+    _stub_crawler(scanner, [ep])
+    scanner.load_module("sqli")
+
+    sqli_v = Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        url="http://example.com/a?id=1",
+        severity=Severity.HIGH,
+        title="t1",
+        description="d",
+    )
+
+    async def fake_run_module(mod_name, target, batch, concurrency, global_sem):
+        return [sqli_v]
+
+    scanner._run_module_concurrent = fake_run_module
+
+    nuclei_v = Vulnerability(
+        type=VulnerabilityType.INFO_DISCLOSURE,
+        url="http://example.com/.git/config",
+        severity=Severity.HIGH,
+        title="t2",
+        description="d",
+    )
+
+    async def fake_nuclei(target):
+        return [nuclei_v]
+
+    scanner._run_nuclei = fake_nuclei
+
+    saved = {}
+
+    def fake_save(url, vulns, endpoints):
+        saved["url"] = url
+        saved["vulns"] = list(vulns)
+        saved["endpoints"] = len(endpoints)
+
+    scanner._save_checkpoint = fake_save
+
+    result = asyncio.run(scanner.scan(ScanTarget(url="http://example.com/")))
+    assert {v.url for v in result.vulnerabilities} == {
+        "http://example.com/a?id=1",
+        "http://example.com/.git/config",
+    }
+    assert result.endpoints_found == 1
+    assert result.modules_run == 1
+    assert saved["url"] == "http://example.com/"
+    assert len(saved["vulns"]) == 2
+    assert saved["endpoints"] == 1
 
 
 def test_dedup_stage_empty() -> None:

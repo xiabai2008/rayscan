@@ -323,7 +323,72 @@ class DedupStage(ScanStage):
     name = "dedup"
 
     async def run(self, ctx: ScanContext) -> None:
+        logger.info("[*] Phase 3/4: Deduplication & confidence...")
         if not ctx.raw_vulns:
             ctx.unique_vulns = []
             return
         ctx.unique_vulns = self.scanner._deduplicate(ctx.raw_vulns)
+
+
+class NucleiStage(ScanStage):
+    """Phase 3.5: Nuclei 外部引擎扫描(默认启用),结果并入去重集合。
+
+    nuclei CLI 可用 → 智能模板扫描;不可用 → 内置回退模板(内容特征验证)。
+    与主流程发现合并后统一去重。
+    """
+
+    name = "nuclei"
+
+    async def run(self, ctx: ScanContext) -> None:
+        if not ctx.target or not ctx.config.get("nuclei.enabled", True):
+            return
+        try:
+            nuclei_vulns = await self.scanner._run_nuclei(ctx.target)
+            if nuclei_vulns:
+                logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings(已合并)")
+                ctx.unique_vulns = self.scanner._deduplicate(ctx.unique_vulns + nuclei_vulns)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[Scanner] Nuclei phase failed: {e}")
+
+
+class AIVerifyStage(ScanStage):
+    """Phase 3.6: AI 误报复核(T1.2,默认关,--ai-verify 开启)。
+
+    medium+ 候选按批复核:确认打 ai_confirmed,存疑降级打 ai_disputed
+    (只降级不删除);请求失败/输出不可解析整批原样返回。
+    """
+
+    name = "ai-verify"
+
+    async def run(self, ctx: ScanContext) -> None:
+        if not ctx.config.get("ai.verify", False) or not ctx.unique_vulns:
+            return
+        try:
+            from ..ai import AIVerifier, LLMClient
+
+            ai_client = LLMClient(ctx.config)
+            if ai_client.available:
+                verifier = AIVerifier(ctx.config, ai_client)
+                ctx.unique_vulns = await verifier.verify_batch(ctx.unique_vulns)
+                logger.info(
+                    f"[AI] 复核完成: {verifier.reviewed_count} 条已复核, "
+                    f"{verifier.confirmed_count} 确认 / {verifier.disputed_count} 存疑降级"
+                )
+            else:
+                logger.warning("[AI] --ai-verify 已开启但未配置 LLM_API_KEY，跳过 AI 复核")
+        except Exception as e:
+            logger.debug(f"[Scanner] AI verify phase failed: {e}")
+
+
+class CheckpointStage(ScanStage):
+    """扫描收尾:保存最终 checkpoint(S2,供 --resume 合并)。"""
+
+    name = "checkpoint"
+
+    async def run(self, ctx: ScanContext) -> None:
+        if not ctx.target:
+            return
+        try:
+            self.scanner._save_checkpoint(ctx.target.url, ctx.unique_vulns, ctx.endpoints)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"[Scanner] final checkpoint save failed: {e}")

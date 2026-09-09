@@ -8,12 +8,16 @@ Stage 划分(对齐扫描四阶段):
 - LabAuthStage         : Step 1.8 靶机识别与自动认证
 - OADetectionStage     : Step 1.9 OA 系统指纹检测
 - ResumeStage          : --resume 恢复(checkpoint 漏洞合并 + 已完成模块跳过)
-- CrawlDetectStage     : Phase 1/2 爬取 + 流式检测
+- CrawlDetectStage     : Phase 1/2 爬取 + 流式检测(+ 端点定型 + JSPathfinder)
 - DedupStage           : Phase 3 去重与置信度
-- ReportStage          : Phase 4 结果统计与汇总
+- NucleiStage          : Phase 3.5 Nuclei 外部引擎扫描并合并
+- AIVerifyStage        : Phase 3.6 AI 误报复核(默认关)
+- CheckpointStage      : S2 最终 checkpoint 落盘
 
 注:Stage 之间通过共享的 ScanContext(持有 config/session/scanner 引用)传递数据,
 降低耦合;新增被动扫描 stage 只需实现 ScanStage 并注册。
+报告统计/排序(result 填充)保留在 WAVScanner.scan() facade——该段异常需向上
+传播(CLI 超时/异常抢救依赖),不走 stage 的失败不阻断语义。
 """
 
 from __future__ import annotations

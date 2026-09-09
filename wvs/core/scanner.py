@@ -124,9 +124,12 @@ class WAVScanner(ScannerIntegrationsMixin):
         """装配默认扫描编排器(可被子类覆盖以替换/增删 stage)。"""
         from .orchestrator import ScanOrchestrator
         from .stages import (
+            AIVerifyStage,
+            CheckpointStage,
             CrawlDetectStage,
             DedupStage,
             LabAuthStage,
+            NucleiStage,
             OADetectionStage,
             ResumeStage,
             WAFDetectionStage,
@@ -141,6 +144,9 @@ class WAVScanner(ScannerIntegrationsMixin):
                 ResumeStage(self),
                 CrawlDetectStage(self),
                 DedupStage(self),
+                NucleiStage(self),
+                AIVerifyStage(self),
+                CheckpointStage(self),
             ],
         )
 
@@ -496,13 +502,11 @@ class WAVScanner(ScannerIntegrationsMixin):
 
     async def scan(self, target: ScanTarget) -> ScanResult:
         """
-        执行完整扫描流程。
+        执行完整扫描流程(facade:扫描全流程由编排器 Stage 流水线执行)。
 
-        流程分为四个阶段:
-        1. 加载检测模块并做 WAF 检测
-        2. 靶机识别与自动认证（DVWA/Metasploitable2 等）
-        3. 爬取 + 流式检测（边爬边测，不等全部爬完）
-        4. 外部集成扫描 + 结果去重合并
+        流水线 stages(v2.2-⑩ 迁移完成):
+        WAF 检测 → 靶机认证 → OA 检测 → --resume 恢复 →
+        爬取+流式检测 → 去重 → Nuclei → AI 复核 → 最终 checkpoint
 
         Args:
             target: 扫描目标（URL + 认证信息 + 自定义参数）
@@ -531,9 +535,6 @@ class WAVScanner(ScannerIntegrationsMixin):
 
         self._print_header(target)
 
-        # ── Step 0: WAF detection (run first, broadcast results to all modules) ──
-        # (已抽取为 WAFDetectionStage,由编排器执行)
-
         # ── Inject manual cookies ──
         if target.cookies:
             for name, value in target.cookies.items():
@@ -541,63 +542,17 @@ class WAVScanner(ScannerIntegrationsMixin):
             print(f"[+] 注入 {len(target.cookies)} 个 session cookie")
 
         # ══════════════════════════════════════════════════════════════
-        # 编排器执行 Step 0 + 1.8 + 1.9 + resume + Phase 1/2:
-        # WAF 检测 / 靶机认证 / OA 检测 / ResumeStage(--resume 恢复) /
-        # CrawlDetectStage(爬取 + 流式检测 + 端点定型 + JSPathfinder)
+        # 单趟编排流水线(单 stage 失败告警不阻断,由 ScanOrchestrator 保证)
         # ══════════════════════════════════════════════════════════════
         from .orchestrator import ScanContext
 
+        orchestrator = self._orchestrator or self._build_orchestrator()
         ctx = ScanContext(self)
         ctx.target = target
-        if self._orchestrator is not None:
-            await self._orchestrator.run(ctx)
+        await orchestrator.run(ctx)
 
-        endpoints = ctx.endpoints
-        all_vulns = ctx.raw_vulns
-
-        # ── Dedup (通过编排器 DedupStage 执行) ──
-        logger.info("[*] Phase 3/4: Deduplication & confidence...")
-        if self._orchestrator is not None:
-            ctx = ScanContext(self)
-            ctx.raw_vulns = all_vulns
-            await self._orchestrator.run(ctx)
-            unique_vulns = ctx.unique_vulns
-        else:
-            unique_vulns = self._deduplicate(all_vulns)
-
-        # ── Phase 3.5: Nuclei 外部引擎(默认启用;CLI 可用走模板扫描,不可用走内置回退) ──
-        if self.config.get("nuclei.enabled", True):
-            try:
-                nuclei_vulns = await self._run_nuclei(target)
-                if nuclei_vulns:
-                    logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings(已合并)")
-                    unique_vulns = self._deduplicate(unique_vulns + nuclei_vulns)
-            except Exception as e:  # noqa: BLE001
-                logger.debug(f"[Scanner] Nuclei phase failed: {e}")
-
-        # ── Phase 3.6: AI 误报复核（T1.2，默认关，--ai-verify 开启） ──
-        if self.config.get("ai.verify", False) and unique_vulns:
-            try:
-                from ..ai import AIVerifier, LLMClient
-
-                ai_client = LLMClient(self.config)
-                if ai_client.available:
-                    verifier = AIVerifier(self.config, ai_client)
-                    unique_vulns = await verifier.verify_batch(unique_vulns)
-                    logger.info(
-                        f"[AI] 复核完成: {verifier.reviewed_count} 条已复核, "
-                        f"{verifier.confirmed_count} 确认 / {verifier.disputed_count} 存疑降级"
-                    )
-                else:
-                    logger.warning("[AI] --ai-verify 已开启但未配置 LLM_API_KEY，跳过 AI 复核")
-            except Exception as e:
-                logger.debug(f"[Scanner] AI verify phase failed: {e}")
-
-        # S2 checkpoint: 扫描结束保存最终 checkpoint(供 --resume 合并)
-        try:
-            self._save_checkpoint(target.url, unique_vulns, endpoints)
-        except Exception as e:  # noqa: BLE001
-            logger.debug(f"[Scanner] final checkpoint save failed: {e}")
+        # ── Report(保持异常向上传播语义,留在 facade) ──
+        unique_vulns = ctx.unique_vulns
 
         # 更新每个漏洞的扫描统计
         for v in unique_vulns:
@@ -616,7 +571,7 @@ class WAVScanner(ScannerIntegrationsMixin):
         self._stats["end_time"] = time.time()
         result.duration = self._stats["end_time"] - self._stats["start_time"]
         result.requests_made = self.session.get_stats()["total_requests"]
-        result.endpoints_found = len(endpoints)
+        result.endpoints_found = len(ctx.endpoints)
         result.modules_run = len(self._modules)
 
         self._print_summary(result)
