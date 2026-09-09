@@ -21,6 +21,15 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-09 (v2.2 工程伴随⑩ — scan() 内联爬扫循环/checkpoint/resume 迁入编排器 Stage)
+- **单趟编排流水线**：`WAVScanner.scan()` 收敛为 facade（模块加载 + header + cookie 注入 + 编排器单趟流水线 + 报告统计段）；流水线 WAF→LabAuth→OA→Resume→CrawlDetect→Dedup→Nuclei→AIVerify→Checkpoint，单 stage 失败告警不阻断语义保持不变
+- **新增 Stage（5 个）**：ResumeStage（--resume 恢复:checkpoint 漏洞并入 ctx.raw_vulns + 已完成模块跳过,恢复时序仍在 WAF/OA 检测之后）；CrawlDetectStage（Phase 1/2 整块:分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder;每批限流 checkpoint、超时预算、T0 兜底 seed 原样保留）；NucleiStage（Phase 3.5）；AIVerifyStage（Phase 3.6）；CheckpointStage（最终落盘——checkpoint 需含 Nuclei 合并结果,故与 Dedup 同趟顺序执行）
+- **编排层吞异常收紧为可观测**：stage 失败 = WARNING(带 exc_info 堆栈) + 结构化记录 `ctx.stage_failures`；facade 转入 `result.errors`（随 JSON 报告落盘,scan() docstring "错误记录到 result.errors" 首次成真）+ `_stats["errors"]` 计数
+- **纯结构迁移**：检测行为零变化（CLI/报告格式/参数零变化）；报告统计/排序段保留在 facade——该段异常需向上传播（CLI 超时/异常抢救依赖），不走 stage 失败不阻断语义
+- **验证**：410 collected 全绿（新增 11 项编排单测,含流水线顺序锁与 facade 端到端）；黄金矩阵 `--only sqli,idor` 冒烟通过
+- 影响文件：`wvs/core/{scanner,stages,orchestrator}.py`、`tests/test_orchestrator.py`、`CHANGELOG.md`、`docs/rayscan-upgrade-roadmap-2026-09-07.md`
+- 注意：本迁移在并发会话冲突下经独立 worktree 分支 `feat/v22-orchestrator-stages` 完成（小步 4 提交）
+
 ### 2026-09-08 (v2.2 T2.4/T2.5 + 矩阵新模块靶标 + 6 真实缺陷修复)
 - **T2.4 登录态维持**：HTTPPool 检测会话失效（401/登录重定向）→ 自动重登回调（CLI 认证后注册,全 auth 类型）→ 刷新凭据重放当前请求；10s 冷却防 401 探测引发反复登录；成功后清 GET 去重缓存；`tests/test_session_reauth.py` 3 用例（真实本地服务全链路）
 - **T2.5 双账号 IDOR**：`--second-auth "Header: Value"` → idor 对象替换命中后用 B 会话（独立 httpx client 防 cookie 混叠）实际读取 A 对象,确认升级 HIGH/HIGH,未确认保持 MEDIUM；`tests/test_idor_second_auth.py` 3 用例；矩阵新增 idor_confirmed 靶标

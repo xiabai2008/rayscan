@@ -24,10 +24,13 @@
 
 ## 2. 分阶段路线
 
-> **执行状态（2026-09-08 更新）**：v2.2 的 T2.1/T2.2/T2.3/T2.4/T2.5 已全部落地
+> **执行状态（2026-09-09 更新）**：v2.2 的 T2.1/T2.2/T2.3/T2.4/T2.5 已全部落地
 > （黄金矩阵 20/20、nightly 门禁、domxss headless、登录态维持、双账号 IDOR），
 > 并额外修复 10 个矩阵暴露的真实缺陷（详见 CHANGELOG [Unreleased]）。
-> 待办：⑩ WAVScanner 循环迁 Orchestrator；⑪ v2.3 四件。
+> **⑩ 已完成（2026-09-09）**：scan() 内联爬扫循环/checkpoint/resume 全部迁入编排器 Stage，
+> scan() 收敛为单趟流水线 facade，编排层吞异常收紧为可观测（ctx.stage_failures → result.errors）；
+> 410 测试全绿 + 黄金矩阵 sqli/idor 冒烟通过。
+> 待办：⑪ v2.3 四件。
 
 ### v2.2 — 实测闭环（检测可信度制度化）⏱ ≈2 周 ✅ 已完成
 

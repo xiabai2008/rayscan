@@ -5,11 +5,19 @@ All notable changes to RayScan (formerly WVS) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**376 collected**（2026-08-25）。
+> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**410 collected**（2026-09-09）。
 
 ---
 
 ## [Unreleased]
+
+### Refactored — v2.2 工程伴随⑩：scan() 内联爬扫循环/checkpoint/resume 迁入编排器 Stage
+
+- **单趟编排流水线**：`WAVScanner.scan()` 收敛为 facade（模块加载 + header + cookie 注入 + 单趟编排器流水线 + 报告统计段），内联的爬取-检测循环、checkpoint 落盘、--resume 恢复全部消失；顺序：WAF→LabAuth→OA→Resume→CrawlDetect→Dedup→Nuclei→AIVerify→Checkpoint，单 stage 失败告警不阻断语义保持不变
+- **新增 Stage（5 个）**：`ResumeStage`（checkpoint 漏洞合并到 ctx.raw_vulns + 已完成模块跳过，恢复时序保持在 WAF/OA 检测之后）；`CrawlDetectStage`（Phase 1/2 整块：分批爬取+流式检测循环 / 端点优先级+lab 合并+参数补全 / JSPathfinder，每批限流 checkpoint 与 T0 兜底 seed 原样保留）；`NucleiStage`（Phase 3.5）；`AIVerifyStage`（Phase 3.6）；`CheckpointStage`（最终落盘——为使 checkpoint 包含 Nuclei 合并结果，三阶段与 Dedup 同趟顺序执行）
+- **编排层吞异常收紧为可观测**：stage 失败由"仅一行 WARNING"升级为 WARNING 带 exc_info 堆栈 + 结构化记录 `ctx.stage_failures`；facade 将失败转入 `result.errors`（随 JSON 报告落盘，scan() docstring 的"错误记录到 result.errors"首次成真）与 `_stats["errors"]` 计数
+- **纯结构迁移**：检测行为零变化（CLI/报告格式/参数零变化）；报告统计/排序段保留在 facade——该段异常需向上传播（CLI 超时/异常抢救依赖），不走 stage 失败不阻断语义
+- **测试**：新增 11 项编排单测（ResumeStage 2 + CrawlDetectStage 2 + 新 Stage/facade 7，含流水线顺序锁与 facade 端到端），410 collected 全绿；黄金矩阵 `--only sqli,idor` 冒烟通过
 
 ### Added — v2.2 T2.4/T2.5 + 检测器真实性修复 + 新模块靶标
 

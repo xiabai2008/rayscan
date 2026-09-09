@@ -50,6 +50,12 @@ CI：`Golden Matrix (FP/FN gate)` job（workflow_dispatch 手动触发；per-pus
 - **cmdi：/api/secure-invoice?id=3001（偶发,未能稳定复现）**——403 静态护栏端点被
   cmdi 偶发标记,独立复扫未复现,疑似验证窗口时序抖动；列入 FP 治理观察队列,
   稳定复现前不进 must_not_flag（避免门禁抖动）
+- **idor：/dom/、/dom-safe/、/jsapp-clean/、/spa/（稳定复现,2026-09-09 登记）**——
+  静态页 + 参数发现 fuzz（status<400 即收编全部候选参数,含 id=1）→ 对象替换对
+  静态页响应结构必然一致 → 标记"疑似 IDOR"。`--only sqli,idor` 冒烟两次复现：
+  迁移前 HEAD（6821874）与 Orchestrator 迁移分支结果逐字节一致,非迁移引入；
+  列入 FP 治理观察队列（候选治理方向:_is_public_path 扩展,或无回显静态页跳过
+  对象替换）
 
 这些不进 must_detect（避免 URL 形态抖动导致基线脆弱），但出现**新的**清单外发现时矩阵会 WARN 提示人工确认。
 
