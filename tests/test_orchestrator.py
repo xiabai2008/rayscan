@@ -91,13 +91,57 @@ def test_scanner_has_default_orchestrator() -> None:
 
 
 def test_prebuilt_stages_importable() -> None:
-    from wvs.core.stages import LabAuthStage, OADetectionStage
+    from wvs.core.stages import LabAuthStage, OADetectionStage, ResumeStage
 
     scanner = _make_scanner()
     assert WAFDetectionStage(scanner).name == "waf-detection"
     assert LabAuthStage(scanner).name == "lab-auth"
     assert OADetectionStage(scanner).name == "oa-detection"
+    assert ResumeStage(scanner).name == "resume"
     assert DedupStage(scanner).name == "dedup"
+
+
+def test_resume_stage_merges_checkpoint_vulns_and_skips_modules() -> None:
+    """ResumeStage:checkpoint 漏洞并入 ctx.raw_vulns,已完成模块被跳过。"""
+    from wvs.core.stages import ResumeStage
+
+    scanner = _make_scanner()
+    scanner.load_module("sqli")
+    scanner.load_module("xss")
+    scanner._resume_checkpoint = {
+        "vulnerabilities": [
+            {
+                "type": "sql_injection",
+                "url": "http://example.com/?id=1",
+                "severity": "high",
+                "title": "t",
+                "description": "d",
+            }
+        ],
+        "modules_done": ["sqli"],
+    }
+    ctx = ScanContext(scanner)
+
+    async def _run():
+        await ResumeStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert len(ctx.raw_vulns) == 1
+    assert "sqli" not in scanner._modules
+    assert "xss" in scanner._modules
+
+
+def test_resume_stage_noop_without_checkpoint() -> None:
+    from wvs.core.stages import ResumeStage
+
+    scanner = _make_scanner()
+    ctx = ScanContext(scanner)
+
+    async def _run():
+        await ResumeStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert ctx.raw_vulns == []
 
 
 def test_dedup_stage_empty() -> None:

@@ -132,7 +132,7 @@ class WAVScanner(ScannerIntegrationsMixin):
     def _build_orchestrator(self):
         """装配默认扫描编排器(可被子类覆盖以替换/增删 stage)。"""
         from .orchestrator import ScanOrchestrator
-        from .stages import DedupStage, LabAuthStage, OADetectionStage, WAFDetectionStage
+        from .stages import DedupStage, LabAuthStage, OADetectionStage, ResumeStage, WAFDetectionStage
 
         return ScanOrchestrator(
             self,
@@ -140,6 +140,7 @@ class WAVScanner(ScannerIntegrationsMixin):
                 WAFDetectionStage(self),
                 LabAuthStage(self),
                 OADetectionStage(self),
+                ResumeStage(self),
                 DedupStage(self),
             ],
         )
@@ -541,14 +542,16 @@ class WAVScanner(ScannerIntegrationsMixin):
             print(f"[+] 注入 {len(target.cookies)} 个 session cookie")
 
         # ══════════════════════════════════════════════════════════════
-        # Step 0 + 1.8 + 1.9: 编排器执行 WAF 检测 / 靶机认证 / OA 检测
+        # Step 0 + 1.8 + 1.9 + resume: 编排器执行 WAF 检测 / 靶机认证 /
+        # OA 检测 / ResumeStage(--resume 恢复,漏洞合并到 ctx.raw_vulns)
         # ══════════════════════════════════════════════════════════════
-        if self._orchestrator is not None:
-            from .orchestrator import ScanContext
+        from .orchestrator import ScanContext
 
-            ctx = ScanContext(self)
-            ctx.target = target
+        ctx = ScanContext(self)
+        ctx.target = target
+        if self._orchestrator is not None:
             await self._orchestrator.run(ctx)
+        all_vulns_before_dedup: List[Vulnerability] = list(ctx.raw_vulns)
 
         # ── Crawl + 流式检测 ──
         logger.info("\n[*] Phase 1/4: Crawling + streaming detection...")
@@ -564,25 +567,6 @@ class WAVScanner(ScannerIntegrationsMixin):
         self.crawler.max_depth = 2 if not self._lab_profile else 4  # 实战浅爬
 
         all_endpoints: List[DiscoveredEndpoint] = []
-        all_vulns_before_dedup: List[Vulnerability] = []
-
-        # S2 resume:合并上次 checkpoint 已发现漏洞 + 跳过已完成模块
-        self._modules_done = []
-        resume_cp: Optional[Dict[str, Any]] = getattr(self, "_resume_checkpoint", None)
-        if resume_cp:
-            for vdict in resume_cp.get("vulnerabilities", []):
-                try:
-                    v = Vulnerability.from_dict(vdict)
-                    all_vulns_before_dedup.append(v)
-                    logger.info(f"[resume] 复用已发现漏洞: {v.url} ({v.type.value})")
-                except Exception:  # noqa: BLE001
-                    logger.debug("[resume] 反序列化漏洞失败,跳过")
-            skip_modules = set(resume_cp.get("modules_done", []))
-            if skip_modules:
-                logger.info(f"[resume] 跳过已完成模块: {sorted(skip_modules)}")
-                for m in list(self._modules.keys()):
-                    if m in skip_modules:
-                        self._modules.pop(m)
 
         async def _crawl_and_detect():
             """爬取+检测循环：爬一批，测一批"""

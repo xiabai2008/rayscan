@@ -7,6 +7,7 @@ Stage 划分(对齐扫描四阶段):
 - WAFDetectionStage    : Step 0 WAF 检测并广播结果
 - LabAuthStage         : Step 1.8 靶机识别与自动认证
 - OADetectionStage     : Step 1.9 OA 系统指纹检测
+- ResumeStage          : --resume 恢复(checkpoint 漏洞合并 + 已完成模块跳过)
 - CrawlDetectStage     : Phase 1/2 爬取 + 流式检测
 - DedupStage           : Phase 3 去重与置信度
 - ReportStage          : Phase 4 结果统计与汇总

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 
-from ..models import ScanTarget
+from ..models import ScanTarget, Vulnerability
 from .orchestrator import ScanContext, ScanStage
 
 logger = logging.getLogger(__name__)
@@ -94,6 +94,36 @@ class OADetectionStage(ScanStage):
                         oa_mod._detected_oa = oa_name
         except Exception:  # noqa: BLE001
             self.scanner._oa_detected = False
+
+
+class ResumeStage(ScanStage):
+    """--resume 恢复:合并上次 checkpoint 已发现漏洞 + 跳过已完成模块(S2)。
+
+    合并的漏洞追加到 ctx.raw_vulns(与流式检测发现一同进入去重),
+    已完成模块从 scanner._modules 移除(后续 stage 不再执行它们)。
+    """
+
+    name = "resume"
+
+    async def run(self, ctx: ScanContext) -> None:
+        scanner = self.scanner
+        scanner._modules_done = []
+        resume_cp = getattr(scanner, "_resume_checkpoint", None)
+        if not resume_cp:
+            return
+        for vdict in resume_cp.get("vulnerabilities", []):
+            try:
+                v = Vulnerability.from_dict(vdict)
+                ctx.raw_vulns.append(v)
+                logger.info(f"[resume] 复用已发现漏洞: {v.url} ({v.type.value})")
+            except Exception:  # noqa: BLE001
+                logger.debug("[resume] 反序列化漏洞失败,跳过")
+        skip_modules = set(resume_cp.get("modules_done", []))
+        if skip_modules:
+            logger.info(f"[resume] 跳过已完成模块: {sorted(skip_modules)}")
+            for m in list(scanner._modules.keys()):
+                if m in skip_modules:
+                    scanner._modules.pop(m)
 
 
 class DedupStage(ScanStage):
