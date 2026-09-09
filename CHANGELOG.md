@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v2.3 T3.2 证据包导出（`report --pack`）
+
+- **`rayscan report --pack <report.json> [-o DIR]`**：把一次扫描的 JSON 报告展开为可直接提交（SRC/渗透报告）的证据包目录——`README.md`（概览+索引+重放说明）、`report.json`（原始副本）、`report.sarif`（SARIF 2.1.0 全量，GitHub Code Scanning 可导入）、`manifest.json`（机器可读索引）、`vulns/<序号>-<类型>-<id8>/`（每漏洞 `finding.md` + `replay.sh` + `evidence.json`）
+- **finding.md**：严重度/置信度/参数/载荷表格 + 漏洞描述/危害 + 证据特征 + `--explain` 证据链逐信号渲染 + 修复建议 + 参考
+- **可复现 curl 重放命令**：由漏洞记录的 method/参数类型/载荷重建——query 参数 Python 侧百分号编码后内嵌 URL（与 httpx 发送前编码一致，避免 `-G` 改写方法）、form body `--data-urlencode`、json body `-H Content-Type --data-raw`、cookie/header 型 `-H`；POSIX 单引号安全引用；**包内文本统一 LF 写入**（Windows 默认 CRLF 会给 URL 带上 `\r` 导致 curl 静默失败）
+- **差分型漏洞支持**：布尔盲注的 True/False 载荷对（检测器以 `" / "` 拼接记录）自动拆为 TRUE/FALSE 两条重放命令，finding.md 提示"分别执行并对比响应差异（差异本身即证据）"，evidence.json 标注 `request.differential` + `replay_variants`
+- **`find_response_feature`**：证据→响应特征定位函数（完整证据 → 剥离检测器注释前缀如 `DB Error (mysql): ` 后的响应摘录 → 记录载荷 → 服务端截断回显时的最长命中前缀），供验收与证据消费方共用
+- **验收**：`tests/test_evidence_pack.py` 8 用例（curl 重建形态/单引号转义/双报告 schema 还原/目录结构/SARIF/**真实检测器产出漏洞 → 打包 → replay.sh 的 curl 实际执行且响应复现证据特征**/布尔差分双命令响应差异/截断回显最长前缀）；另对黄金靶场 E2E 产出的 10 项真实发现全量重放 10/10 PASS（含布尔差分双命令 `Hello admin` vs `Hello guest` 响应差异）
+- 兼容两种报告落盘 schema：`JSONReporter`（wvs-report-v1）与 `ScanResult.to_dict`（超时/兜底部分保存）
+
 ### Added — v2.3 T3.1 passive→active 联动
 
 - **被动捕获队列**：`PassiveProxy` 把目标域过滤通过的端点送入内存队列（`ProxyCaptureQueue`，按 method+路径+参数名/类型面去重——浏览产生的参数值变化合并为同一端点，首见值留作基线）；`passive --queue-out` 落盘（默认 `scan_reports/proxy_queue.json`），且**捕获即增量落盘**（进程被杀队列不丢）；`passive --no-live-scan` 只捕获不入检（联动工作流浏览零干扰，避免与 from-proxy 重复做功）

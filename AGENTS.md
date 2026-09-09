@@ -21,6 +21,16 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-09 (v2.3 T3.2 证据包导出 — report --pack)
+- **`rayscan report --pack <report.json> [-o DIR]`**（`wvs/reporting/evidence_pack.py::EvidencePackBuilder` + CLI `report` 子命令）：JSON 报告 → 可提交证据包目录（README.md 索引 / report.json 副本 / report.sarif 全量 SARIF 2.1.0 / manifest.json 机器可读索引 / vulns/<seq>-<type>-<id8>/ 每漏洞 finding.md + replay.sh + evidence.json）
+- **可复现 curl 重建**：由漏洞记录 method/参数类型/载荷生成——query 参数 Python 侧百分号编码内嵌 URL（与 httpx 一致,避免 curl -G 改写方法）、form body --data-urlencode、json body --data-raw、cookie/header 型 -H；POSIX 单引号安全引用
+- **踩坑（Windows CRLF）**：`Path.write_text` 默认把 \n 翻译成 \r\n → replay.sh 的 URL 带尾随 \r → curl 静默失败（rc 非零、-s 无输出）；包内所有文本改 `open(newline="\n")` 统一 LF 写入（queue.py 的 save 同步修）
+- **差分型漏洞**：布尔盲注 payload 以 `" / "` 拼接 True/False 对（sqli 检测器惯例）→ 自动拆为 TRUE/FALSE 两条重放命令（`build_curl_commands`/`split_differential_payload`），finding.md 提示对比响应差异,evidence.json `request.differential` + `replay_variants`
+- **`find_response_feature(vuln, body)`**：证据→响应特征定位（完整证据 → 剥离 `DB Error (mysql): ` 类检测器注释前缀 → 载荷回显 → 服务端截断回显的最长命中前缀）,验收测试与证据消费方共用
+- **双 schema 兼容**：`load_report_as_scan_result` 同时支持 JSONReporter（wvs-report-v1）与 ScanResult.to_dict（超时/兜底部分保存）
+- **验收**：`tests/test_evidence_pack.py` 8 用例——真实检测器产出漏洞 → 打包 → replay.sh 的 curl **实际执行**且响应复现证据特征；布尔差分双命令响应差异；截断回显最长前缀；另对 E2E 真实报告 10 项发现全量重放 10/10 PASS
+- 影响文件：`wvs/reporting/{evidence_pack.py(新增),__init__.py}`、`wvs/cli.py`、`wvs/core/passive/queue.py`、`tests/test_evidence_pack.py(新增)`
+
 ### 2026-09-09 (v2.3 T3.1 passive→active 联动)
 - **被动捕获队列**：`PassiveProxy._capture_and_scan` 在目标域过滤通过后将端点入内存队列（`wvs/core/passive/queue.py::ProxyCaptureQueue`，去重键 = method+路径+排序参数名/类型面，参数值不参与——值变化属同一参数面，首见值作基线；hits 计数）；`_host_matches` 委托给 `queue.host_matches` 共享实现（联动扫描同语义）
 - **队列落盘**：`passive --queue-out PATH`（默认 `scan_reports/proxy_queue.json`）；每入队新端点即增量落盘（Windows 下代理被强杀也不丢队列），停止时覆盖最终态；schema `rayscan-proxy-queue-v1`

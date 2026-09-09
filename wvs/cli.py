@@ -1507,6 +1507,15 @@ def build_parser() -> argparse.ArgumentParser:
     ai_report_parser.add_argument("report", help="JSON 扫描报告路径")
     ai_report_parser.add_argument("-o", "--output", help="输出 markdown 路径（默认 <report>_ai_summary.md）")
 
+    # report 命令（v2.3 T3.2：证据包导出）
+    report_parser = sub.add_parser("report", help="报告后处理：把 JSON 扫描报告导出为可提交证据包")
+    report_parser.add_argument(
+        "--pack",
+        metavar="REPORT_JSON",
+        help="输入 JSON 扫描报告：每漏洞生成 markdown + 可复现 curl + evidence_chain，附全量 SARIF",
+    )
+    report_parser.add_argument("-o", "--output", help="证据包输出目录（默认 <报告名>_pack/）")
+
     # mcp 命令（T2.1：MCP Server）
     mcp_parser = sub.add_parser("mcp", help="启动 MCP Server（供 Claude/ChatGPT 等 AI 客户端调用扫描能力）")
     mcp_parser.add_argument("--host", default="127.0.0.1", help="监听地址（默认仅本机回环）")
@@ -1889,6 +1898,51 @@ def cmd_passive(args):
     return 0
 
 
+def cmd_report(args):
+    """报告后处理:--pack 把 JSON 报告展开为可提交证据包目录(v2.3 T3.2)"""
+    from .reporting import EvidencePackBuilder
+
+    report_file = Path(args.pack)
+    if not report_file.exists():
+        console.print(f"[red]报告文件不存在: {report_file.resolve()}[/red]")
+        return 1
+    try:
+        json.loads(report_file.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[red]报告文件不是合法 JSON: {e}[/red]")
+        return 1
+
+    builder = EvidencePackBuilder(report_file, output_dir=Path(args.output) if getattr(args, "output", None) else None)
+    console.print(f"[cyan][*] 正在生成证据包: {report_file.resolve()} → {builder.output_dir.resolve()}[/cyan]")
+    try:
+        manifest = builder.build()
+    except Exception as e:  # noqa: BLE001
+        console.print(f"[red]证据包生成失败: {e}[/red]")
+        logger.debug("证据包生成失败", exc_info=True)
+        return 1
+
+    from rich.table import Table as PackTable
+
+    table = PackTable(title=f"证据包 — {manifest['vulnerability_count']} 项漏洞(按严重度排序)")
+    table.add_column("#", style="cyan")
+    table.add_column("严重度", style="yellow")
+    table.add_column("类型")
+    table.add_column("URL", overflow="fold")
+    table.add_column("重放", style="green")
+    for v in manifest["vulnerabilities"]:
+        table.add_row(
+            f"{v['seq']:03d}",
+            v["severity"].upper(),
+            v["type"],
+            v["url"],
+            v["replay_sh"],
+        )
+    console.print(table)
+    console.print(f"[green]📦 证据包已生成: {builder.output_dir.resolve()}[/green]")
+    console.print("[dim]   README.md = 索引与重放说明 | report.sarif = 平台导入 | vulns/*/replay.sh = 一键复现[/dim]")
+    return 0
+
+
 def cmd_demo(args):
     """一键演示:启动内置靶场并自动扫描"""
 
@@ -2059,6 +2113,8 @@ def main():
     elif args.command == "passive":
         setup_logging(args.verbose)
         return cmd_passive(args)
+    elif args.command == "report":
+        return cmd_report(args)
     elif args.command == "batch":
         setup_logging(args.verbose)
         return cmd_batch(args)
