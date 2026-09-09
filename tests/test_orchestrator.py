@@ -144,6 +144,82 @@ def test_resume_stage_noop_without_checkpoint() -> None:
     assert ctx.raw_vulns == []
 
 
+def _stub_crawler(scanner, crawl_eps):
+    """替换 scanner.crawler 为无网络 stub。"""
+    from types import SimpleNamespace
+
+    async def fake_crawl(url, session):
+        return list(crawl_eps)
+
+    async def fake_discover(eps, session):
+        return list(eps)
+
+    scanner.crawler = SimpleNamespace(
+        crawl=fake_crawl,
+        discover_params_batch=fake_discover,
+        get_stats=lambda: {"pages_crawled": 1, "forms_found": 0},
+        max_urls_per_run=0,
+        max_depth=0,
+    )
+    scanner._try_save_checkpoint = lambda *a, **k: None
+    scanner._timeout_remaining = lambda: 100.0
+
+
+def test_crawl_detect_stage_streams_findings_into_ctx() -> None:
+    from wvs.core.crawler import DiscoveredEndpoint
+    from wvs.core.stages import CrawlDetectStage
+    from wvs.models import ScanTarget, Severity, Vulnerability, VulnerabilityType
+
+    scanner = _make_scanner()
+    ep = DiscoveredEndpoint(url="http://example.com/", method="GET", source_url="http://example.com/", source_depth=1)
+    _stub_crawler(scanner, [ep])
+    scanner.load_module("sqli")
+
+    found = Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        url="http://example.com/?id=1",
+        severity=Severity.HIGH,
+        title="t",
+        description="d",
+    )
+
+    async def fake_run_module(mod_name, target, batch, concurrency, global_sem):
+        assert batch == [ep]
+        return [found]
+
+    scanner._run_module_concurrent = fake_run_module
+
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+
+    async def _run():
+        await CrawlDetectStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert len(ctx.endpoints) == 1
+    assert ctx.raw_vulns == [found]
+    assert scanner._stats["endpoints_discovered"] == 1
+
+
+def test_crawl_detect_stage_empty_crawl_seeds_fallback_endpoint() -> None:
+    """T0 兜底:crawler 零端点时至少测目标本身,流式检测不被整体跳过。"""
+    from wvs.core.stages import CrawlDetectStage
+    from wvs.models import ScanTarget
+
+    scanner = _make_scanner()
+    _stub_crawler(scanner, [])
+
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+
+    async def _run():
+        await CrawlDetectStage(scanner).run(ctx)
+
+    asyncio.run(_run())
+    assert len(ctx.endpoints) == 1
+    assert ctx.endpoints[0].url == "http://example.com/"
+
+
 def test_dedup_stage_empty() -> None:
     scanner = _make_scanner()
     stage = DedupStage(scanner)
