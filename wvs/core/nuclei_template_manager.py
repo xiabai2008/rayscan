@@ -192,6 +192,8 @@ class NucleiTemplateManager:
         self._templates: Dict[str, TemplateInfo] = {}  # path -> TemplateInfo
         self._index_loaded = False
         self._stats = {"total": 0, "by_severity": {}, "by_source": {}, "by_year": {}}
+        # T3.4 模板策展审计：最近一次 get_templates_for_target 的选择过程记录
+        self.last_selection: Optional[Dict[str, Any]] = None
 
     @staticmethod
     def _resolve_default_dirs() -> List[str]:
@@ -568,6 +570,7 @@ class NucleiTemplateManager:
         severities: Optional[List[str]] = None,
         max_templates: int = 500,
         recent_years_only: bool = True,
+        curated: bool = False,
     ) -> List[str]:
         """
         根据目标特征智能选择最匹配的模板
@@ -578,6 +581,9 @@ class NucleiTemplateManager:
             severities: 要检测的严重程度（默认 critical+high+medium）
             max_templates: 最大模板数
             recent_years_only: 是否只选近5年 CVE
+            curated: 策展模式（T3.4）——指纹命中技术栈时开启：只用 tech 匹配 +
+                CVE 命中的模板，淘汰泛匹配（severity 兜底/misconfig 补充不再注入）。
+                检出不丢失：tech 匹配模板全量保留。
 
         Returns:
             选中的模板文件路径列表
@@ -602,24 +608,27 @@ class NucleiTemplateManager:
             for t in cve_templates:
                 candidates.add(t.path)
 
-        # 3. 按严重程度补充（针对 general 目标）
-        if not tech_stack or len(candidates) < max_templates // 2:
-            for sev in severities:
-                sev_templates = self.get_templates_by_severity(sev)
-                for t in sev_templates:
+        # 策展模式（T3.4）：指纹已确认技术栈 → 只信 tech/CVE 命中，
+        # 淘汰下面的泛匹配步骤（避免对 OA 靶标注入无关的通用模板洪水）
+        if not curated:
+            # 3. 按严重程度补充（针对 general 目标）
+            if not tech_stack or len(candidates) < max_templates // 2:
+                for sev in severities:
+                    sev_templates = self.get_templates_by_severity(sev)
+                    for t in sev_templates:
+                        if len(candidates) >= max_templates:
+                            break
+                        # 优先选有 CVE 的
+                        if t.category == "cve" and t.severity in severity_set:
+                            candidates.add(t.path)
+
+            # 4. 若候选仍不足，补充 recent misconfig 模板
+            if len(candidates) < max_templates // 4:
+                misconfigs = self.get_templates_by_tags(["misconfig", "exposure", "tech"])
+                for t in misconfigs:
                     if len(candidates) >= max_templates:
                         break
-                    # 优先选有 CVE 的
-                    if t.category == "cve" and t.severity in severity_set:
-                        candidates.add(t.path)
-
-        # 4. 若候选仍不足，补充 recent misconfig 模板
-        if len(candidates) < max_templates // 4:
-            misconfigs = self.get_templates_by_tags(["misconfig", "exposure", "tech"])
-            for t in misconfigs:
-                if len(candidates) >= max_templates:
-                    break
-                candidates.add(t.path)
+                    candidates.add(t.path)
 
         # 5. 限制数量并按严重程度排序
         sorted_candidates = sorted(
@@ -628,8 +637,24 @@ class NucleiTemplateManager:
         )
 
         result = list(sorted_candidates[:max_templates])
+
+        # T3.4 审计：模板选择过程随报告输出（可审计字段）
+        self.last_selection = {
+            "mode": "curated" if curated else "generic",
+            "tech_stack": list(tech_stack),
+            "severities": list(severities),
+            "candidates": len(candidates),
+            "selected": len(result),
+            "truncated": len(sorted_candidates) > max_templates,
+            "templates": [
+                self._templates[p].template_id or self._templates[p].filename
+                for p in result[:50]
+            ],
+        }
+
         logger.info(
-            f"[TemplateManager] 为目标选择 {len(result)} 个模板 (tech_stack={tech_stack}, severities={severities})"
+            f"[TemplateManager] 为目标选择 {len(result)} 个模板 "
+            f"(tech_stack={tech_stack}, severities={severities}, mode={'curated' if curated else 'generic'})"
         )
         return result
 

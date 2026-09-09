@@ -21,6 +21,13 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-09 (v2.3 T3.4 Nuclei 模板策展 — 按 OA 指纹精选模板 + 审计字段)
+- **策展模式**：`get_templates_for_target(..., curated=True)`——指纹命中技术栈只取 tech/CVE 匹配模板,淘汰泛匹配(severity 兜底/misconfig 补充不再注入);tech 模板全量保留(检出不丢失);未命中指纹走原通用选择(行为不变)
+- **接线**：detector 导出 `OA_TO_TECH`/`oa_tech_stack_for()`(兼容注入短名;纯 YAML 新增 OA 无映射安全退通用);scanner `_oa_tech_hints()`(getattr 防御读 `_modules`,兼容 bare 实例)→ `_run_nuclei` 传 `tech_stack` → `NucleiIntegration.scan()` CLI 分支策展(max 200)
+- **审计字段**：`NucleiTemplateManager.last_selection`/`NucleiIntegration.last_selection`(mode/tech_stack/candidates/selected/truncated/templates≤50;builtin-fallback/template-dir/none 模式)→ `ScanResult.template_selection` 新字段 + JSON 报告 `template_selection` 键(Nuclei 未跑则省略)
+- **测试**：`tests/test_nuclei_curation.py` 17 用例(策展精选/数量下降+检出不丢失/空命中/通用不回归/审计/integration 透传/scanner 接线/报告两态);`test_s2_resume.py` FakeNuclei 签名补 `tech_stack=None`;全量 441 通过
+- 影响文件：`wvs/core/{nuclei_template_manager,scanner}.py`、`wvs/integrations/nuclei_integration.py`、`wvs/modules/oa/detector.py`、`wvs/models.py`、`wvs/reporting/json_reporter.py`、`tests/{test_nuclei_curation,test_s2_resume}.py`、`CHANGELOG.md`
+
 ### 2026-09-09 (v2.3 T3.3 OA 规则外部化 — rules/oa YAML 规则包)
 - **规则包**：`rules/oa/*.yaml` 12 文件（每文件一种 OA）,从 `OA_RULES`/`OA_CONTENT_FINGERPRINTS` 机械转录（一次性脚本生成 + round-trip 逐字段校验）,检查项含 path/method/params/param_type/type/severity/evidence/min_version/max_version/status_codes 全部元数据
 - **加载器**：新增 `wvs/modules/oa/rules_loader.py`——目录优先级 `~/.rayscan/rules/oa/`（用户覆盖,同名 OA 整体替换）> 仓库 `rules/oa/`;校验失败（缺 path/type/severity、未知字段笔误）丢弃该检查项并告警（宁漏报不弱化验证语义）;数字形标量自动转 str;`SEVERITY_MAP`/`VULN_TYPE_MAP` 移至加载器,detector re-export 兼容

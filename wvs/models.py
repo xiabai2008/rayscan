@@ -224,6 +224,9 @@ class ScanResult:
     endpoints_found: int = 0
     modules_run: int = 0
     errors: List[Dict[str, Any]] = field(default_factory=list)
+    # T3.4 Nuclei 模板策展审计：模板选择过程（mode/tech_stack/selected/templates 等），
+    # 随报告输出可审计；未运行 Nuclei 阶段时为 None
+    template_selection: Optional[Dict[str, Any]] = None
 
     @property
     def vulnerability_count(self) -> Dict[str, int]:

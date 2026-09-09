@@ -349,6 +349,36 @@ OA_CONTENT_FINGERPRINTS: Dict[str, List[Dict[str, str]]] = _oa_pack.fingerprints
 OA_RULE_SOURCES: Dict[str, str] = _oa_pack.sources
 
 
+# ── OA 名 → Nuclei tech_stack 标签（T3.4 模板策展共用映射） ────
+# keys 需覆盖 OA_RULES 的全部内置名；YAML 新增的 OA 未映射时策展退回通用选择。
+OA_TO_TECH: Dict[str, str] = {
+    "泛微-Ecology": "weaver",
+    "通达OA": "tongda",
+    "金蝶-Kingdee": "kingdee",
+    "蓝凌-Landray": "landray",
+    "致远-Seeyon": "seeyon",
+    "用友-Yonyou": "yonyou",
+    "禅道-Zentao": "zentao",
+    "万户-Whir": "whir",
+    "Nacos": "nacos",
+    "Spring": "spring",
+    "Jenkins": "jenkins",
+    "Confluence": "confluence",
+}
+
+
+def oa_tech_stack_for(oa_name: Optional[str]) -> List[str]:
+    """OA 名（规则全名或 scanner 注入的短名）→ Nuclei 模板策展的 tech 标签列表。
+
+    未知名（如纯 YAML 新增、尚无 tech 映射的 OA）返回 []，调用方应退回通用模板选择。
+    """
+    if not oa_name:
+        return []
+    name = _OA_ALIASES.get(oa_name, oa_name)
+    tech = OA_TO_TECH.get(name)
+    return [tech] if tech else []
+
+
 @register_module
 class OADetector(DetectionModule):
     """OA 系统专项漏洞检测模块"""
@@ -855,7 +885,7 @@ class OADetector(DetectionModule):
         return vulns
 
     async def _load_oa_templates(self, oa_name: str) -> List[str]:
-        """加载 OA 对应的 Nuclei 模板（通过模板管理器）"""
+        """加载 OA 对应的 Nuclei 模板（通过模板管理器，按 tech 标签精筛）"""
         try:
             from ...core.nuclei_template_manager import get_template_manager
 
@@ -863,28 +893,12 @@ class OADetector(DetectionModule):
             if not tm.is_ready:
                 return []
 
-            # OA 名称转 tech_stack 标签
-            oa_to_tech = {
-                "泛微-Ecology": "weaver",
-                "通达OA": "tongda",
-                "金蝶-Kingdee": "kingdee",
-                "蓝凌-Landray": "landray",
-                "致远-Seeyon": "seeyon",
-                "用友-Yonyou": "yonyou",
-                "禅道-Zentao": "zentao",
-                "万户-Whir": "whir",
-                "Nacos": "nacos",
-                "Spring": "spring",
-                "Jenkins": "jenkins",
-                "Confluence": "confluence",
-            }
-
-            tech = oa_to_tech.get(oa_name)
-            if not tech:
+            tech_list = oa_tech_stack_for(oa_name)
+            if not tech_list:
                 return []
 
             templates = tm.get_templates_for_target(
-                tech_stack=[tech],
+                tech_stack=tech_list,
                 severities=["critical", "high", "medium"],
                 max_templates=200,
             )

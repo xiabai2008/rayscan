@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v2.3 T3.4 Nuclei 模板策展
+
+- **策展模式**：`get_templates_for_target(..., curated=True)`——目标指纹命中技术栈时只用 tech 匹配 + CVE 命中的模板，淘汰泛匹配（severity 兜底/misconfig 补充不再注入）；tech 匹配模板全量保留（检出不丢失）；未命中指纹保持通用选择（行为不变）
+- **指纹→模板接线**：detector 导出 `OA_TO_TECH` 映射与 `oa_tech_stack_for()`（兼容 scanner 注入短名，纯 YAML 新增 OA 无映射时安全退回通用选择）；scanner `_run_nuclei` 读取 oa 模块 `_detected_oa` → 传 `tech_stack` 给 `NucleiIntegration.scan()`；CLI 分支 tech 命中时走策展（max 200）
+- **可审计字段**：`NucleiTemplateManager.last_selection` 记录 `{mode: curated/generic, tech_stack, severities, candidates, selected, truncated, templates[≤50]}`；`NucleiIntegration.last_selection` 透传（含 `builtin-fallback`/`template-dir`/`none` 模式）；`ScanResult.template_selection` 新字段随 `to_dict()` 落盘，JSON 报告 `_build_standard` 输出 `template_selection` 键（未运行 Nuclei 阶段时省略）
+- **验收**：新增 `tests/test_nuclei_curation.py`（17 用例：策展只选 tech 模板、数量下降且检出不丢失（策展⊆通用且无泛匹配混入）、无 tech 命中返回空、通用模式不回归、审计字段、integration 透传/回退记录、scanner 接线（含短名/未知名/无 oa 模块）、报告字段有无两态）；全量测试 441 通过
+
 ### Added — v2.3 T3.3 OA 规则外部化
 
 - **规则包**：`rules/oa/*.yaml`（12 文件 × 12 种 OA，每文件一种 OA）——`name/paths/keywords/fingerprints/checks` 完整迁移，检查项含 `path/method/params/param_type/type/severity/evidence/min_version/max_version/status_codes` 全部元数据；由一次性脚本从硬编码机械转录 + round-trip 逐字段校验

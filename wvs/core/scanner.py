@@ -398,10 +398,27 @@ class WAVScanner(ScannerIntegrationsMixin):
         """扫描结果去重（按漏洞签名）。"""
         return list(self.dedup.deduplicate(vulns))
 
+    def _oa_tech_hints(self) -> List[str]:
+        """T3.4 模板策展：OA 指纹命中 → Nuclei 模板 tech 标签（未命中返回空）。
+
+        _modules 用 getattr 防御式读取（checkpoint/单测路径可能使用未完整初始化的实例）。
+        """
+        oa_mod = (getattr(self, "_modules", None) or {}).get("oa")
+        oa_name = getattr(oa_mod, "_detected_oa", None) if oa_mod else None
+        if not oa_name:
+            return []
+        try:
+            from ..modules.oa.detector import oa_tech_stack_for
+
+            return oa_tech_stack_for(oa_name)
+        except Exception:  # noqa: BLE001
+            return []
+
     async def _run_nuclei(self, target: ScanTarget) -> List[Vulnerability]:
         """S2 接入:运行 Nuclei 外部引擎(模板扫描),结果由主流程去重合并。
 
         nuclei CLI 可用 → 智能模板扫描;CLI 不可用 → 内置回退模板(S1 内容特征验证)。
+        T3.4 策展:OA 指纹命中时只选 tech 匹配模板,淘汰泛匹配。
         """
         from ..integrations.nuclei_integration import NucleiIntegration
 
@@ -411,10 +428,14 @@ class WAVScanner(ScannerIntegrationsMixin):
         if not self._nuclei_integration.is_available:
             logger.info("[Nuclei] nuclei CLI 不可用，使用内置回退模板（内容特征验证）")
 
+        tech_hints = self._oa_tech_hints()
+        if tech_hints:
+            logger.info(f"[Nuclei] 模板策展: 按目标技术栈 {tech_hints} 精选模板")
         result = await self._nuclei_integration.scan(
             target.url,
             cookies=target.cookies or None,
             severities=None,  # 默认全部严重级，由结果合并后统一去重/排序
+            tech_stack=tech_hints or None,
         )
         return result if isinstance(result, list) else []
 
@@ -742,6 +763,9 @@ class WAVScanner(ScannerIntegrationsMixin):
         if self.config.get("nuclei.enabled", True):
             try:
                 nuclei_vulns = await self._run_nuclei(target)
+                # T3.4 模板策展审计:选择过程随报告输出(可审计字段)
+                if self._nuclei_integration is not None:
+                    result.template_selection = getattr(self._nuclei_integration, "last_selection", None)
                 if nuclei_vulns:
                     logger.info(f"[+] Nuclei: {len(nuclei_vulns)} findings(已合并)")
                     unique_vulns = self._deduplicate(unique_vulns + nuclei_vulns)
