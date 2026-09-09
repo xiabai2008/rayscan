@@ -551,6 +551,11 @@ class WAVScanner(ScannerIntegrationsMixin):
         ctx.target = target
         await orchestrator.run(ctx)
 
+        # ── Stage 失败可观测:转入报告 errors 与统计(不阻断,与 fail-soft 语义一致) ──
+        for failure in ctx.stage_failures:
+            result.errors.append(failure)
+            self._stats["errors"] += 1
+
         # ── Report(保持异常向上传播语义,留在 facade) ──
         unique_vulns = ctx.unique_vulns
 

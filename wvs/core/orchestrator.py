@@ -57,6 +57,7 @@ class ScanContext:
         self.endpoints: List[Any] = []  # 爬取发现的端点
         self.raw_vulns: List[Any] = []  # 去重前的原始漏洞
         self.unique_vulns: List[Any] = []  # 去重后的漏洞
+        self.stage_failures: List[Dict[str, str]] = []  # 失败 stage 记录(可观测,见 ScanOrchestrator.run)
         self._data: Dict[str, Any] = {}  # 扩展数据
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -77,13 +78,16 @@ class ScanOrchestrator:
         self.stages.append(stage)
 
     async def run(self, ctx: ScanContext) -> None:
-        """顺序执行所有 stage;单个 stage 失败不阻断后续(记录日志)。"""
+        """顺序执行所有 stage;单个 stage 失败不阻断后续(告警 + 记录到 ctx.stage_failures)。"""
         for stage in self.stages:
             try:
                 logger.debug("[Orchestrator] 执行 stage: %s", stage.name)
                 await stage.run(ctx)
             except Exception as e:  # noqa: BLE001
-                logger.warning("[Orchestrator] stage %s 失败: %s", stage.name, e)
+                # 失败不阻断,但必须可观测:WARNING 带堆栈 + 结构化记录,
+                # 由 facade 转入 result.errors / 统计,而非静默吞掉。
+                logger.warning("[Orchestrator] stage %s 失败: %s", stage.name, e, exc_info=True)
+                ctx.stage_failures.append({"stage": stage.name, "error": str(e)})
 
     def __repr__(self) -> str:
         return f"ScanOrchestrator(stages={[s.name for s in self.stages]})"

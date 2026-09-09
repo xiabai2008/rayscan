@@ -84,6 +84,20 @@ def test_orchestrator_continues_after_stage_failure() -> None:
     assert ctx.get("noop_called") is True
 
 
+def test_orchestrator_records_stage_failures_observably() -> None:
+    """收紧吞异常:失败 stage 告警同时结构化记录到 ctx.stage_failures。"""
+    scanner = _make_scanner()
+    orch = ScanOrchestrator(scanner, stages=[_FailStage(scanner), _NoopStage(scanner)])
+    ctx = ScanContext(scanner)
+
+    async def _run():
+        await orch.run(ctx)
+
+    asyncio.run(_run())
+    assert ctx.stage_failures == [{"stage": "fail", "error": "stage failure"}]
+    assert ctx.get("noop_called") is True  # 后续 stage 仍执行
+
+
 def test_scanner_has_default_orchestrator() -> None:
     scanner = _make_scanner()
     assert scanner._orchestrator is not None
@@ -408,6 +422,40 @@ def test_scan_facade_runs_single_pipeline() -> None:
     assert saved["url"] == "http://example.com/"
     assert len(saved["vulns"]) == 2
     assert saved["endpoints"] == 1
+
+
+def test_scan_facade_surfaces_stage_failures_in_report() -> None:
+    """stage 失败不阻断但可观测:转入 result.errors 与 _stats['errors']。"""
+    from wvs.core.crawler import DiscoveredEndpoint
+    from wvs.models import ScanTarget, Severity, Vulnerability, VulnerabilityType
+
+    scanner = _make_scanner()
+    ep = DiscoveredEndpoint(url="http://example.com/", method="GET", source_url="http://example.com/", source_depth=1)
+    _stub_crawler(scanner, [ep])
+    scanner.load_module("sqli")
+
+    found = Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        url="http://example.com/?id=1",
+        severity=Severity.HIGH,
+        title="t",
+        description="d",
+    )
+
+    async def fake_run_module(mod_name, target, batch, concurrency, global_sem):
+        return [found]
+
+    scanner._run_module_concurrent = fake_run_module
+
+    def boom(vulns):
+        raise RuntimeError("dedup exploded")
+
+    scanner._deduplicate = boom
+
+    result = asyncio.run(scanner.scan(ScanTarget(url="http://example.com/")))
+    assert result.errors and result.errors[0]["stage"] == "dedup"
+    assert scanner._stats["errors"] == 1
+    assert result.vulnerabilities == []  # 去重 stage 失败 → 无结果,但扫描不崩
 
 
 def test_dedup_stage_empty() -> None:
