@@ -18,9 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **证据链**：扫描默认开 explain，SSE 结果与 JSON 导出均含 `evidence_chain`；结果表行点击展开逐信号明细
 - **Profile**：下拉应用（填充速率/深度/模块）+ 当前配置保存为新 Profile（内置名保护，名称白名单校验）
 - **被动捕获闭环**：UI 启动/停止代理（TLS 解密可选、目标域必填、queue_out 限 scan_reports/）→ 2s 轮询捕获统计 → 「去扫描队列」预填并 `from_proxy` 定向主动验证（复用 `wvs/core/passive/queue_scan.py` 共享实现，gentle 限速）
-- **死标签修复**：dashboard/history 接入 Tab 导航；`_record_scan` 首次被调用（历史/统计有数据，读写加锁）；模块列表从硬编码 10 个改为 `/api/modules` 动态获取（18 个）；版本号改由 `wvs.__version__` 渲染
+- **死标签修复**：dashboard/history 接入 Tab 导航；`_record_scan` 首次被调用（历史/统计有数据，读写加锁）；模块列表从硬编码 10 个改为 `/api/modules` 动态获取（实测 21 个模块）；版本号改由 `wvs.__version__` 渲染
 - **共享提取**：`wvs/core/passive/queue_scan.py`（`apply_gentle_rate_cap`/`queue_endpoint_to_target`/`scan_proxy_queue` 自 cli.py 转正），CLI 与 UI 同一实现
-- **测试**：`tests/test_web_ui.py`（payloads/ScanSession/PassiveProxySession/API 共 24 用例）、`tests/test_auth_assembly.py`（11 用例）；CI ruff 覆盖 `web_ui/`
+- **测试**：`tests/test_web_ui.py`（payloads/ScanSession/PassiveProxySession/API 共 25 用例）、`tests/test_auth_assembly.py`（11 用例）；CI ruff 覆盖 `web_ui/`
+
+### Fixed — v2.3 T3.5 验收发现的真实缺陷
+
+- **被动目标过滤端口失效**：`queue.host_matches` 只剥请求 Host 端口、未剥 target 端口，而 CLI/Web UI 的目标归一化（`urlparse().netloc`）会带端口 → `passive --target http://host:port` 与 UI 被动捕获永远捕获 0 条。现双侧剥端口（与 docstring 一致），新增回归用例 `test_host_matches_target_port_stripped`
+- **陈旧 SSE 事件泄漏**：`ScanSession` 队列在无 SSE 客户端订阅时（API 发起的扫描）残留 `done`/`result`，下一次 UI 扫描的新连接会先读到陈旧 `done` 导致 UI 提前结束、只显示旧结果。`ScanSession.start()` 现先清空残留事件，新增回归用例 `test_start_drains_stale_events_from_previous_scan`
+- **验收记录**：本机真实链路——API 扫描 `sqli/error` 23.5s 检出 4 HIGH 并落账历史；被动代理捕获 `/sqli/error?id=1` → 队列落盘（schema v1）→ `from_proxy` 定向扫描 4.4s 检出 3 HIGH；Playwright UI 冒烟 16/16 PASS（登录/三 Tab/动态 21 模块/历史/被动启停/UI 发起扫描+证据链展开）；带 Set-Cookie 的 mock 登录服务验证 form 认证成功 + 登录态维持
 
 ### Added — v2.3 T3.2 证据包导出（`report --pack`）
 
