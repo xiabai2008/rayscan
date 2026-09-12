@@ -17,6 +17,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 # ── Windows GBK console fix ────────────────────────────────────
 # rich library crashes on Windows GBK terminals when outputting Unicode
@@ -102,7 +103,7 @@ from .core.passive.queue_scan import (
 )
 from .models import ScanResult, ScanTarget, Severity
 from .modules.base import ModuleFactory
-from .plugins.auth import AuthManager
+from .plugins.auth import AuthManager, authenticate_and_apply, configure_from_options
 from .reporting import ConsoleReporter, CSVReporter, HTMLReporter, JSONReporter, MarkdownReporter
 
 console = Console()
@@ -191,6 +192,40 @@ def _save_partial_results(
 # ─────────────────────────────────────────────────────────────────
 # CLI 命令
 # ─────────────────────────────────────────────────────────────────
+
+
+def _auth_options_from_args(args) -> Optional[Dict[str, Any]]:
+    """CLI 认证参数 → 共享 options 字典（None = 未配置认证）。"""
+    auth_type = getattr(args, "auth_type", None)
+    if (
+        not auth_type
+        and getattr(args, "username", None)
+        and getattr(args, "password", None)
+        and getattr(args, "login_url", None)
+    ):
+        auth_type = "form"  # 旧参数兼容
+    if not auth_type:
+        return None
+    options: Dict[str, Any] = {"type": auth_type}
+    for key in (
+        "login_url",
+        "username",
+        "password",
+        "token",
+        "cookies",
+        "api_key",
+        "api_key_header",
+        "success_check",
+        "fail_check",
+    ):
+        value = getattr(args, key, None)
+        if value is not None:
+            options[key] = value
+    if getattr(args, "login_extra", None):
+        options["login_extra"] = list(args.login_extra)
+    if getattr(args, "csrf_fields", None):
+        options["csrf_fields"] = list(args.csrf_fields)
+    return options
 
 
 def cmd_scan(args):
@@ -376,102 +411,22 @@ def cmd_scan(args):
         for mod_name, mod_instance in scanner._modules.items():
             mod_instance.set_oob_manager(oob_manager)
 
-    # 认证处理
+    # 认证处理（v2.3 T3.5：装配/执行与 Web UI 共享 wvs.plugins.auth）
     target = ScanTarget(url=target_url)
-    auth_manager = AuthManager(config)
-
-    if args.auth_type == "form":
-        if not args.login_url:
-            console.print("[red]错误：--auth-type form 需要 --login-url[/red]")
+    auth_options = _auth_options_from_args(args)
+    if auth_options:
+        auth_manager = AuthManager(config)
+        ok, err = configure_from_options(auth_manager, auth_options)
+        if not ok:
+            console.print(f"[red]错误：{err}[/red]")
             return 1
-        if not (args.username and args.password):
-            console.print("[red]错误：--auth-type form 需要 --username 和 --password[/red]")
-            return 1
-        extra = {}
-        if args.login_extra:
-            for pair in args.login_extra:
-                if "=" in pair:
-                    k, v = pair.split("=", 1)
-                    extra[k] = v
-        form_kwargs = {"extra_fields": extra}
-        if hasattr(args, "csrf_fields") and args.csrf_fields:
-            form_kwargs["csrf_fields"] = args.csrf_fields
-        if hasattr(args, "success_check") and args.success_check:
-            form_kwargs["success_check"] = args.success_check
-        if hasattr(args, "fail_check") and args.fail_check:
-            form_kwargs["fail_check"] = args.fail_check
-        auth_manager.configure_form_login(
-            login_url=args.login_url,
-            username=args.username,
-            password=args.password,
-            **form_kwargs,
-        )
-    elif args.auth_type == "bearer":
-        if not args.token:
-            console.print("[red]错误：--auth-type bearer 需要 --token[/red]")
-            return 1
-        auth_manager.configure_bearer(token=args.token)
-    elif args.auth_type == "basic":
-        if not (args.username and args.password):
-            console.print("[red]错误：--auth-type basic 需要 --username 和 --password[/red]")
-            return 1
-        auth_manager.configure_basic(username=args.username, password=args.password)
-    elif args.auth_type == "apikey":
-        if not args.api_key:
-            console.print("[red]错误：--auth-type apikey 需要 --api-key[/red]")
-            return 1
-        auth_manager.configure_api_key(key=args.api_key, header_name=args.api_key_header)
-    elif args.auth_type == "cookie":
-        if not args.cookies:
-            console.print("[red]错误：--auth-type cookie 需要 --cookies[/red]")
-            return 1
-        auth_manager.configure_cookies(cookies=args.cookies)
-    else:
-        # 兼容旧参数
-        if args.auth_type is None and args.username and args.password and args.login_url:
-            auth_manager.configure_form_login(
-                login_url=args.login_url,
-                username=args.username,
-                password=args.password,
-            )
-
-    # 执行认证
-    if args.auth_type or (args.username and args.password):
         console.print(f"[cyan][AUTH] 正在执行认证 ({auth_manager.provider_name})...[/cyan]")
-        import httpx
-
-        async def _do_auth():
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
-                return await auth_manager.authenticate(tmp_client)
-
-        asyncio.run(_do_auth())
-
-        if not auth_manager.is_authenticated:
-            console.print(f"[red][X] 认证失败: {auth_manager.auth_error}[/red]")
+        ok, err = asyncio.run(authenticate_and_apply(auth_manager, target, session))
+        if not ok:
+            console.print(f"[red][X] 认证失败: {err}[/red]")
             return 1
-
         console.print("[green][OK] 认证成功[/green]")
-        auth_manager.apply_to_target(target)
-
-        # 关键：把 auth cookies 同步进 scanner 的 HTTPPool
-        # CLI 的 auth 用的是独立 httpx client，scanner 的 HTTPPool 是另一个 client
-        for name, value in target.cookies.items():
-            session.set_cookie(target_url, name, value)
         console.print(f"[cyan]  已同步 {len(target.cookies)} 个 cookie 到扫描 session[/cyan]")
-
-        # T2.4 登录态维持：注册自动重登回调（扫描中检测到 401/登录重定向时重新认证并重放）
-        async def _reauth_handler() -> bool:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
-                result = await auth_manager.authenticate(tmp_client)
-            if not result.get("authenticated"):
-                return False
-            for name, value in (result.get("cookies") or {}).items():
-                session.set_cookie(target_url, name, value)
-            for name, value in (result.get("headers") or {}).items():
-                session.set_header(name, value)
-            return True
-
-        session.set_reauth_handler(_reauth_handler)
         console.print("[cyan]  已启用登录态维持（会话失效自动重登）[/cyan]")
 
     # ── 利用引擎开关校验（默认禁用） ──

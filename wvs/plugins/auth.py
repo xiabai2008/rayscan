@@ -13,7 +13,7 @@ import base64
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -571,3 +571,106 @@ class AuthManager:
     @property
     def provider_name(self) -> str:
         return self._provider.__class__.__name__ if self._provider else "None"
+
+
+# ─────────────────────────────────────────────────────────────────
+# Shared assembly helpers (v2.3 T3.5: CLI and Web UI)
+# ─────────────────────────────────────────────────────────────────
+
+
+def parse_cookies(raw: Any) -> Dict[str, str]:
+    """解析 cookie 输入：dict 原样返回；"k=v; k2=v2" 字符串 → dict。"""
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    cookies: Dict[str, str] = {}
+    for part in str(raw or "").split(";"):
+        if "=" in part:
+            key, value = part.split("=", 1)
+            key = key.strip()
+            if key:
+                cookies[key] = value.strip()
+    return cookies
+
+
+def configure_from_options(auth_manager: "AuthManager", options: Dict[str, Any]) -> Tuple[bool, str]:
+    """按 options 字典装配 AuthManager（CLI 与 Web UI 共用）。
+
+    支持 type: form/bearer/basic/apikey/cookie。缺参/未知类型返回 (False, 错误信息)。
+    """
+    auth_type = str((options or {}).get("type") or "").strip().lower()
+    if not auth_type:
+        return False, "缺少认证类型 auth.type"
+    if auth_type == "form":
+        login_url = options.get("login_url")
+        username = options.get("username")
+        password = options.get("password")
+        if not login_url:
+            return False, "auth-type form 需要 login_url"
+        if not (username and password):
+            return False, "auth-type form 需要 username 和 password"
+        extra: Dict[str, str] = {}
+        for pair in options.get("login_extra") or []:
+            if "=" in str(pair):
+                key, value = str(pair).split("=", 1)
+                extra[key] = value
+        form_kwargs: Dict[str, Any] = {"extra_fields": extra}
+        if options.get("csrf_fields"):
+            form_kwargs["csrf_fields"] = options["csrf_fields"]
+        if options.get("success_check"):
+            form_kwargs["success_check"] = options["success_check"]
+        if options.get("fail_check"):
+            form_kwargs["fail_check"] = options["fail_check"]
+        auth_manager.configure_form_login(login_url=login_url, username=username, password=password, **form_kwargs)
+    elif auth_type == "bearer":
+        if not options.get("token"):
+            return False, "auth-type bearer 需要 token"
+        auth_manager.configure_bearer(
+            token=str(options["token"]), header_name=str(options.get("header_name") or "Authorization")
+        )
+    elif auth_type == "basic":
+        if not (options.get("username") and options.get("password")):
+            return False, "auth-type basic 需要 username 和 password"
+        auth_manager.configure_basic(username=str(options["username"]), password=str(options["password"]))
+    elif auth_type == "apikey":
+        if not options.get("api_key"):
+            return False, "auth-type apikey 需要 api_key"
+        auth_manager.configure_api_key(
+            key=str(options["api_key"]), header_name=str(options.get("api_key_header") or "X-API-Key")
+        )
+    elif auth_type == "cookie":
+        cookies = parse_cookies(options.get("cookies"))
+        if not cookies:
+            return False, "auth-type cookie 需要 cookies"
+        auth_manager.configure_cookies(cookies=cookies)
+    else:
+        return False, f"不支持的认证类型: {auth_type}"
+    return True, ""
+
+
+async def authenticate_and_apply(auth_manager: "AuthManager", target: ScanTarget, http_pool: Any) -> Tuple[bool, str]:
+    """执行认证并把凭据注入 target 与 HTTPPool，注册登录态维持回调（T2.4）。
+
+    成功: target.cookies/target.headers 携带认证结果; http_pool 注入 cookie 并注册重登。
+    失败: 返回 (False, 错误信息)，不修改 http_pool。
+    """
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
+        await auth_manager.authenticate(tmp_client)
+    if not auth_manager.is_authenticated:
+        return False, auth_manager.auth_error or "认证失败"
+    auth_manager.apply_to_target(target)
+    for name, value in target.cookies.items():
+        http_pool.set_cookie(target.url, name, value)
+
+    async def _reauth_handler() -> bool:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as tmp_client:
+            result = await auth_manager.authenticate(tmp_client)
+        if not result.get("authenticated"):
+            return False
+        for name, value in (result.get("cookies") or {}).items():
+            http_pool.set_cookie(target.url, name, value)
+        for name, value in (result.get("headers") or {}).items():
+            http_pool.set_header(name, value)
+        return True
+
+    http_pool.set_reauth_handler(_reauth_handler)
+    return True, ""
