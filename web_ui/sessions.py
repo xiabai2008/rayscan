@@ -17,10 +17,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
 
 from wvs.config import ConfigManager
 from wvs.core import HTTPPool, WAVScanner
-from wvs.core.passive import ProxyCaptureQueue
+from wvs.core.passive import PassiveProxy, ProxyCaptureQueue
 from wvs.core.passive.queue_scan import apply_gentle_rate_cap, scan_proxy_queue
 from wvs.models import ScanResult, ScanTarget
 from wvs.plugins.auth import AuthManager, authenticate_and_apply, configure_from_options
@@ -358,3 +359,121 @@ class ScanSession:
 
     def _log(self, level: str, text: str) -> None:
         self.queue.put(("log", {"level": level, "text": text, "time": datetime.now().strftime("%H:%M:%S")}))
+
+
+class PassiveProxySession:
+    """被动代理会话:后台线程运行 asyncio 代理,只捕获不入检（--no-live-scan 语义）。"""
+
+    def __init__(self):
+        self._thread: Optional[threading.Thread] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._proxy: Any = None
+        self._lock = threading.Lock()
+        self._started = threading.Event()
+        self.running = False
+        self.last_error: Optional[str] = None
+        self.target: Optional[str] = None
+        self.target_filter: Optional[str] = None
+        self.listen_host = "127.0.0.1"
+        self.listen_port = 8081
+        self.tls_intercept = False
+        self.ca_dir: Optional[str] = None
+        self.queue_path: Optional[Path] = None
+
+    @staticmethod
+    def _normalize_target(raw: str) -> str:
+        """目标 URL → host 过滤值（与 CLI cmd_passive 同语义）。"""
+        target = (raw or "").strip().rstrip("/")
+        if target.startswith(("http://", "https://")):
+            target = urlparse(target).netloc or target
+        return target
+
+    def start(self, options: Dict[str, Any]) -> None:
+        with self._lock:
+            if self.running:
+                raise RuntimeError("被动代理已在运行")
+            self.target = str(options.get("target") or "").strip()
+            self.target_filter = self._normalize_target(self.target)
+            self.listen_host = str(options.get("listen") or "127.0.0.1")
+            self.listen_port = int(options.get("port") or 8081)
+            self.tls_intercept = bool(options.get("tls_intercept"))
+            self.ca_dir = options.get("ca_dir") or None
+            self.queue_path = Path(options["queue_path"]) if options.get("queue_path") else None
+            self.last_error = None
+            self._started.clear()
+            self.running = True
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+        if not self._started.wait(timeout=10):
+            self.running = False
+            raise RuntimeError("代理启动超时")
+        if self.last_error:
+            self.running = False
+            raise RuntimeError(self.last_error)
+
+    def _run(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        try:
+            self._proxy = PassiveProxy(
+                scan_callback=None,
+                target_filter=self.target_filter,
+                listen_host=self.listen_host,
+                listen_port=self.listen_port,
+                tls_intercept=self.tls_intercept,
+                ca_dir=self.ca_dir,
+                queue_path=self.queue_path,
+            )
+            self._loop.run_until_complete(self._proxy.start())
+            self._started.set()
+            self._loop.run_until_complete(self._proxy.serve_forever())
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:  # noqa: BLE001
+            self.last_error = str(e)
+            self._started.set()
+        finally:
+            self.running = False
+            try:
+                self._loop.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def stop(self) -> None:
+        with self._lock:
+            proxy = self._proxy
+            loop = self._loop
+            if not self.running or proxy is None or loop is None:
+                self.running = False
+                return
+            future = asyncio.run_coroutine_threadsafe(proxy.close(), loop)
+            try:
+                future.result(timeout=5)
+            except Exception as e:  # noqa: BLE001
+                self.last_error = str(e)
+        if self._thread:
+            self._thread.join(timeout=5)
+        self.running = False
+
+    def status(self) -> Dict[str, Any]:
+        proxy = self._proxy
+        result = getattr(proxy, "result", None)
+        queued = 0
+        if proxy is not None:
+            try:
+                queued = len(proxy.queue)
+            except Exception:  # noqa: BLE001
+                queued = 0
+        return {
+            "running": bool(self.running),
+            "listen": f"{self.listen_host}:{self.listen_port}",
+            "target": self.target,
+            "target_filter": self.target_filter,
+            "tls_intercept": self.tls_intercept,
+            "ca_dir": self.ca_dir,
+            "queue_path": str(self.queue_path) if self.queue_path else None,
+            "requests_captured": getattr(result, "requests_captured", 0) if result else 0,
+            "endpoints_discovered": getattr(result, "endpoints_discovered", 0) if result else 0,
+            "queued_endpoints": queued or (getattr(result, "queued_endpoints", 0) if result else 0),
+            "errors": list(getattr(result, "errors", []) or []) if result else [],
+        }

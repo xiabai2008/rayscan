@@ -191,3 +191,85 @@ class TestScanSession:
         assert events[-1] == "done"
         assert recorded and recorded[0][0] is not None
         assert recorded[0][1]["url"] == "http://t"
+
+
+class _FakeProxy:
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.result = SimpleNamespace(
+            requests_captured=0,
+            endpoints_discovered=0,
+            queued_endpoints=0,
+            requests_scanned=0,
+            vulnerabilities=[],
+            errors=[],
+        )
+        self.queue = []
+        self._stop = None
+        self.closed = False
+        _FakeProxy.instances.append(self)
+
+    async def start(self):
+        self._stop = asyncio.Event()
+
+    async def serve_forever(self):
+        await self._stop.wait()
+        raise asyncio.CancelledError()
+
+    async def close(self):
+        self.closed = True
+        if self._stop is not None:
+            self._stop.set()
+
+
+class TestPassiveSession:
+    def test_start_status_stop(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(sessions, "PassiveProxy", _FakeProxy)
+        ps = sessions.PassiveProxySession()
+        ps.start(
+            {
+                "target": "http://example.com/app",
+                "listen": "127.0.0.1",
+                "port": 18081,
+                "tls_intercept": False,
+                "ca_dir": None,
+                "queue_path": str(tmp_path / "q.json"),
+            }
+        )
+        status = ps.status()
+        assert status["running"] is True
+        assert status["target_filter"] == "example.com"
+        assert status["listen"] == "127.0.0.1:18081"
+        assert status["queue_path"] == str(tmp_path / "q.json")
+
+        proxy = _FakeProxy.instances[-1]
+        assert proxy.kwargs["scan_callback"] is None
+        assert proxy.kwargs["target_filter"] == "example.com"
+
+        ps.stop()
+        assert ps.status()["running"] is False
+        assert proxy.closed is True
+
+    def test_duplicate_start_rejected(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(sessions, "PassiveProxy", _FakeProxy)
+        ps = sessions.PassiveProxySession()
+        options = {"target": "http://t", "port": 18082, "queue_path": str(tmp_path / "q.json")}
+        ps.start(options)
+        try:
+            with pytest.raises(RuntimeError):
+                ps.start(options)
+        finally:
+            ps.stop()
+
+    def test_start_failure_raises(self, monkeypatch, tmp_path):
+        class _BoomProxy(_FakeProxy):
+            async def start(self):
+                raise OSError("port in use")
+
+        monkeypatch.setattr(sessions, "PassiveProxy", _BoomProxy)
+        ps = sessions.PassiveProxySession()
+        with pytest.raises(RuntimeError, match="port in use"):
+            ps.start({"target": "http://t", "port": 18083, "queue_path": str(tmp_path / "q.json")})
+        assert ps.status()["running"] is False
