@@ -30,7 +30,7 @@ def host_matches(host: str, target: str) -> bool:
 
     双侧剥离 www. 前缀与端口;target 支持域名或 IP。
     """
-    target = (target or "").lower().rstrip(".")
+    target = (target or "").lower().split(":")[0].rstrip(".")
     if target.startswith("www."):
         target = target[4:]
     h = (host or "").lower().split(":")[0].rstrip(".")

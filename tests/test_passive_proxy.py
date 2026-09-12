@@ -30,6 +30,13 @@ def test_host_matches_port_stripped() -> None:
     assert _proxy("example.com")._host_matches("example.com:8080", "example.com") is True
 
 
+def test_host_matches_target_port_stripped() -> None:
+    """target 带端口（netloc 归一化结果）也应命中同一主机（v2.3 T3.5 回归）。"""
+    assert _proxy("example.com:8080")._host_matches("example.com:8080", "example.com:8080") is True
+    assert _proxy("127.0.0.1:18099")._host_matches("127.0.0.1:18099", "127.0.0.1:18099") is True
+    assert _proxy("example.com:8080")._host_matches("api.example.com:9000", "example.com:8080") is True
+
+
 def test_host_no_match() -> None:
     assert _proxy("example.com")._host_matches("evil.org", "example.com") is False
 
