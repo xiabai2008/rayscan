@@ -171,5 +171,12 @@ def test_auth_options_from_args_legacy_and_none():
     )
     assert _auth_options_from_args(legacy)["type"] == "form"
 
+    # 旧行为保留:用户名+密码但缺 login_url 时仍视为表单登录意图
+    # （configure_from_options 会报错退出，不会静默跳过认证）
+    missing_login_url = SimpleNamespace(**{**legacy.__dict__, "login_url": None})
+    assert _auth_options_from_args(missing_login_url)["type"] == "form"
+    ok, err = configure_from_options(AuthManager(), _auth_options_from_args(missing_login_url))
+    assert not ok and "login_url" in err
+
     empty = SimpleNamespace(**{**legacy.__dict__, "login_url": None, "username": None, "password": None})
     assert _auth_options_from_args(empty) is None

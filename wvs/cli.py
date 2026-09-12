@@ -197,13 +197,12 @@ def _save_partial_results(
 def _auth_options_from_args(args) -> Optional[Dict[str, Any]]:
     """CLI 认证参数 → 共享 options 字典（None = 未配置认证）。"""
     auth_type = getattr(args, "auth_type", None)
-    if (
-        not auth_type
-        and getattr(args, "username", None)
-        and getattr(args, "password", None)
-        and getattr(args, "login_url", None)
-    ):
-        auth_type = "form"  # 旧参数兼容
+    username = getattr(args, "username", None)
+    password = getattr(args, "password", None)
+    if not auth_type and username and password:
+        # 旧行为兼容:用户名+密码即视为表单登录意图;缺 login_url 时由
+        # configure_from_options 报错退出(与旧版"认证失败退出"一致,不静默跳过)
+        auth_type = "form"
     if not auth_type:
         return None
     options: Dict[str, Any] = {"type": auth_type}
