@@ -192,6 +192,17 @@ class TestScanSession:
         assert recorded and recorded[0][0] is not None
         assert recorded[0][1]["url"] == "http://t"
 
+    def test_start_drains_stale_events_from_previous_scan(self, monkeypatch):
+        """API 发起（无 SSE 订阅）的扫描完成后，残留 done/result 不得泄漏给下一次扫描。"""
+        self._patch(monkeypatch)
+        s = sessions.ScanSession()
+        s.queue.put(("done", {"msg": "stale"}))
+        s.queue.put(("result", {"vulnerabilities": [{"type": "stale"}]}))
+        s.start({"url": "http://t"}, ConfigManager(), ["sqli"])
+        typ, data = s.queue.get(timeout=5)
+        assert not (typ == "done" and data.get("msg") == "stale")
+        assert not (typ == "result" and data.get("vulnerabilities", [{}])[0].get("type") == "stale")
+
 
 class _FakeProxy:
     instances = []

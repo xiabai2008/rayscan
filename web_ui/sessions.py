@@ -141,6 +141,19 @@ class ScanSession:
         def flush(self):
             self.orig.flush()
 
+    def _drain_queue(self) -> None:
+        """清空上次会话残留事件。
+
+        扫描可经 API 发起而无 SSE 客户端订阅，此时 done/result 事件会滞留在
+        队列里；下一次扫描的新 SSE 连接会先读到陈旧事件，导致 UI 提前结束/
+        展示旧结果。
+        """
+        while True:
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                return
+
     # ── 生命周期 ──
     def start(
         self,
@@ -150,6 +163,7 @@ class ScanSession:
         from_proxy_queue_path: Optional[Path] = None,
         on_finish: Optional[Callable[[Optional[ScanResult], float, Dict[str, Any]], None]] = None,
     ) -> None:
+        self._drain_queue()
         self.scanning = True
         self._start_time = time.time()
         self._module_order = list(modules or [])
