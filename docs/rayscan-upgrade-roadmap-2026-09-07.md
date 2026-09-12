@@ -30,7 +30,9 @@
 > **⑩ 已完成（2026-09-09）**：scan() 内联爬扫循环/checkpoint/resume 全部迁入编排器 Stage，
 > scan() 收敛为单趟流水线 facade，编排层吞异常收紧为可观测（ctx.stage_failures → result.errors）；
 > 410 测试全绿 + 黄金矩阵 sqli/idor 冒烟通过。
-> 待办：⑪ v2.3 四件。
+> **⑪ 已完成（2026-09-12）**：v2.3 四件全部落地（T3.1 联动 / T3.2 证据包 / T3.3 规则外部化 / T3.4 模板策展），
+> 另完成 **T3.5 Web UI 对齐 CLI**（passive 捕获队列闭环 / explain 证据链 / profile 应用保存 / 五类认证）。
+> v2.3 收尾，版本升 2.3.0。
 
 ### v2.2 — 实测闭环（检测可信度制度化）⏱ ≈2 周 ✅ 已完成
 
@@ -56,7 +58,7 @@
 | T3.2 证据包导出 | `rayscan report --pack`：每漏洞生成 markdown + curl 重放命令 + evidence_chain + SARIF，打包为可提交目录 | 每条漏洞可用导出的 curl 一键复现 |
 | T3.3 OA 规则包 | `rules/` 从近空到可用：按 `docs/OA_RULES.md` 检测矩阵补齐规则文件（YAML 化，含 evidence/max_version 元数据），`rayscan rules update` 接 git 源 | OA 模块全部检测项由外部规则驱动；新增 OA 只需加规则不改代码 |
 | T3.4 Nuclei 模板策展 | 按 OA 指纹（`OA_FINGERPRINTS` 已有 12 种）自动挑选对应 tags/路径模板，淘汰泛匹配 | 模板选择结果随报告输出（可审计） |
-| T3.5 Web UI 对齐 CLI | web_ui 补 passive/explain/profile 三能力入口（社区可协作的显式切面） | UI 可发起带认证的扫描并查看证据链 |
+| T3.5 Web UI 对齐 CLI | ✅ web_ui 补 passive/explain/profile 三能力入口（社区可协作的显式切面） | UI 可发起带认证的扫描并查看证据链 |
 
 ### v3.0 — 规模化与生态 ⏱ ≈1 个月（可社区并行）
 

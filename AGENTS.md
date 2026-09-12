@@ -21,6 +21,15 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-12 (v2.3 T3.5 Web UI 对齐 CLI — passive/explain/profile 三能力入口)
+- **薄 app + 服务层**：`web_ui/app.py` 收敛为路由/鉴权/CSRF/序列化层；新增 `web_ui/sessions.py`（`ScanSession` 线程+SSE 日志捕获+结果序列化/认证透传/from-proxy 定向扫描、`PassiveProxySession` 代理后台线程/状态机）与 `web_ui/payloads.py`（profile/参数/模块解析纯函数）；前端三 Tab 导航 + 动态模块列表（`/api/modules`，18 模块）+ `wvs.__version__` 渲染
+- **三能力入口**：①passive 捕获队列闭环——UI 启停代理（target 必填、queue_out 限 `scan_reports/`、TLS 解密可选）→ 2s 轮询捕获统计 → 「去扫描队列」预填并 `from_proxy` 定向主动验证（复用共享 `scan_proxy_queue`，gentle 限速）；②explain 证据链——SSE 结果与 JSON 导出均含 `evidence_chain`，结果行点击展开逐信号明细；③profile——下拉应用（填充速率/深度/模块）+ 当前配置保存为新 Profile（内置名 409 保护、名称白名单校验）
+- **五类认证**：form/bearer/basic/apikey/cookie 折叠面板动态字段，扫描中自动启用登录态维持（T2.4）
+- **共享提取**：`wvs/core/passive/queue_scan.py`（`apply_gentle_rate_cap`/`queue_endpoint_to_target`/`scan_proxy_queue` 自 cli.py 转正）；`wvs/plugins/auth.py` 新增 `parse_cookies`/`configure_from_options`/`authenticate_and_apply`，CLI cmd_scan 改用共享装配（`_auth_options_from_args` 保留旧参数兼容，行为不变）
+- **死标签修复**：dashboard/history 接入 Tab 导航；`_record_scan` 首次被调用（历史/统计有数据，读写加锁）；模块列表硬编码 10 个 → `/api/modules` 动态 18 个
+- **测试**：`tests/test_web_ui.py` 24 用例（payloads/ScanSession/PassiveProxySession/API）、`tests/test_auth_assembly.py` 11 用例（五类装配/缺参/cookie 解析/重登回调/CLI 参数映射）；CI ruff check/format 覆盖 `web_ui/`；版本升 2.3.0
+- 影响文件：`web_ui/{app.py(重写),sessions.py(新增),payloads.py(新增),__init__.py(新增),templates/index.html}`、`wvs/core/passive/queue_scan.py(新增)`、`wvs/plugins/auth.py`、`wvs/cli.py`、`tests/{test_web_ui,test_auth_assembly}.py(新增)`、`tests/test_from_proxy.py`、`.github/workflows/ci.yml`、`pyproject.toml`、`wvs/__init__.py`、`README.md`、`CHANGELOG.md`、`docs/rayscan-upgrade-roadmap-2026-09-07.md`
+
 ### 2026-09-09 (v2.3 T3.2 证据包导出 — report --pack)
 - **`rayscan report --pack <report.json> [-o DIR]`**（`wvs/reporting/evidence_pack.py::EvidencePackBuilder` + CLI `report` 子命令）：JSON 报告 → 可提交证据包目录（README.md 索引 / report.json 副本 / report.sarif 全量 SARIF 2.1.0 / manifest.json 机器可读索引 / vulns/<seq>-<type>-<id8>/ 每漏洞 finding.md + replay.sh + evidence.json）
 - **可复现 curl 重建**：由漏洞记录 method/参数类型/载荷生成——query 参数 Python 侧百分号编码内嵌 URL（与 httpx 一致,避免 curl -G 改写方法）、form body --data-urlencode、json body --data-raw、cookie/header 型 -H；POSIX 单引号安全引用

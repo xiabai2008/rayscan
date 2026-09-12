@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — v2.3 T3.5 Web UI 对齐 CLI（passive / explain / profile 三能力入口）
+
+- **薄 app + 服务层**：`web_ui/app.py` 收敛为路由/鉴权/CSRF 层；新增 `web_ui/sessions.py`（`ScanSession` 线程+SSE+结果序列化、`PassiveProxySession` 代理线程状态机）与 `web_ui/payloads.py`（profile/参数/模块解析纯函数）
+- **认证（五种）**：Web UI 支持 form/bearer/basic/apikey/cookie 认证扫描，扫描中自动启用登录态维持（T2.4）；认证装配/执行提取为 `wvs.plugins.auth.configure_from_options/authenticate_and_apply`（CLI cmd_scan 同步改用，行为不变）
+- **证据链**：扫描默认开 explain，SSE 结果与 JSON 导出均含 `evidence_chain`；结果表行点击展开逐信号明细
+- **Profile**：下拉应用（填充速率/深度/模块）+ 当前配置保存为新 Profile（内置名保护，名称白名单校验）
+- **被动捕获闭环**：UI 启动/停止代理（TLS 解密可选、目标域必填、queue_out 限 scan_reports/）→ 2s 轮询捕获统计 → 「去扫描队列」预填并 `from_proxy` 定向主动验证（复用 `wvs/core/passive/queue_scan.py` 共享实现，gentle 限速）
+- **死标签修复**：dashboard/history 接入 Tab 导航；`_record_scan` 首次被调用（历史/统计有数据，读写加锁）；模块列表从硬编码 10 个改为 `/api/modules` 动态获取（18 个）；版本号改由 `wvs.__version__` 渲染
+- **共享提取**：`wvs/core/passive/queue_scan.py`（`apply_gentle_rate_cap`/`queue_endpoint_to_target`/`scan_proxy_queue` 自 cli.py 转正），CLI 与 UI 同一实现
+- **测试**：`tests/test_web_ui.py`（payloads/ScanSession/PassiveProxySession/API 共 24 用例）、`tests/test_auth_assembly.py`（11 用例）；CI ruff 覆盖 `web_ui/`
+
 ### Added — v2.3 T3.2 证据包导出（`report --pack`）
 
 - **`rayscan report --pack <report.json> [-o DIR]`**：把一次扫描的 JSON 报告展开为可直接提交（SRC/渗透报告）的证据包目录——`README.md`（概览+索引+重放说明）、`report.json`（原始副本）、`report.sarif`（SARIF 2.1.0 全量，GitHub Code Scanning 可导入）、`manifest.json`（机器可读索引）、`vulns/<序号>-<类型>-<id8>/`（每漏洞 `finding.md` + `replay.sh` + `evidence.json`）
