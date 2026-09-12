@@ -20,7 +20,7 @@ from web_ui import payloads, sessions
 from wvs.config import ConfigManager
 from wvs.core.crawler import DiscoveredEndpoint
 from wvs.core.passive import ProxyCaptureQueue
-from wvs.models import ScanResult, Severity, Vulnerability, VulnerabilityType
+from wvs.models import ScanResult, ScanTarget, Severity, Vulnerability, VulnerabilityType
 from wvs.profiles import ProfileManager
 
 
@@ -273,3 +273,136 @@ class TestPassiveSession:
         with pytest.raises(RuntimeError, match="port in use"):
             ps.start({"target": "http://t", "port": 18083, "queue_path": str(tmp_path / "q.json")})
         assert ps.status()["running"] is False
+
+
+class TestApi:
+    @pytest.fixture()
+    def app_client(self, monkeypatch):
+        from web_ui import app as web_app
+
+        web_app.app.config["TESTING"] = True
+        monkeypatch.setattr(web_app, "scan_session", sessions.ScanSession())
+        monkeypatch.setattr(web_app, "passive_session", sessions.PassiveProxySession())
+        with web_app.app.test_client() as client:
+            yield client, web_app
+
+    def test_api_requires_auth(self, app_client):
+        client, _ = app_client
+        assert client.get("/api/modules").status_code == 401
+
+    def test_api_token_allows_and_lists_modules(self, app_client):
+        client, web_app = app_client
+        response = client.get("/api/modules", headers={"X-Api-Token": web_app.API_TOKEN})
+        assert response.status_code == 200
+        modules = response.get_json()["modules"]
+        assert {"sqli", "xss", "mcp"} <= {m["name"] for m in modules}
+
+    def test_session_post_requires_csrf(self, app_client):
+        client, web_app = app_client
+        response = client.post("/login", data={"token": web_app.API_TOKEN})
+        assert response.status_code in (302, 303)
+        response = client.post("/api/scan", json={"url": "http://t", "modules": ["sqli"]})
+        assert response.status_code == 403
+
+    def test_profiles_list_save_and_detail(self, app_client, monkeypatch, tmp_path):
+        client, web_app = app_client
+        monkeypatch.setattr(web_app, "_profile_manager", ProfileManager(tmp_path))
+        headers = {"X-Api-Token": web_app.API_TOKEN}
+
+        names = {p["name"] for p in client.get("/api/profiles", headers=headers).get_json()["profiles"]}
+        assert {"default", "src-quick"} <= names
+
+        response = client.post(
+            "/api/profiles",
+            headers=headers,
+            json={"name": "custom1", "description": "d", "modules": {"enabled": ["sqli"]}, "params": {"rate": 5}},
+        )
+        assert response.status_code == 200
+        assert (tmp_path / "custom1.yaml").exists()
+
+        detail = client.get("/api/profiles/custom1", headers=headers).get_json()
+        assert detail["params"]["rate"] == 5
+        assert detail["builtin"] is False
+
+        assert client.get("/api/profiles/nope", headers=headers).status_code == 404
+        assert client.post("/api/profiles", headers=headers, json={"name": "default", "params": {}}).status_code == 409
+
+    def test_scan_unknown_profile_400(self, app_client):
+        client, web_app = app_client
+        response = client.post(
+            "/api/scan",
+            headers={"X-Api-Token": web_app.API_TOKEN},
+            json={"url": "http://t", "profile": "nope"},
+        )
+        assert response.status_code == 400
+
+    def test_scan_bad_auth_400(self, app_client):
+        client, web_app = app_client
+        response = client.post(
+            "/api/scan",
+            headers={"X-Api-Token": web_app.API_TOKEN},
+            json={"url": "http://t", "auth": {"type": "bearer"}},
+        )
+        assert response.status_code == 400
+
+    def test_scan_from_proxy_without_queue_400(self, app_client):
+        client, web_app = app_client
+        response = client.post(
+            "/api/scan",
+            headers={"X-Api-Token": web_app.API_TOKEN},
+            json={"url": "http://t", "from_proxy": True},
+        )
+        assert response.status_code == 400
+
+    def test_scan_start_returns_started(self, app_client):
+        client, web_app = app_client
+
+        class _FakeScanSession:
+            scanning = False
+
+            def __init__(self):
+                self.started = False
+
+            def start(self, *args, **kwargs):
+                self.started = True
+
+        fake = _FakeScanSession()
+        web_app.scan_session = fake
+        response = client.post(
+            "/api/scan",
+            headers={"X-Api-Token": web_app.API_TOKEN},
+            json={"url": "http://t", "modules": ["sqli"], "explain": True},
+        )
+        assert response.status_code == 200 and fake.started
+
+    def test_export_json_includes_evidence_chain(self, app_client):
+        client, web_app = app_client
+        web_app.scan_session._result = ScanResult(target=ScanTarget(url="http://t"), vulnerabilities=[_stub_vuln()])
+        response = client.get("/api/export/json", headers={"X-Api-Token": web_app.API_TOKEN})
+        assert response.status_code == 200
+        vuln = response.get_json()["vulnerabilities"][0]
+        assert vuln["evidence_chain"][0]["kind"] == "payload"
+        assert vuln["recommendation"] == ""
+
+    def test_passive_start_requires_target(self, app_client):
+        client, web_app = app_client
+        response = client.post("/api/passive/start", headers={"X-Api-Token": web_app.API_TOKEN}, json={"port": 18091})
+        assert response.status_code == 400
+
+    def test_passive_start_queue_path_restricted(self, app_client):
+        client, web_app = app_client
+        response = client.post(
+            "/api/passive/start",
+            headers={"X-Api-Token": web_app.API_TOKEN},
+            json={"target": "http://t", "queue_out": "evil/outside.json"},
+        )
+        assert response.status_code == 400
+
+    def test_passive_conflict_and_status(self, app_client):
+        client, web_app = app_client
+        web_app.passive_session.running = True
+        headers = {"X-Api-Token": web_app.API_TOKEN}
+        assert client.post("/api/passive/start", headers=headers, json={"target": "http://t"}).status_code == 409
+        status = client.get("/api/passive/status", headers=headers).get_json()
+        assert status["running"] is True
+        assert "queue_path" in status
