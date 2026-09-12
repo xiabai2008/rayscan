@@ -328,7 +328,66 @@
     </div> <!-- /#tab-scan -->
 
     <!-- 被动捕获 Tab（Task 9 填充面板） -->
-    <div class="tab-pane fade" id="tab-passive" role="tabpanel"></div>
+    <div class="tab-pane fade" id="tab-passive" role="tabpanel">
+        <div class="row g-3 mt-1">
+            <div class="col-12 col-md-5">
+                <div class="card">
+                    <div class="card-header py-2">被动捕获配置</div>
+                    <div class="card-body py-2">
+                        <div class="mb-2">
+                            <label class="stat-label">目标域（必填，须有授权）</label>
+                            <input class="form-control form-control-sm" id="passive-target" placeholder="http://授权目标">
+                        </div>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6">
+                                <label class="stat-label">监听地址</label>
+                                <input class="form-control form-control-sm" id="passive-listen" value="127.0.0.1">
+                            </div>
+                            <div class="col-6">
+                                <label class="stat-label">端口</label>
+                                <input class="form-control form-control-sm" id="passive-port" value="8081">
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="stat-label">队列文件（仅限 scan_reports/）</label>
+                            <input class="form-control form-control-sm" id="passive-queue"
+                                   value="scan_reports/proxy_queue.json">
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="passive-tls">
+                            <label class="form-check-label" for="passive-tls">TLS 解密（需先信任 CA）</label>
+                        </div>
+                        <div class="mb-2" id="passive-ca-row" style="display:none">
+                            <label class="stat-label">CA 目录（留空用默认 ~/.rayscan/ca）</label>
+                            <input class="form-control form-control-sm" id="passive-ca-dir" placeholder="~/.rayscan/ca">
+                        </div>
+                        <button class="btn btn-primary btn-sm" id="btn-passive-start" onclick="startPassive()">▶ 启动代理</button>
+                        <button class="btn btn-danger btn-sm" id="btn-passive-stop" onclick="stopPassive()" disabled>■ 停止</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-7">
+                <div class="card">
+                    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                        <span>捕获状态（只捕获不入检）</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="toQueueScan()"
+                                id="btn-queue-scan" disabled>去扫描队列</button>
+                    </div>
+                    <div class="card-body py-2">
+                        <div class="row text-center mb-2">
+                            <div class="col-3"><div class="stat-label">捕获请求</div><div class="stat-value" id="p-stat-requests">0</div></div>
+                            <div class="col-3"><div class="stat-label">发现端点</div><div class="stat-value" id="p-stat-endpoints">0</div></div>
+                            <div class="col-3"><div class="stat-label">已入队</div><div class="stat-value" id="p-stat-queued">0</div></div>
+                            <div class="col-3"><div class="stat-label">状态</div><div class="stat-value" id="p-stat-state">未运行</div></div>
+                        </div>
+                        <div class="stat-label" id="p-hint">启动后将浏览器/工具代理指向提示地址，浏览目标站点即可捕获真实参数面。</div>
+                        <div class="stat-label mt-1" id="p-queue-path" style="font-size:0.7rem;"></div>
+                        <div class="log-error mt-1" id="p-errors" style="font-size:0.75rem;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 历史 Tab（原 dashboard + history 标记，ID 不变） -->
     <div class="tab-pane fade" id="tab-history" role="tabpanel">
@@ -516,6 +575,79 @@ function buildAuthPayload() {
 }
 
 loadProfiles();
+
+let passiveTimer = null;
+
+async function startPassive() {
+    const target = document.getElementById('passive-target').value.trim();
+    if (!target) { alert('请输入目标域（必须是你有授权的目标）'); return; }
+    const body = {
+        target: target,
+        listen: document.getElementById('passive-listen').value.trim() || '127.0.0.1',
+        port: parseInt(document.getElementById('passive-port').value) || 8081,
+        tls_intercept: document.getElementById('passive-tls').checked,
+        ca_dir: document.getElementById('passive-ca-dir').value.trim() || null,
+        queue_out: document.getElementById('passive-queue').value.trim(),
+    };
+    const r = await fetch('/api/passive/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token }}'},
+        body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    document.getElementById('btn-passive-start').disabled = true;
+    document.getElementById('btn-passive-stop').disabled = false;
+    document.getElementById('p-queue-path').textContent = '队列: ' + d.queue_path;
+    if (passiveTimer) clearInterval(passiveTimer);
+    passiveTimer = setInterval(refreshPassiveStatus, 2000);
+    refreshPassiveStatus();
+}
+
+async function stopPassive() {
+    const r = await fetch('/api/passive/stop', {
+        method: 'POST',
+        headers: {'X-CSRF-Token': '{{ csrf_token }}'},
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    document.getElementById('btn-passive-start').disabled = false;
+    document.getElementById('btn-passive-stop').disabled = true;
+    if (passiveTimer) { clearInterval(passiveTimer); passiveTimer = null; }
+    refreshPassiveStatus();
+}
+
+async function refreshPassiveStatus() {
+    try {
+        const r = await fetch('/api/passive/status');
+        const s = await r.json();
+        document.getElementById('p-stat-requests').textContent = s.requests_captured || 0;
+        document.getElementById('p-stat-endpoints').textContent = s.endpoints_discovered || 0;
+        document.getElementById('p-stat-queued').textContent = s.queued_endpoints || 0;
+        document.getElementById('p-stat-state').textContent = s.running ? '运行中' : '已停止';
+        document.getElementById('btn-queue-scan').disabled = !(s.queued_endpoints > 0);
+        if (s.running) {
+            const tlsHint = s.tls_intercept
+                ? `HTTPS 解密已开，请先信任 ${s.ca_dir || '~/.rayscan/ca'} 下的 CA 证书。`
+                : 'HTTPS 流量仅隧道转发（不解密）。';
+            document.getElementById('p-hint').textContent =
+                `浏览器/工具代理指向 ${s.listen}；目标域 ${s.target_filter || ''}。` + tlsHint;
+        }
+        document.getElementById('p-errors').textContent = (s.errors || []).join(' | ');
+    } catch (e) {}
+}
+
+function toQueueScan() {
+    const target = document.getElementById('passive-target').value.trim();
+    document.getElementById('tab-scan-btn').click();
+    if (target) document.getElementById('url-input').value = target;
+    document.getElementById('cfg-from-proxy').checked = true;
+    appendLog('--', 'INFO', '已切换到扫描页并启用「被动队列定向扫描」，点击开始扫描');
+}
+
+document.getElementById('passive-tls').addEventListener('change', e => {
+    document.getElementById('passive-ca-row').style.display = e.target.checked ? '' : 'none';
+});
 
 function toggleAll(state) {
     document.querySelectorAll('.module-cb').forEach(cb => cb.checked = state);
