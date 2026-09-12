@@ -89,7 +89,7 @@ jobs:
         run: pip install "ruff==0.15.21"
       - name: ruff check
         # T4: select/ignore 已统一进 pyproject.toml（本地 = CI），此处不再命令行覆盖
-        run: ruff check wvs/ tests/
+        run: ruff check wvs/ tests/ web_ui/
 
   format:
     name: Format (ruff)
@@ -102,7 +102,7 @@ jobs:
       - name: Install ruff
         run: pip install "ruff==0.15.21"
       - name: ruff format check
-        run: ruff format --check wvs/ tests/
+        run: ruff format --check wvs/ tests/ web_ui/
 
   types:
     name: Types (mypy budget)

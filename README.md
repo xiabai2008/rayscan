@@ -1,26 +1,26 @@
-# 🔬 RayScan 2.2.0
+# 🔬 RayScan 2.3.0
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-2.2.0-blue)
+![Version](https://img.shields.io/badge/Version-2.3.0-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Tests-376%20collected-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-495%20collected-brightgreen)
 ![GitHub stars](https://img.shields.io/github/stars/xiabai2008/rayscan?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/xiabai2008/rayscan)
 [![Flask](https://img.shields.io/badge/Web%20UI-Flask-000?logo=flask)](https://github.com/xiabai2008/rayscan)
 
 **🎯 中文 OA / 国产中间件专项 Web 漏洞检测器 | 三级检测链路 · 规则级证据 · 低误报 | 通用漏洞 Nuclei 兜底（12.5w 模板）**
 
-**376 个自动化测试（pytest 实测口径） · 靶机验证（Metasploitable 2 / DVWA） · 12 种 OA 系统专项检测**
+**495 个自动化测试（pytest 实测口径） · 靶机验证（Metasploitable 2 / DVWA） · 12 种 OA 系统专项检测**
 
 > 📌 **项目定位**（[ADR-0001](docs/adr/0001-oa-focused-repositioning.md)）：中文 OA / 国产中间件专项检测器，一条命令出可复核报告。通用检测由内置 Nuclei 阶段兜底。
 > 领域术语见 [CONTEXT.md](CONTEXT.md)。
 
-> 📈 **v2.2.0 新特性**：AI 误报复核（--ai-verify）· MCP Server（--serve 给 Claude/ChatGPT）· MCP 目标检测 · GraphQL introspection 检测 · SPA 爬取（--js-render）· OA mock 靶场实测闭环（泛微/Nacos/Jenkins + 版本过滤负样本）
-> 📈 **测试覆盖路线图**：当前 376 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
+> 📈 **v2.3.0 新特性**：被动捕获→主动验证联动（passive --queue-out / scan --from-proxy）· 证据包导出（report --pack，含可复现 curl）· OA 规则外部化（rules/oa YAML）· Nuclei 模板策展 · Web UI 三能力入口（被动捕获 / Profile / 证据链）
+> 📈 **测试覆盖路线图**：当前 495 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
 > v2.0 新特性：OA专项检测 / WebShell / 弱口令 / 子域名枚举 / Nuclei 模板集成
 > 规划中（roadmap）：多引擎聚合（AWVS/Nessus 集成层已实现，待接入主流程）、Metasploit 验证链、DOM XSS（需 headless 验证）
 
@@ -160,7 +160,7 @@ RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ RayScan 2.2.0 扫描目标: http://192.168.18.131                    │
+│ RayScan 2.3.0 扫描目标: http://192.168.18.131                    │
 │ 模块: sqli, xss (核心专精)                          │
 │ 速率: 10 req/s                                             │
 └────────────────────────────────────────────────────────────┘

@@ -646,10 +646,7 @@ class NucleiTemplateManager:
             "candidates": len(candidates),
             "selected": len(result),
             "truncated": len(sorted_candidates) > max_templates,
-            "templates": [
-                self._templates[p].template_id or self._templates[p].filename
-                for p in result[:50]
-            ],
+            "templates": [self._templates[p].template_id or self._templates[p].filename for p in result[:50]],
         }
 
         logger.info(
