@@ -9,10 +9,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import queue as queue_module
+import time
+from types import SimpleNamespace
+
 import pytest
 
-from web_ui import payloads
+from web_ui import payloads, sessions
 from wvs.config import ConfigManager
+from wvs.core.crawler import DiscoveredEndpoint
+from wvs.core.passive import ProxyCaptureQueue
+from wvs.models import ScanResult, Severity, Vulnerability, VulnerabilityType
 from wvs.profiles import ProfileManager
 
 
@@ -46,3 +54,140 @@ class TestPayloads:
         assert all(isinstance(m["default_enabled"], bool) for m in catalog)
         first_lite = min((i for i, m in enumerate(catalog) if m["category"] != "core"), default=len(catalog))
         assert all(m["category"] == "core" for m in catalog[:first_lite])
+
+
+def _stub_vuln() -> Vulnerability:
+    return Vulnerability(
+        type=VulnerabilityType.SQL_INJECTION,
+        title="stub",
+        url="http://t/a?id=1",
+        parameter="id",
+        parameter_type="query",
+        payload="' OR 1=1",
+        evidence="stub evidence",
+        severity=Severity.HIGH,
+        evidence_chain=[{"kind": "payload", "detail": "sent payload", "data": {"n": 1}}],
+    )
+
+
+class _StubScanner:
+    def __init__(self, config, session):
+        self.config = config
+        self.session = session
+        self._modules = {}
+        self._loaded_module_names = []
+        self._progress_callback = None
+
+    def load_module(self, name):
+        async def _scan(target):
+            return []
+
+        self._modules[name] = SimpleNamespace(scan=_scan)
+        self._loaded_module_names.append(name)
+        return True
+
+    async def scan(self, target):
+        return ScanResult(target=target, vulnerabilities=[_stub_vuln()], endpoints_found=3, requests_made=7)
+
+
+class _StubPool:
+    def __init__(self, config):
+        self.config = config
+        self.closed = False
+        self.reauth_handler = None
+
+    def set_cookie(self, url, name, value, domain=None):
+        return None
+
+    def set_header(self, name, value):
+        return None
+
+    def set_reauth_handler(self, handler):
+        self.reauth_handler = handler
+
+    async def close(self):
+        self.closed = True
+
+    def get_stats(self):
+        return {"total_requests": 0}
+
+
+def _drain(q):
+    out = []
+    while not q.empty():
+        out.append(q.get_nowait())
+    return out
+
+
+class TestScanSession:
+    def _patch(self, monkeypatch):
+        monkeypatch.setattr(sessions, "WAVScanner", _StubScanner)
+        monkeypatch.setattr(sessions, "HTTPPool", _StubPool)
+
+    def test_run_scan_emits_result_with_evidence_chain(self, monkeypatch):
+        self._patch(monkeypatch)
+        s = sessions.ScanSession()
+        result = asyncio.run(s._run_scan({"url": "http://t"}, ConfigManager(), ["sqli"], None))
+        assert result is not None and len(result.vulnerabilities) == 1
+        events = _drain(s.queue)
+        result_events = [d for t, d in events if t == "result"]
+        assert result_events and result_events[0]["vulnerabilities"][0]["evidence_chain"]
+        assert result_events[0]["vulnerabilities"][0]["payload"] == "' OR 1=1"
+
+    def test_run_scan_auth_config_error_aborts(self, monkeypatch):
+        self._patch(monkeypatch)
+        s = sessions.ScanSession()
+        result = asyncio.run(
+            s._run_scan({"url": "http://t", "auth": {"type": "bearer"}}, ConfigManager(), ["sqli"], None)
+        )
+        assert result is None
+        logs = [d["text"] for t, d in _drain(s.queue) if t == "log"]
+        assert any("认证配置错误" in text for text in logs)
+
+    def test_run_from_proxy_uses_queue_endpoints(self, monkeypatch, tmp_path):
+        self._patch(monkeypatch)
+        capture = ProxyCaptureQueue()
+        endpoint = DiscoveredEndpoint(url="http://t/user", method="GET", source_url="http://t/user?id=1", is_api=True)
+        endpoint.parameters = {"id": "1"}
+        endpoint.param_types = {"id": "query"}
+        capture.enqueue(endpoint)
+        path = capture.save(tmp_path / "queue.json")
+
+        s = sessions.ScanSession()
+        result = asyncio.run(s._run_scan({"url": "http://t", "from_proxy": True}, ConfigManager(), ["sqli"], path))
+        assert result is not None
+        assert result.endpoints_found == 1
+        assert result.modules_run == 1
+
+    def test_run_from_proxy_missing_file_returns_none(self, monkeypatch, tmp_path):
+        self._patch(monkeypatch)
+        s = sessions.ScanSession()
+        result = asyncio.run(
+            s._run_scan({"url": "http://t", "from_proxy": True}, ConfigManager(), ["sqli"], tmp_path / "nope.json")
+        )
+        assert result is None
+
+    def test_start_thread_calls_on_finish_and_done_event(self, monkeypatch):
+        self._patch(monkeypatch)
+        s = sessions.ScanSession()
+        recorded = []
+        s.start(
+            {"url": "http://t"},
+            ConfigManager(),
+            ["sqli"],
+            on_finish=lambda r, e, p: recorded.append((r, p)),
+        )
+        events = []
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                typ, _data = s.queue.get(timeout=1)
+            except queue_module.Empty:
+                continue
+            events.append(typ)
+            if typ == "done":
+                break
+        assert "result" in events
+        assert events[-1] == "done"
+        assert recorded and recorded[0][0] is not None
+        assert recorded[0][1]["url"] == "http://t"
