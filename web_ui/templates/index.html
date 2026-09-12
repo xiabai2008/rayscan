@@ -143,6 +143,14 @@
             <div class="card mb-3">
                 <div class="card-header py-2">扫描配置</div>
                 <div class="card-body py-2">
+                    <div class="mb-2">
+                        <label class="stat-label">Profile</label>
+                        <div class="input-group input-group-sm">
+                            <select class="form-select" id="profile-select"></select>
+                            <button class="btn btn-outline-secondary" type="button" onclick="applyProfile()">应用</button>
+                            <button class="btn btn-outline-secondary" type="button" onclick="saveProfile()">保存为</button>
+                        </div>
+                    </div>
                     <div class="mb-2"><label class="stat-label">速率 (req/s)</label>
                         <input class="form-control form-control-sm" id="cfg-rate" value="15"></div>
                     <div class="mb-2"><label class="stat-label">超时 (秒)</label>
@@ -156,6 +164,53 @@
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="cfg-insecure">
                         <label class="form-check-label" for="cfg-insecure">跳过 SSL 验证</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="cfg-explain" checked>
+                        <label class="form-check-label" for="cfg-explain">证据链（--explain）</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="cfg-from-proxy">
+                        <label class="form-check-label" for="cfg-from-proxy">被动队列定向扫描</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header py-2">
+                    <a class="text-decoration-none" data-bs-toggle="collapse" href="#auth-body">认证（可选）</a>
+                </div>
+                <div class="collapse" id="auth-body">
+                    <div class="card-body py-2">
+                        <select class="form-select form-select-sm mb-2" id="auth-type" onchange="toggleAuthFields()">
+                            <option value="">无认证</option>
+                            <option value="form">表单登录</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="basic">Basic Auth</option>
+                            <option value="apikey">API Key</option>
+                            <option value="cookie">Cookie 注入</option>
+                        </select>
+                        <div class="auth-fields" data-type="form" style="display:none">
+                            <input class="form-control form-control-sm mb-1" id="auth-login-url" placeholder="登录 URL">
+                            <input class="form-control form-control-sm mb-1" id="auth-username" placeholder="用户名">
+                            <input class="form-control form-control-sm" type="password" id="auth-password" placeholder="密码">
+                        </div>
+                        <div class="auth-fields" data-type="bearer" style="display:none">
+                            <input class="form-control form-control-sm" id="auth-token" placeholder="Bearer Token">
+                        </div>
+                        <div class="auth-fields" data-type="basic" style="display:none">
+                            <input class="form-control form-control-sm mb-1" id="auth-basic-user" placeholder="用户名">
+                            <input class="form-control form-control-sm" type="password" id="auth-basic-pass" placeholder="密码">
+                        </div>
+                        <div class="auth-fields" data-type="apikey" style="display:none">
+                            <input class="form-control form-control-sm mb-1" id="auth-apikey" placeholder="API Key">
+                            <input class="form-control form-control-sm" id="auth-apikey-header"
+                                   placeholder="Header 名称（默认 X-API-Key）" value="X-API-Key">
+                        </div>
+                        <div class="auth-fields" data-type="cookie" style="display:none">
+                            <textarea class="form-control form-control-sm" id="auth-cookies" rows="2"
+                                      placeholder="name=value; name2=value2"></textarea>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -378,6 +433,90 @@ function collectModules() {
 
 loadModules();
 
+async function loadProfiles() {
+    try {
+        const r = await fetch('/api/profiles');
+        const data = await r.json();
+        const sel = document.getElementById('profile-select');
+        sel.innerHTML = '<option value="">（不使用）</option>' + (data.profiles || [])
+            .map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}${p.builtin ? '（内置）' : ''}</option>`)
+            .join('');
+    } catch (e) {}
+}
+
+async function applyProfile() {
+    const name = document.getElementById('profile-select').value;
+    if (!name) return;
+    const r = await fetch(`/api/profiles/${encodeURIComponent(name)}`);
+    if (!r.ok) { alert('Profile 加载失败'); return; }
+    const p = await r.json();
+    const params = p.params || {};
+    if (params.rate !== undefined) document.getElementById('cfg-rate').value = params.rate;
+    if (params.timeout !== undefined) document.getElementById('cfg-timeout').value = params.timeout;
+    if (params.crawl_depth !== undefined) document.getElementById('cfg-depth').value = params.crawl_depth;
+    if (params.crawl_max_urls !== undefined) document.getElementById('cfg-urls').value = params.crawl_max_urls;
+    if (params.verify_ssl === false) document.getElementById('cfg-insecure').checked = true;
+    const enabled = ((p.modules || {}).enabled) || [];
+    if (enabled.length) {
+        document.querySelectorAll('.module-cb').forEach(cb => {
+            cb.checked = enabled.includes(cb.id.replace('mod-', ''));
+        });
+    }
+}
+
+async function saveProfile() {
+    const name = prompt('Profile 名称（字母/数字/_/-）');
+    if (!name) return;
+    const params = {
+        rate: parseInt(document.getElementById('cfg-rate').value) || 15,
+        timeout: parseInt(document.getElementById('cfg-timeout').value) || 15,
+        crawl_depth: parseInt(document.getElementById('cfg-depth').value) || 2,
+        crawl_max_urls: parseInt(document.getElementById('cfg-urls').value) || 50,
+    };
+    const r = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token }}'},
+        body: JSON.stringify({
+            name: name,
+            description: 'Web UI 保存',
+            modules: {enabled: collectModules(), disabled: []},
+            params: params,
+        }),
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); } else { alert('已保存'); loadProfiles(); }
+}
+
+function toggleAuthFields() {
+    const t = document.getElementById('auth-type').value;
+    document.querySelectorAll('.auth-fields').forEach(el => {
+        el.style.display = (el.dataset.type === t) ? '' : 'none';
+    });
+}
+
+function buildAuthPayload() {
+    const t = document.getElementById('auth-type').value;
+    if (!t) return null;
+    const val = id => document.getElementById(id).value.trim();
+    if (t === 'form') {
+        return {type: 'form', login_url: val('auth-login-url'), username: val('auth-username'),
+                password: document.getElementById('auth-password').value};
+    }
+    if (t === 'bearer') return {type: 'bearer', token: val('auth-token')};
+    if (t === 'basic') {
+        return {type: 'basic', username: val('auth-basic-user'),
+                password: document.getElementById('auth-basic-pass').value};
+    }
+    if (t === 'apikey') {
+        return {type: 'apikey', api_key: val('auth-apikey'),
+                api_key_header: val('auth-apikey-header') || 'X-API-Key'};
+    }
+    if (t === 'cookie') return {type: 'cookie', cookies: document.getElementById('auth-cookies').value};
+    return null;
+}
+
+loadProfiles();
+
 function toggleAll(state) {
     document.querySelectorAll('.module-cb').forEach(cb => cb.checked = state);
 }
@@ -403,10 +542,7 @@ function startScan() {
     const url = document.getElementById('url-input').value.trim();
     if (!url || url === 'http://') { alert('请输入目标 URL'); return; }
 
-    const modules = [];
-    document.querySelectorAll('.module-cb:checked').forEach(cb => {
-        modules.push(cb.id.replace('mod-', ''));
-    });
+    const modules = collectModules();
     if (modules.length === 0) { alert('至少选择一个模块'); return; }
 
     document.getElementById('btn-start').disabled = true;
@@ -477,6 +613,10 @@ function startScan() {
         body: JSON.stringify({
             url: url,
             modules: modules,
+            profile: document.getElementById('profile-select').value || null,
+            explain: document.getElementById('cfg-explain').checked,
+            from_proxy: document.getElementById('cfg-from-proxy').checked,
+            auth: buildAuthPayload(),
             rate: parseInt(document.getElementById('cfg-rate').value) || 15,
             timeout: parseInt(document.getElementById('cfg-timeout').value) || 15,
             crawl_depth: parseInt(document.getElementById('cfg-depth').value) || 2,
@@ -535,6 +675,8 @@ function addResultRow(v) {
     const badgeCls = `badge-${sev}`;
     const tr = document.createElement('tr');
     tr.dataset.severity = sev;
+    tr.style.cursor = 'pointer';
+    tr._vulnData = v;
     const typeText = escapeHtml(v.type || '');
     const urlText = escapeHtml(v.url || '');
     tr.innerHTML = `
@@ -544,11 +686,44 @@ function addResultRow(v) {
         <td>${escapeHtml(v.parameter || '')}</td>
         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(v.evidence || '')}</td>
     `;
+    tr.onclick = () => toggleDetailRow(tr);
     _allResults.push({sev, type: typeText, url: urlText, el: tr});
     tbody.appendChild(tr);
 
     updateStats();
     filterResults();
+}
+
+function toggleDetailRow(tr) {
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains('detail-row')) {
+        next.style.display = next.style.display === 'none' ? '' : 'none';
+        return;
+    }
+    const detail = document.createElement('tr');
+    detail.className = 'detail-row';
+    detail.innerHTML = `<td colspan="5" style="background:#0d1117;">${renderEvidenceChain(tr._vulnData || {})}</td>`;
+    tr.insertAdjacentElement('afterend', detail);
+}
+
+function renderEvidenceChain(v) {
+    let html = '';
+    if (v.description) html += `<div class="mb-1"><strong>描述:</strong> ${escapeHtml(v.description)}</div>`;
+    if (v.recommendation) html += `<div class="mb-1"><strong>修复建议:</strong> ${escapeHtml(v.recommendation)}</div>`;
+    if (v.payload) html += `<div class="mb-1"><strong>载荷:</strong> <code>${escapeHtml(v.payload)}</code></div>`;
+    const chain = v.evidence_chain || [];
+    if (chain.length) {
+        html += '<div><strong>证据链:</strong><ol class="mb-0 mt-1">';
+        chain.forEach(ev => {
+            html += `<li><span class="badge bg-secondary">${escapeHtml(ev.kind || '')}</span> ${escapeHtml(ev.detail || '')}`;
+            if (ev.data && Object.keys(ev.data).length) {
+                html += `<pre class="mb-0 mt-1" style="font-size:11px;white-space:pre-wrap;">${escapeHtml(JSON.stringify(ev.data, null, 2))}</pre>`;
+            }
+            html += '</li>';
+        });
+        html += '</ol></div>';
+    }
+    return html || '<span class="text-muted">（无证据链，未开启 explain 或无信号）</span>';
 }
 
 function updateStats() {
