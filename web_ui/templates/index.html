@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RayScan 2.2.0 — Web Vulnerability Scanner</title>
+    <title>RayScan {{ version }} — Web Vulnerability Scanner</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         /* ── 共享基础样式 ── */
@@ -95,8 +95,22 @@
     <div class="container-fluid">
         <span class="navbar-brand mb-0 h1">
             <span style="color:#58a6ff;">RayScan</span>
-            <small class="text-secondary ms-2" style="font-size:0.7rem;">2.2.0</small>
+            <small class="text-secondary ms-2" style="font-size:0.7rem;">{{ version }}</small>
         </span>
+        <ul class="nav nav-pills ms-3" id="main-tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-scan-btn" data-bs-toggle="tab"
+                        data-bs-target="#tab-scan" type="button" role="tab">扫描</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-passive-btn" data-bs-toggle="tab"
+                        data-bs-target="#tab-passive" type="button" role="tab">被动捕获</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-history-btn" data-bs-toggle="tab"
+                        data-bs-target="#tab-history" type="button" role="tab">历史</button>
+            </li>
+        </ul>
         <div class="d-flex align-items-center gap-3">
             <span id="vuln-badge" class="badge bg-secondary">漏洞: 0</span>
             <div class="form-check form-switch mb-0">
@@ -109,6 +123,8 @@
 </nav>
 
 <div class="container-fluid px-3 py-3">
+  <div class="tab-content" id="main-tabs-content">
+    <div class="tab-pane fade show active" id="tab-scan" role="tabpanel">
     <div class="row g-3">
 
         <!-- 左侧配置面板 -->
@@ -147,7 +163,7 @@
             <div class="card">
                 <div class="card-header py-2">信息</div>
                 <div class="card-body py-2">
-                    <div class="stat-label">RayScan 2.2.0</div>
+                    <div class="stat-label">RayScan {{ version }}</div>
                     <div class="stat-label" style="font-size:0.7rem;">MIT License</div>
                     <div class="stat-label" style="font-size:0.7rem;">
                         <a href="https://github.com/xiabai2008/rayscan" class="text-secondary">github.com/xiabai2008</a>
@@ -253,91 +269,114 @@
             </div>
         </div>
 
-        <!-- Dashboard Tab -->
-        <div id="dashboard" class="tab-pane fade">
-            <div class="row mt-3">
-                <div class="col-md-3">
-                    <div class="card text-white bg-primary mb-3">
-                        <div class="card-header">总扫描数</div>
-                        <div class="card-body"><h3 id="dash-total-scans">0</h3></div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card text-white bg-danger mb-3">
-                        <div class="card-header">总漏洞数</div>
-                        <div class="card-body"><h3 id="dash-total-vulns">0</h3></div>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <div class="card text-white bg-danger mb-3">
-                        <div class="card-header">严重</div>
-                        <div class="card-body"><h3 id="dash-critical">0</h3></div>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <div class="card text-white bg-warning mb-3">
-                        <div class="card-header">高危</div>
-                        <div class="card-body"><h3 id="dash-high">0</h3></div>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <div class="card text-white bg-info mb-3">
-                        <div class="card-header">中危</div>
-                        <div class="card-body"><h3 id="dash-medium">0</h3></div>
-                    </div>
+    </div> <!-- /#tab-scan row -->
+    </div> <!-- /#tab-scan -->
+
+    <!-- 被动捕获 Tab（Task 9 填充面板） -->
+    <div class="tab-pane fade" id="tab-passive" role="tabpanel"></div>
+
+    <!-- 历史 Tab（原 dashboard + history 标记，ID 不变） -->
+    <div class="tab-pane fade" id="tab-history" role="tabpanel">
+        <div class="row mt-3">
+            <div class="col-md-3">
+                <div class="card text-white bg-primary mb-3">
+                    <div class="card-header">总扫描数</div>
+                    <div class="card-body"><h3 id="dash-total-scans">0</h3></div>
                 </div>
             </div>
-            <div class="card mt-2">
-                <div class="card-header">最近扫描</div>
-                <div class="card-body" id="dash-recent" style="max-height:400px;overflow-y:auto">
-                    <p class="text-muted">暂无扫描记录</p>
+            <div class="col-md-3">
+                <div class="card text-white bg-danger mb-3">
+                    <div class="card-header">总漏洞数</div>
+                    <div class="card-body"><h3 id="dash-total-vulns">0</h3></div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-white bg-danger mb-3">
+                    <div class="card-header">严重</div>
+                    <div class="card-body"><h3 id="dash-critical">0</h3></div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-white bg-warning mb-3">
+                    <div class="card-header">高危</div>
+                    <div class="card-body"><h3 id="dash-high">0</h3></div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card text-white bg-info mb-3">
+                    <div class="card-header">中危</div>
+                    <div class="card-body"><h3 id="dash-medium">0</h3></div>
                 </div>
             </div>
         </div>
-
-        <!-- History Tab -->
-        <div id="history" class="tab-pane fade">
-            <div class="card mt-3">
-                <div class="card-header d-flex justify-content-between">
-                    <span>扫描历史</span>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">刷新</button>
-                </div>
-                <div class="card-body" id="history-list" style="max-height:500px;overflow-y:auto">
-                    <p class="text-muted">暂无历史记录</p>
-                </div>
+        <div class="card mt-2">
+            <div class="card-header">最近扫描</div>
+            <div class="card-body" id="dash-recent" style="max-height:400px;overflow-y:auto">
+                <p class="text-muted">暂无扫描记录</p>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between">
+                <span>扫描历史</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">刷新</button>
+            </div>
+            <div class="card-body" id="history-list" style="max-height:500px;overflow-y:auto">
+                <p class="text-muted">暂无历史记录</p>
             </div>
         </div>
     </div>
+
+  </div> <!-- /#main-tabs-content -->
 </div>
 
 <script>
 // ── 模块列表 ──
-const MODULES = {
+const MODULE_LABELS = {
     "sqli": "SQL注入", "xss": "XSS", "cmdi": "命令注入",
     "lfi": "LFI", "rce": "RCE", "ssrf": "SSRF", "xxe": "XXE",
     "api": "API安全", "sensitive": "敏感信息", "waf": "WAF检测",
 };
 const MODULE_COLS = 2;
 
-function initModules() {
-    const container = document.getElementById('modules-container');
-    let cols = [];
-    const keys = Object.keys(MODULES);
-    for (let i = 0; i < Math.min(MODULE_COLS, keys.length); i++) {
-        cols[i] = document.createElement('div');
-        cols[i].className = 'col-6';
+async function loadModules() {
+    try {
+        const r = await fetch('/api/modules');
+        const data = await r.json();
+        renderModules(data.modules || []);
+    } catch (e) {
+        appendLog('--', 'ERROR', '模块列表加载失败: ' + e);
     }
-    keys.forEach((key, idx) => {
-        const col = cols[idx % MODULE_COLS];
+}
+
+function renderModules(list) {
+    const container = document.getElementById('modules-container');
+    container.innerHTML = '';
+    const cols = [];
+    for (let i = 0; i < MODULE_COLS; i++) {
+        const c = document.createElement('div');
+        c.className = 'col-6';
+        cols.push(c);
+    }
+    list.forEach((m, idx) => {
         const div = document.createElement('div');
         div.className = 'form-check';
-        div.innerHTML = `<input class="form-check-input module-cb" type="checkbox" id="mod-${key}" checked>
-                         <label class="form-check-label" for="mod-${key}">${MODULES[key]}</label>`;
-        col.appendChild(div);
+        const checked = m.default_enabled ? 'checked' : '';
+        const label = MODULE_LABELS[m.name] || m.name.toUpperCase();
+        div.innerHTML = `<input class="form-check-input module-cb" type="checkbox" id="mod-${m.name}" ${checked}>
+                         <label class="form-check-label" for="mod-${m.name}"
+                                title="${escapeHtml(m.description || '')}">${escapeHtml(label)}</label>`;
+        cols[idx % MODULE_COLS].appendChild(div);
     });
     cols.forEach(c => container.appendChild(c));
 }
-initModules();
+
+function collectModules() {
+    const out = [];
+    document.querySelectorAll('.module-cb:checked').forEach(cb => out.push(cb.id.replace('mod-', '')));
+    return out;
+}
+
+loadModules();
 
 function toggleAll(state) {
     document.querySelectorAll('.module-cb').forEach(cb => cb.checked = state);
