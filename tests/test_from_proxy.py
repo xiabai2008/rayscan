@@ -5,8 +5,8 @@
 - 队列落盘/恢复(schema 校验)
 - filter_for_target 域名过滤(与代理 --target 同语义:子域匹配)
 - PassiveProxy 捕获入队(目标域过滤延续、第三方域不入队)
-- _scan_proxy_queue 定向主动验证(仅扫队列端点、来源标注、结果去重)
-- _apply_gentle_rate_cap(gentle 预设上限,更低用户速率优先)
+- scan_proxy_queue 定向主动验证(仅扫队列端点、来源标注、结果去重)
+- apply_gentle_rate_cap(gentle 预设上限,更低用户速率优先)
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from wvs.cli import _apply_gentle_rate_cap, _queue_endpoint_to_target, _scan_proxy_queue
 from wvs.config import ConfigManager
 from wvs.core.crawler import DiscoveredEndpoint
 from wvs.core.passive import ProxyCaptureQueue
 from wvs.core.passive.proxy import PassiveProxy
+from wvs.core.passive.queue_scan import apply_gentle_rate_cap, queue_endpoint_to_target, scan_proxy_queue
 from wvs.models import ScanResult, ScanTarget, Severity, Vulnerability, VulnerabilityType
 
 
@@ -210,7 +210,7 @@ def test_scan_proxy_queue_only_scans_captured_endpoints() -> None:
     q.enqueue(_ep("http://t/search", params={"q": "x"}))
 
     queue_result = ScanResult(target=ScanTarget(url="http://t"))
-    asyncio.run(_scan_proxy_queue(scanner, _FakeSession(), q.endpoints, "http://t", 4, queue_result))
+    asyncio.run(scan_proxy_queue(scanner, _FakeSession(), q.endpoints, "http://t", 4, queue_result))
 
     assert sorted(mod.scanned) == ["http://t/search", "http://t/user"]  # 去重后的参数面
     assert queue_result.endpoints_found == 2
@@ -239,7 +239,7 @@ def test_scan_proxy_queue_dedups_identical_findings() -> None:
     same = _SameURLModule(vuln_urls={"http://t"})
     queue_result = ScanResult(target=ScanTarget(url="http://t"))
     asyncio.run(
-        _scan_proxy_queue(
+        scan_proxy_queue(
             SimpleNamespace(_modules={"stub": same}), _FakeSession(), q.endpoints, "http://t", 4, queue_result
         )
     )
@@ -253,7 +253,7 @@ def test_queue_endpoint_to_target_param_split() -> None:
         params={"page": "1", "name": "n", "sid": "abc"},
         ptypes={"page": "query", "name": "json", "sid": "cookie"},
     )
-    t = _queue_endpoint_to_target(ep)
+    t = queue_endpoint_to_target(ep)
     assert t.methods == ["POST"]
     assert t.params == {"page": "1"}
     assert t.data == {"name": "n"}
@@ -275,13 +275,13 @@ def test_gentle_rate_cap_applies_and_respects_lower_rate(monkeypatch) -> None:
     monkeypatch.setattr(ProfileManager, "load_profile", fake_load)
     cfg = ConfigManager()
     cfg.set("rate", 10)
-    assert _apply_gentle_rate_cap(cfg) == 3
+    assert apply_gentle_rate_cap(cfg) == 3
     assert cfg.get("rate") == 3
     assert cfg.get("max_requests_per_second") == 3
 
     cfg = ConfigManager()
     cfg.set("rate", 1)  # 用户更低速率优先
-    assert _apply_gentle_rate_cap(cfg) == 1
+    assert apply_gentle_rate_cap(cfg) == 1
 
     def missing_load(self, name):
         return None
@@ -289,4 +289,4 @@ def test_gentle_rate_cap_applies_and_respects_lower_rate(monkeypatch) -> None:
     monkeypatch.setattr(ProfileManager, "load_profile", missing_load)
     cfg = ConfigManager()
     cfg.set("rate", 10)
-    assert _apply_gentle_rate_cap(cfg) == 10  # 回退当前默认上限
+    assert apply_gentle_rate_cap(cfg) == 10  # 回退当前默认上限
