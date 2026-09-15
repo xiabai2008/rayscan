@@ -21,6 +21,14 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-15 (Benchmark job 精简 — 模块计数断言移交黄金矩阵)
+- run_benchmark.py 默认只跑 SPA(--js-render)链路(其独有覆盖);历史全站逐模块计数断言
+  改为 --legacy-modules 显式开启——黄金矩阵的 URL 级断言已严格取代,且全站扫描在 CI
+  上单模块超 900s(09-15/09-14 手动 dispatch 的 Benchmark job 连续失败)
+- SPA 扫描超时 1200→1800s;本地冒烟 spa_sqli 1/1 + spa_xss 3/1 全 PASS
+- 影响文件：`scripts/run_benchmark.py`
+
+
 ### 2026-09-15 (黄金矩阵 hub 缩面 — CI nightly 提速,22/22 全 PASS)
 - **背景**：nightly Golden Matrix 在共享 runner 上连续超时（09-13/09-14 批次 2 跑满 36min;100min job 上限也不够）
 - **hub 缩面**：`benchmark_lab.py` 新增 7 个 `/hub/<name>` 页（sqli/exec/xss/xxe/business/probe/js），

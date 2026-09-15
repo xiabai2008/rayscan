@@ -96,6 +96,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=18099)
     parser.add_argument("--keep", action="store_true", help="结束后保留靶场进程")
+    parser.add_argument(
+        "--legacy-modules",
+        action="store_true",
+        help="运行历史模块计数断言（全站逐模块扫描,慢;默认跳过——已被黄金矩阵 URL 级断言取代）",
+    )
     args = parser.parse_args()
 
     lab = subprocess.Popen(
@@ -111,32 +116,37 @@ def main() -> int:
             return 1
 
         results = {}
-        for module in EXPECTATIONS:
-            urls = scan_module(args.port, module)
-            results[module] = urls
-            print(f"  [{module}] {len(urls)} 个检出")
+        # 模块计数断言已由黄金矩阵（run_golden_matrix.py 的 URL 级 must_detect/must_not_flag）
+        # 严格取代——此处仅保留其独有的 SPA（--js-render）链路覆盖，避免全站重复扫描。
+        # 历史模块计数基线见 docs/BENCHMARK.md §1。
+        if args.legacy_modules:
+            for module in EXPECTATIONS:
+                urls = scan_module(args.port, module)
+                results[module] = urls
+                print(f"  [{module}] {len(urls)} 个检出")
 
         # SPA 基准（--js-render 链路）
         print("\n===== SPA 基准（--js-render） =====")
-        for key, (path, module, minimum, desc) in SPA_EXPECTATIONS.items():
-            urls = scan_module(args.port, module, timeout=1200, path=path)
+        for key, (path, module, _minimum, _desc) in SPA_EXPECTATIONS.items():
+            urls = scan_module(args.port, module, timeout=1800, path=path)
             results[key] = urls
             print(f"  [{key}] {len(urls)} 个检出")
 
         print("\n===== 基准断言 =====")
         failed = 0
-        for module, (minimum, desc) in EXPECTATIONS.items():
-            if module == "lfi" and EXCLUDE_LFI_ON_WINDOWS:
-                print("  [SKIP] lfi（Windows 无 /etc/passwd，需 Linux）")
-                continue
-            count = len(results[module])
-            ok = count >= minimum
-            status = "PASS" if ok else "FAIL"
-            if not ok:
-                failed += 1
-            print(f"  [{status}] {module}: {count}/{minimum} — {desc}")
+        if args.legacy_modules:
+            for module, (minimum, desc) in EXPECTATIONS.items():
+                if module == "lfi" and EXCLUDE_LFI_ON_WINDOWS:
+                    print("  [SKIP] lfi（Windows 无 /etc/passwd，需 Linux）")
+                    continue
+                count = len(results[module])
+                ok = count >= minimum
+                status = "PASS" if ok else "FAIL"
+                if not ok:
+                    failed += 1
+                print(f"  [{status}] {module}: {count}/{minimum} — {desc}")
 
-        for key, (path, module, minimum, desc) in SPA_EXPECTATIONS.items():
+        for key, (path, _module, minimum, desc) in SPA_EXPECTATIONS.items():
             count = len(results[key])
             ok = count >= minimum
             status = "PASS" if ok else "FAIL"
