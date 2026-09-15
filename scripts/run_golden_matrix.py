@@ -66,7 +66,7 @@ def _weak_jwt(secret: str = "secret") -> str:
     return f"{header}.{payload}.{sig}"
 
 
-def scan_batch(port: int, modules: list, path: str = "/", extra_args=None, timeout: int = 2400) -> dict:
+def scan_batch(port: int, modules: list, path: str = "/", extra_args=None, timeout: int = 3600) -> dict:
     """单次批量扫描多模块,按报告中的 module 字段归属发现。"""
     out = ROOT / f"bench_golden_{port}_{abs(hash(path)) % 10000}.json"
     cmd = [

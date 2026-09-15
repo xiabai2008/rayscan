@@ -91,7 +91,7 @@ Issues = "https://github.com/xiabai2008/rayscan/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["wvs*"]
+include = ["wvs*", "web_ui*"]
 exclude = ["tests*", "docs*", "examples*"]
 
 # 单一格式化器 = ruff-format（不再使用 black/isort，避免行宽/风格冲突）

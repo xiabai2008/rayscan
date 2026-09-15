@@ -22,7 +22,8 @@ targets:
     modules: [sqli, xss, cmdi, rce, xxe, ssrf, sensitive, lfi, idor, waf, webshell, weakpass, js_analysis, jspathfinder, api]
     scan_groups:
       - [sqli]
-      - [cmdi, rce, lfi]
+      - [cmdi, rce]
+      - [lfi]
       - [xss, xxe]
       - [ssrf, sensitive, idor]
       - [waf, webshell, weakpass]

@@ -21,6 +21,12 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-15 (nightly CI 修复 — web_ui 打包 + 矩阵分批超时)
+- **修复夜间 CI 连续失败（09-13/09-14）**：①测试 job 全版本挂 `No module named 'web_ui'`——`pyproject.toml` packages.find 只含 `wvs*`,T3.5 的 web_ui 包未随 `pip install -e .` 安装（本地靠 cwd 侥幸通过）→ include 补 `web_ui*` ②Golden Matrix 主靶标批次 2(cmdi/rce/lfi)在共享 runner 上跑满 36min `--max-time` 超时,且零发现时超时兜底不落盘 → 拆为 `[cmdi,rce]`+`[lfi]` 两组、scan_batch 超时 2400→3600s、job 超时 60→100min、`_save_partial_results` 指定 -o 时零发现也产出报告（矩阵可诊断）
+- 本地验证：web_ui 仓库外可导入；拆分批次 cmdi 2/rce 1 全 PASS
+- 影响文件：`pyproject.toml`、`scripts/golden_matrix.yaml`、`scripts/run_golden_matrix.py`、`wvs/cli.py`、`.github/workflows/ci.yml`
+
+
 ### 2026-09-12 (v2.3 T3.5 Web UI 对齐 CLI — passive/explain/profile 三能力入口)
 - **薄 app + 服务层**：`web_ui/app.py` 收敛为路由/鉴权/CSRF/序列化层；新增 `web_ui/sessions.py`（`ScanSession` 线程+SSE 日志捕获+结果序列化/认证透传/from-proxy 定向扫描、`PassiveProxySession` 代理后台线程/状态机）与 `web_ui/payloads.py`（profile/参数/模块解析纯函数）；前端三 Tab 导航 + 动态模块列表（`/api/modules`，实测 21 模块）+ `wvs.__version__` 渲染
 - **三能力入口**：①passive 捕获队列闭环——UI 启停代理（target 必填、queue_out 限 `scan_reports/`、TLS 解密可选）→ 2s 轮询捕获统计 → 「去扫描队列」预填并 `from_proxy` 定向主动验证（复用共享 `scan_proxy_queue`，gentle 限速）；②explain 证据链——SSE 结果与 JSON 导出均含 `evidence_chain`，结果行点击展开逐信号明细；③profile——下拉应用（填充速率/深度/模块）+ 当前配置保存为新 Profile（内置名 409 保护、名称白名单校验）

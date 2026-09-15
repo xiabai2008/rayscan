@@ -143,7 +143,10 @@ def _save_partial_results(
     args,
 ):
     """去重并保存部分扫描结果"""
-    if not partial_vulns:
+    # 指定 -o 时即使零发现也产出报告(调用方依赖文件存在——如黄金矩阵需从
+    # 超时批次报告读取"检出 0"的诊断信息);未指定 -o 时零发现不落盘,
+    # 避免 scan_reports/ 被空报告刷屏
+    if not partial_vulns and not getattr(args, "output", None):
         return
     import json
     import re
