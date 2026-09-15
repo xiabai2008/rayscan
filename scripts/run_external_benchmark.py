@@ -87,6 +87,21 @@ def main() -> int:
             print("[FAIL] Juice Shop 未就绪")
             return 1
 
+        # 诊断：记录实际运行的镜像 digest（未钉 tag 时镜像漂移是外部基准失效的首要嫌疑,
+        # digest 唯一标识应用版本——断言失败时应据此钉死版本再重跑）
+        for fmt in ("{{index .RepoDigests 0}}", "{{.Image}}"):
+            try:
+                out = subprocess.run(
+                    ["docker", "inspect", "--format", fmt, "rayscan-juiceshop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                tag = "digest" if "RepoDigests" in fmt else "image_id"
+                print(f"  [{tag}] {out.stdout.strip()}")
+            except Exception as e:  # noqa: BLE001
+                print(f"  [{tag}] 获取失败: {e}")
+
         print("[*] 扫描核心模块（sqli/xss/api/sensitive，--js-render 渲染）...")
         cmd_extra = ["--js-render"]
         # scan() 已支持 --js-render（SPA 渲染 + XHR 捕获）——外部目标（Juice Shop）需要
