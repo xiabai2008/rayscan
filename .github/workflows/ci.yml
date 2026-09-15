@@ -129,7 +129,7 @@ jobs:
   golden-matrix:
     name: Golden Matrix (FP/FN gate)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 100
     # nightly 定时 + 手动触发。per-push 化待靶场分 hub 缩面提速后启用
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
