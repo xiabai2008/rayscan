@@ -131,9 +131,16 @@ def run_matrix(only=None, record=False) -> int:
         print("===== 黄金靶场矩阵扫描(分批) =====")
         for target, cfg in targets_cfg.items():
             modules_all = list(cfg["modules"])
-            groups = [list(g) for g in (cfg.get("scan_groups") or [modules_all])]
+            groups = list(cfg.get("scan_groups") or [modules_all])
             if only:
-                groups = [[m for m in g if m in only] for g in groups]
+                # group 可为模块名列表或 {"modules": [...], "path": ...},统一按模块名过滤
+                filtered = []
+                for g in groups:
+                    mods = g if isinstance(g, list) else g.get("modules", [])
+                    kept = [m for m in mods if m in only]
+                    if kept:
+                        filtered.append({**g, "modules": kept} if isinstance(g, dict) else kept)
+                groups = filtered
             groups = [g for g in groups if g]
             if not groups:
                 continue
@@ -147,16 +154,25 @@ def run_matrix(only=None, record=False) -> int:
             by_module: dict = {}
             target_failed = False
             for gi, group in enumerate(groups, 1):
-                skipped = [m for m in group if m == "lfi" and EXCLUDE_LFI_ON_WINDOWS]
-                scan_modules = [m for m in group if m not in skipped]
+                # group 可为模块名列表,或 {"modules": [...], "path": "/hub/x"}（hub 缩面）
+                if isinstance(group, dict):
+                    group_modules = list(group.get("modules", []))
+                    group_path = group.get("path", path)
+                else:
+                    group_modules = list(group)
+                    group_path = path
+                skipped = [m for m in group_modules if m == "lfi" and EXCLUDE_LFI_ON_WINDOWS]
+                scan_modules = [m for m in group_modules if m not in skipped]
                 for m in skipped:
                     print(f"  [SKIP] {target}/{m}（Windows 无 /etc/passwd，CI Linux 复测）")
                     results[(target, m)] = []
                 if not scan_modules:
                     continue
-                print(f"  [{target} 批次 {gi}/{len(groups)}]: {', '.join(scan_modules)}")
+                print(f"  [{target} 批次 {gi}/{len(groups)}]: {', '.join(scan_modules)} @ {group_path}")
                 try:
-                    part = scan_batch(port_of.get(target, main_port), scan_modules, path=path, extra_args=extra_args)
+                    part = scan_batch(
+                        port_of.get(target, main_port), scan_modules, path=group_path, extra_args=extra_args
+                    )
                 except RuntimeError as e:
                     print(f"  [FAIL] {target}: {e}")
                     scan_failed = True

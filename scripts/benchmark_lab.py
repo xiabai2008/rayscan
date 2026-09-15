@@ -309,6 +309,76 @@ def index():
     return Response(body, content_type="text/html; charset=utf-8")
 
 
+# ── 黄金矩阵 hub 页（v2.3 提速）────────────────────────────────────
+# 每个矩阵批次从专属 hub 爬取（2-5 页替代全站 40 页），检出 URL 仍是端点本身，
+# 期望清单不变。hub 链接 = 该批次模块的 must_detect 端点 + must_not_flag 护栏端点
+# （护栏端点必须被扫到，误报防线才生效）。
+# js 相关 hub 携带 app.js script 引用（jspathfinder/js_analysis 从页面提取 JS）。
+
+_HUB_LINKS = {
+    "sqli": [
+        "/sqli/error?id=1",
+        "/sqli/blind?id=1",
+        "/xss/reflected?q=test",
+        "/safe/api?code=1",
+        "/api/invoice?id=1001",
+        "/api/secure-invoice?id=3001",
+    ],
+    "exec": [
+        "/cmdi?host=127.0.0.1",
+        "/rce?cmd=echo%20hi",
+        "/ssti?name=world",
+        "/lfi?file=index.html",
+        "/xss/reflected?q=test",
+        "/safe/api?code=1",
+    ],
+    "xss": [
+        "/xss/reflected?q=test",
+        "/spa",
+        "/safe/api?code=1",
+        "/api/invoice?id=1001",
+        "/api/secure-invoice?id=3001",
+    ],
+    "xxe": ["/xxe_get?xml=<xml>", "/xxe", "/xss/reflected?q=test", "/safe/api?code=1"],
+    "business": [
+        "/api/invoice?id=1001",
+        "/api/secure-invoice?id=3001",
+        "/api/users",
+        "/safe/api?code=1",
+        "/ssrf?url=http://127.0.0.1/",
+        "/xss/reflected?q=test",
+        "/.env",
+        "/backup/backup.sql",
+    ],
+    "probe": ["/login", "/user/login", "/cmd.php", "/safe/api?code=1"],
+    "js": [
+        "/jsapp",
+        "/jsapp-clean",
+        "/api/cors-open",
+        "/api/cors-strict",
+        "/api/debug-info",
+        "/.env",
+        "/api/users",
+        "/safe/api?code=1",
+    ],
+}
+
+
+def _hub_page(name: str) -> Response:
+    body = (
+        f"<html><head><title>Hub {name}</title>"
+        f'<script src="/static/app.js"></script></head><body><h1>Hub {name}</h1><ul>'
+    )
+    for link in _HUB_LINKS.get(name, []):
+        body += f'<li><a href="{link}">{link}</a></li>'
+    body += "</ul></body></html>"
+    return Response(body, content_type="text/html; charset=utf-8")
+
+
+for _hub_name in _HUB_LINKS:
+    app.add_url_rule(f"/hub/{_hub_name}", endpoint=f"hub_{_hub_name}", view_func=lambda _n=_hub_name: _hub_page(_n))
+
+
 # ── SSRF ──────────────────────────────────────────────────────────
 
 

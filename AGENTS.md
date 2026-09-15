@@ -21,6 +21,16 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-09-15 (黄金矩阵 hub 缩面 — CI nightly 提速,22/22 全 PASS)
+- **背景**：nightly Golden Matrix 在共享 runner 上连续超时（09-13/09-14 批次 2 跑满 36min;100min job 上限也不够）
+- **hub 缩面**：`benchmark_lab.py` 新增 7 个 `/hub/<name>` 页（sqli/exec/xss/xxe/business/probe/js），
+  每矩阵批次从专属 hub 爬取 2-5 页替代全站 40 页；hub 链接 = 该批 must_detect 端点 + must_not 护栏
+  （护栏端点必须被扫到防线才生效）；js hub 带 app.js script 引用（js_analysis/jspathfinder 提取依赖）
+- **runner**：scan_groups 支持 `{modules, path}` 字典组；修复 `list(dict)` 把组名展平成键列表的 bug
+- **效果**：本地整轮 22/22 全 PASS、单批大幅提速；CI job 超时 60→100min、scan_batch 超时 2400→3600s
+- 影响文件：`scripts/{benchmark_lab,run_golden_matrix}.py`、`scripts/golden_matrix.yaml`、`.github/workflows/ci.yml`
+
+
 ### 2026-09-15 (nightly CI 修复 — web_ui 打包 + 矩阵分批超时)
 - **修复夜间 CI 连续失败（09-13/09-14）**：①测试 job 全版本挂 `No module named 'web_ui'`——`pyproject.toml` packages.find 只含 `wvs*`,T3.5 的 web_ui 包未随 `pip install -e .` 安装（本地靠 cwd 侥幸通过）→ include 补 `web_ui*` ②Golden Matrix 主靶标批次 2(cmdi/rce/lfi)在共享 runner 上跑满 36min `--max-time` 超时,且零发现时超时兜底不落盘 → 拆为 `[cmdi,rce]`+`[lfi]` 两组、scan_batch 超时 2400→3600s、job 超时 60→100min、`_save_partial_results` 指定 -o 时零发现也产出报告（矩阵可诊断）
 - 本地验证：web_ui 仓库外可导入；拆分批次 cmdi 2/rce 1 全 PASS

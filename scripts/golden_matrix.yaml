@@ -20,14 +20,25 @@ version: 1
 targets:
   main:
     modules: [sqli, xss, cmdi, rce, xxe, ssrf, sensitive, lfi, idor, waf, webshell, weakpass, js_analysis, jspathfinder, api]
+    # hub 缩面（v2.3 提速,CI 慢 runner 单批不再超时）:
+    # 每批从专属 /hub/<name> 页爬取 2-5 页替代全站 40 页;检出 URL 是端点本身,期望不变
     scan_groups:
-      - [sqli]
-      - [cmdi, rce]
-      - [lfi]
-      - [xss, xxe]
-      - [ssrf, sensitive, idor]
-      - [waf, webshell, weakpass]
-      - [js_analysis, jspathfinder, api]
+      - modules: [sqli]
+        path: /hub/sqli
+      - modules: [cmdi, rce]
+        path: /hub/exec
+      - modules: [lfi]
+        path: /hub/exec
+      - modules: [xss]
+        path: /hub/xss
+      - modules: [xxe]
+        path: /hub/xxe
+      - modules: [ssrf, sensitive, idor]
+        path: /hub/business
+      - modules: [waf, webshell, weakpass]
+        path: /hub/probe
+      - modules: [js_analysis, jspathfinder, api]
+        path: /hub/js
   oa_vuln:
     modules: [oa]
   oa_fixed:
