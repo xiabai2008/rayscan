@@ -21,6 +21,19 @@ All code changes must be logged in this file. Each entry should include:
 
 ## Change Log
 
+### 2026-10-05 (README 实录素材重制 — CLI 截图/GIF + 2 处演示可见输出修复)
+- **README 素材**：`images/` 全套重制——`cli运行截图1.png`（命令+2.3.0 横幅+爬取阶段）、
+  `cli运行截图2.png`（扫描报告：发现 4 漏洞+漏洞列表+详情标题）、新增 `cli运行.gif`
+  （11 帧 880px/96 色 2.6MB，12.4s 循环：命令→爬取→payload 流→报告）；README hero 区改用 GIF，
+  靶机验证区截图说明补充靶场上下文（素材来自本机 `scripts/benchmark_lab.py` + hub/sqli 专题页）
+- **顺带修复 2 处演示可见的产品输出问题**：①`scanner_integrations.py::_print_header` 硬编码
+  "RayScan 1.0 — Web Vulnerability Scanner" 与 2.3.0 头部框自相矛盾 → 动态读 `__version__`；
+  ②sqli union 列探测标记 `CLAUDE_MARKER` → `RAYSCAN_MARKER`（payload 会出现在报告/GIF 中，品牌不妥）
+- **演示链路**：`python -m wvs scan http://127.0.0.1:18099/hub/sqli --allow-loopback --modules sqli`
+  实测 272.7s / 763 请求 / 检出 4 HIGH（error/error-based/stacked/boolean-blind）
+- 影响文件：`wvs/core/scanner_integrations.py`、`wvs/modules/sqli/techniques_mixins.py`、
+  `README.md`、`images/{cli运行截图1,cli运行截图2}.png`、`images/cli运行.gif(新增)`
+
 ### 2026-09-15 (Benchmark job 精简 — 模块计数断言移交黄金矩阵)
 - run_benchmark.py 默认只跑 SPA(--js-render)链路(其独有覆盖);历史全站逐模块计数断言
   改为 --legacy-modules 显式开启——黄金矩阵的 URL 级断言已严格取代,且全站扫描在 CI

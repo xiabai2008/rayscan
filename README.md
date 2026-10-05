@@ -43,8 +43,8 @@ python web_ui/app.py
 ```
 
 <p align="center">
-  <img src="images/cli运行截图1.png" alt="RayScan CLI 实战扫描" width="80%">
-  <br><em>一条命令扫描靶机，实时查看检测过程</em>
+  <img src="images/cli运行.gif" alt="RayScan CLI 运行演示" width="80%">
+  <br><em>一条命令扫描靶场 —— 爬取 / 流式检测 / 漏洞报告全流程实录（循环演示）</em>
 </p>
 
 [一分钟开始](#-快速开始) · [Web UI 演示](#-web-ui-模式推荐) · [实战报告](#-靶机验证) · [功能列表](#-功能特性) · [Star 支持](https://github.com/xiabai2008/rayscan/stargazers)
@@ -148,12 +148,12 @@ python -m wvs scan https://target.com --resume
 
 <p align="center">
   <img src="images/cli运行截图1.png" alt="RayScan CLI 扫描过程" width="80%">
-  <br><em>RayScan CLI 实时扫描输出</em>
+  <br><em>RayScan CLI 实时扫描输出（本地靶场 <code>scripts/benchmark_lab.py</code>）</em>
 </p>
 
 <p align="center">
   <img src="images/cli运行截图2.png" alt="RayScan CLI 扫描结果" width="80%">
-  <br><em>RayScan CLI 扫描结果与漏洞详情</em>
+  <br><em>RayScan CLI 扫描报告 —— 漏洞列表与详情（SQL 注入 4 项检出）</em>
 </p>
 
 RayScan 在 **Metasploitable 2**（DVWA v1.0.7）靶机上的扫描结果：
