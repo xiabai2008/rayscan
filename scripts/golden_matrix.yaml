@@ -71,7 +71,9 @@ expectations:
       must_not_flag: ["/xss/reflected", "/safe/api", "/api/invoice"]
     xss:
       must_detect: ["/xss/reflected"]
-      must_not_flag: ["/safe/api", "/api/invoice", "/api/secure-invoice"]
+      # /rest/products/search 是 JSON API(Content-Type: application/json),参数反射进
+      # JSON 字符串值不构成 XSS —— 列为误报防线,固化 Content-Type 门禁(2026-10 修复)
+      must_not_flag: ["/safe/api", "/api/invoice", "/api/secure-invoice", "/rest/products/search"]
     cmdi:
       must_detect_any: ["/rce", "/cmdi"]  # cmdi 检出端点随平台 shell 语义不同(Win→/rce, Linux→/cmdi)
       must_not_flag: ["/xss/reflected", "/safe/api"]

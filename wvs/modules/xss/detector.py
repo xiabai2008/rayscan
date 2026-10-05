@@ -26,6 +26,56 @@ from .payloads import (
 
 logger = logging.getLogger("wvs.module.xss")
 
+# 可执行 HTML 的 Content-Type——只有这些响应里"反射即成立"(浏览器会解析为 HTML)。
+# JSON / 纯文本 / 二进制等响应中即便原样反射载荷,浏览器也不会当 HTML 执行,
+# 反射本身不构成 XSS(典型误报源:JSON API 把参数回显进响应体,如 REST 搜索接口)。
+_HTML_CONTENT_TYPES = (
+    "text/html",
+    "application/xhtml+xml",
+    "application/xhtml",
+    "text/xhtml",
+)
+
+# 无 Content-Type 时无法判定渲染语义——按保守处理视为可执行 HTML,
+# 避免因服务端省略该头导致漏报(宁可多查一次,不可漏报)。
+_NON_HTML_SUFFIX_TYPES = (
+    "application/json",
+    "text/json",
+    "application/javascript",
+    "text/javascript",
+    "application/xml",
+    "text/xml",
+    "text/plain",
+    "application/octet-stream",
+)
+
+
+def _content_type_allows_xss(headers: Optional[Dict[str, str]]) -> bool:
+    """响应是否可能被浏览器当作 HTML 解析(决定"反射"能否作为 XSS 证据)。
+
+    Args:
+        headers: 响应头字典(大小写不敏感读取)。
+
+    Returns:
+        True=可能按 HTML 渲染(反射有意义);False=JSON/纯文本等(反射不是 XSS)。
+    """
+    if not headers:
+        return True  # 无头信息 → 保守放行,避免漏报
+    ctype = ""
+    for k, v in headers.items():
+        if k.lower() == "content-type":
+            ctype = (v or "").lower()
+            break
+    if not ctype:
+        return True
+    mime = ctype.split(";", 1)[0].strip()
+    if any(mime.startswith(t) for t in _HTML_CONTENT_TYPES):
+        return True
+    if any(mime.startswith(t) for t in _NON_HTML_SUFFIX_TYPES):
+        return False
+    # 未知 MIME:带 +xml 的多为可解析类型,其余保守放行
+    return True
+
 
 @register_module
 class XSSDetector(DetectionModule):
@@ -315,7 +365,7 @@ class XSSDetector(DetectionModule):
             if resp is None:
                 continue
             resp_text = resp.get("text", "")[:20000]
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text, resp.get("headers"))
             if reflected:
                 self._explain(
                     "signal",
@@ -356,7 +406,7 @@ class XSSDetector(DetectionModule):
             if resp is None:
                 continue
             resp_text = resp.get("text", "")[:20000]
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text, resp.get("headers"))
             if reflected:
                 vuln = self._create_vuln(
                     url=url,
@@ -482,7 +532,7 @@ class XSSDetector(DetectionModule):
                 continue
 
             resp_text = resp.get("text", "")[:20000]
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text, resp.get("headers"))
 
             if reflected:
                 if self._is_echo_server(url, resp_text, payload):
@@ -534,7 +584,7 @@ class XSSDetector(DetectionModule):
                 continue
 
             resp_text = resp.get("text", "")[:20000]
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text, resp.get("headers"))
 
             if reflected:
                 if self._is_echo_server(url, resp_text, payload):
@@ -582,7 +632,7 @@ class XSSDetector(DetectionModule):
             resp_text = resp.get("text", "")[:20000]
 
             # DOM XSS characteristic: payload appears in response (possibly encoded)
-            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text)
+            reflected, evidence = self._check_reflection(resp_text, payload, baseline_text, resp.get("headers"))
             if reflected:
                 vuln = self._create_vuln(
                     url=url,
@@ -597,16 +647,33 @@ class XSSDetector(DetectionModule):
                 logger.warning(f"[XSS] DOM-based detected: {url}")
                 return
 
-    def _check_reflection(self, resp_text: str, payload: str, baseline_text: str) -> Tuple[bool, str]:
-        """
-        Detect if the payload is reflected (possibly in different encoding forms).
+    def _check_reflection(
+        self,
+        resp_text: str,
+        payload: str,
+        baseline_text: str,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Tuple[bool, str]:
+        """检测载荷是否被反射(可能经不同编码变形)。
 
         P9 fix: Guarantee evidence is never empty. Every return path
         now includes a specific evidence string describing what was found.
 
+        门禁内置于此(而非各调用点):非 HTML 响应(JSON API 等)里的反射不构成 XSS ——
+        放在函数内可保证新增调用路径不会绕过该防线。
+
+        Args:
+            resp_text: 响应体文本。
+            payload: 注入的 XSS 载荷。
+            baseline_text: 基线响应体(用于排除本来就存在的静态内容)。
+            headers: 响应头;提供时按 Content-Type 判定是否可能按 HTML 解析。
+
         Returns:
-            (is_reflected, evidence) — Whether reflected + detailed evidence (never empty on True)
+            (is_reflected, evidence) — 是否反射 + 具体证据(True 时永不为空)
         """
+        if not _content_type_allows_xss(headers):
+            return False, ""
+
         # 1. Payload appears verbatim in response AND not in baseline (strongest)
         if payload in resp_text and payload not in baseline_text:
             idx = resp_text.find(payload)
@@ -722,7 +789,7 @@ class XSSDetector(DetectionModule):
             resp_text = resp.get("text", "")[:20000]
 
             # P8: Use _check_reflection for consistent structural detection
-            reflected, _ = self._check_reflection(resp_text, verify_payload, baseline_text)
+            reflected, _ = self._check_reflection(resp_text, verify_payload, baseline_text, resp.get("headers"))
             if reflected:
                 logger.debug("[XSS] Verification successful: structural reflection detected")
                 return True
