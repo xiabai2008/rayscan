@@ -95,6 +95,8 @@ def main() -> int:
                     ["docker", "inspect", "--format", fmt, "rayscan-juiceshop"],
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=30,
                 )
                 tag = "digest" if "RepoDigests" in fmt else "image_id"

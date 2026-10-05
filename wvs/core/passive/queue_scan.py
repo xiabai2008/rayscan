@@ -84,6 +84,7 @@ async def scan_proxy_queue(scanner, session, endpoints, target_url: str, concurr
     sem = asyncio.Semaphore(max(1, int(concurrency)))
 
     async def verify_one(ep):
+        """对单个队列端点跑全模块定向验证(受信号量限流,模块异常不中断其他端点)。"""
         async with sem:
             ep_target = queue_endpoint_to_target(ep)
             for mod_name, module in list(scanner._modules.items()):

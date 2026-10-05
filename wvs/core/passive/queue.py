@@ -97,6 +97,7 @@ class ProxyCaptureQueue:
     # ─────────────────────────────────────────────────────────────
 
     def to_dict(self) -> Dict[str, Any]:
+        """队列序列化(schema 版本 + 目标过滤 + 端点列表),供落盘与 from-proxy 读取。"""
         return {
             "schema": PROXY_QUEUE_SCHEMA,
             "saved_at": datetime.now().isoformat(timespec="seconds"),
@@ -117,6 +118,7 @@ class ProxyCaptureQueue:
         }
 
     def save(self, path: Path) -> Path:
+        """原子落盘队列(Windows 下用 tmp + replace,避免半写文件)。"""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8", newline="\n") as f:

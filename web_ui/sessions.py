@@ -106,6 +106,7 @@ class ScanSession:
             self._log_handlers.append((lg, handler))
 
     def _teardown_log_capture(self) -> None:
+        """摘除日志钩子并恢复 propagate(防 handler 泄漏到后续扫描)。"""
         for lg, handler in self._log_handlers:
             try:
                 lg.removeHandler(handler)
@@ -163,6 +164,7 @@ class ScanSession:
         from_proxy_queue_path: Optional[Path] = None,
         on_finish: Optional[Callable[[Optional[ScanResult], float, Dict[str, Any]], None]] = None,
     ) -> None:
+        """启动被动代理(后台线程 + 独立事件循环);10s 内未就绪或出错则抛出。"""
         self._drain_queue()
         self.scanning = True
         self._start_time = time.time()
@@ -178,6 +180,7 @@ class ScanSession:
         self._thread.start()
 
     def stop(self) -> None:
+        """停止代理(线程安全地向事件循环投递 proxy.close 并 join 线程)。"""
         self.scanning = False
 
     def events(self):
@@ -194,6 +197,7 @@ class ScanSession:
 
     # ── 执行 ──
     def _worker(self, payload, config, modules, from_proxy_queue_path, on_finish) -> None:
+        """worker 线程主体:独立事件循环跑异步扫描;异常兜底并收尾(回调/摘钩子/发 done)。"""
         result: Optional[ScanResult] = None
         try:
             loop = asyncio.new_event_loop()
@@ -229,6 +233,7 @@ class ScanSession:
         modules: List[str],
         from_proxy_queue_path: Optional[Path],
     ) -> Optional[ScanResult]:
+        """组装 HTTPPool+WAVScanner,按需认证并启用登录态维持,执行扫描并产出 result 事件。"""
         if self._start_time is None:
             self._start_time = time.time()
         url = str(payload.get("url") or "")
@@ -314,6 +319,7 @@ class ScanSession:
         config: ConfigManager,
         queue_path: Optional[Path],
     ) -> Optional[ScanResult]:
+        """被动队列定向扫描:加载队列 → 域过滤 → gentle 限速 → 只扫捕获面端点(不重爬)。"""
         if not queue_path or not Path(queue_path).exists():
             self._log("ERROR", "没有可用的被动捕获队列")
             return None
@@ -341,9 +347,11 @@ class ScanSession:
 
     # ── 进度 / 日志 ──
     def _progress(self, pct: int) -> None:
+        """发一条进度事件(0-100 百分比)。"""
         self.queue.put(("progress", {"pct": pct}))
 
     def _progress_cb(self, module_name, done, total, pct):
+        """扫描器进度回调:按模块序号把模块内进度映射到全局 10-85% 区间。"""
         if not self.scanning:
             return
         if module_name in set(m.lower() for m in self._module_order):
@@ -372,6 +380,7 @@ class ScanSession:
             self.queue.put(("action", {"text": f"爬虫 {done}/{total} 页面"}))
 
     def _log(self, level: str, text: str) -> None:
+        """发一条日志事件到 SSE 队列。"""
         self.queue.put(("log", {"level": level, "text": text, "time": datetime.now().strftime("%H:%M:%S")}))
 
 
@@ -403,6 +412,7 @@ class PassiveProxySession:
         return target
 
     def start(self, options: Dict[str, Any]) -> None:
+        """启动被动代理(后台线程 + 独立事件循环);10s 内未就绪或出错则抛出。"""
         with self._lock:
             if self.running:
                 raise RuntimeError("被动代理已在运行")
@@ -426,6 +436,7 @@ class PassiveProxySession:
             raise RuntimeError(self.last_error)
 
     def _run(self) -> None:
+        """代理线程主体:建事件循环 → 启 PassiveProxy → serve_forever(取消/异常均落 last_error)。"""
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         try:
@@ -454,6 +465,7 @@ class PassiveProxySession:
                 pass
 
     def stop(self) -> None:
+        """停止代理(线程安全地向事件循环投递 proxy.close 并 join 线程)。"""
         with self._lock:
             proxy = self._proxy
             loop = self._loop
@@ -470,6 +482,7 @@ class PassiveProxySession:
         self.running = False
 
     def status(self) -> Dict[str, Any]:
+        """代理当前状态快照(运行标志/监听地址/目标域/TLS 开关/队列路径/错误)。"""
         proxy = self._proxy
         result = getattr(proxy, "result", None)
         queued = 0

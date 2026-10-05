@@ -57,6 +57,7 @@ class DOMXSSDetector(DetectionModule):
 
     @classmethod
     def get_info(cls) -> ModuleInfo:
+        """返回模块元数据(lite 类:默认关闭,需 Playwright)。"""
         return ModuleInfo(
             name="domxss",
             description="DOM XSS 检测 (headless Chromium hash 注入真实执行验证)",
@@ -75,9 +76,11 @@ class DOMXSSDetector(DetectionModule):
 
     @staticmethod
     def _available() -> bool:
+        """Playwright 是否可用(决定本模块能否运行)。"""
         return HAS_PLAYWRIGHT
 
     async def _scan_impl(self, target: ScanTarget) -> List[Vulnerability]:
+        """按预算逐个 URL 做 headless 验证(浏览器启动昂贵,故限次)。"""
         if not HAS_PLAYWRIGHT:
             return []
 

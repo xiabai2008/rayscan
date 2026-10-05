@@ -330,6 +330,7 @@ document.querySelectorAll('.section-header').forEach(h => {{
 </html>"""
 
     def _build_stats_html(self, result: ScanResult, stats: Dict[str, int]) -> str:
+        """渲染统计卡片区(总数 + 各级别计数)。"""
         total = len(result.vulnerabilities)
         parts = []
         for sev, cls in [
@@ -352,12 +353,14 @@ document.querySelectorAll('.section-header').forEach(h => {{
         return f'<div class="stats-grid">{"".join(parts)}</div>'
 
     def _group_by_severity(self, vulns: List[Vulnerability]) -> Dict[Severity, List[Vulnerability]]:
+        """按严重级别分组(固定 SEV_ORDER 键序,便于模板渲染)。"""
         groups: Dict[Severity, List[Vulnerability]] = {s: [] for s in SEV_ORDER}
         for v in vulns:
             groups[v.severity].append(v)
         return {k: v for k, v in groups.items() if v}
 
     def _build_vuln_sections(self, groups: Dict[Severity, List[Vulnerability]]) -> str:
+        """按级别分节渲染漏洞区块(CRITICAL 在前)。"""
         html_parts = []
         for sev in SEV_ORDER:
             vulns = groups.get(sev, [])
@@ -389,6 +392,7 @@ document.querySelectorAll('.section-header').forEach(h => {{
         return "\n".join(html_parts)
 
     def _build_vuln_row(self, v: Vulnerability, i: int) -> str:
+        """渲染单条漏洞行(可折叠详情,含证据/载荷/建议)。"""
         vuln_id = f"vuln-{v.type.value}-{i}"
         color_cls = v.severity.value.lower()
         badge_cls = f"badge-{color_cls}"
@@ -433,9 +437,11 @@ document.querySelectorAll('.section-header').forEach(h => {{
 </tr>"""
 
     def _build_vuln_rows(self, vulns: List[Vulnerability]) -> str:
+        """渲染漏洞表格所有行。"""
         return "\n".join(self._build_vuln_row(v, i) for i, v in enumerate(vulns))
 
     def _vuln_to_json(self, v: Vulnerability) -> Dict[str, Any]:
+        """漏洞 → 内嵌 JSON(供前端展开证据链)。"""
         return {
             "type": v.type.value,
             "title": v.title,

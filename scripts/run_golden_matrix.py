@@ -88,7 +88,15 @@ def scan_batch(port: int, modules: list, path: str = "/", extra_args=None, timeo
     ]
     if extra_args:
         cmd.extend(extra_args)
-    proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run(
+        cmd,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",  # 扫描输出含 emoji/中文,Windows 默认 GBK 解码会 UnicodeDecodeError 崩掉读取线程
+        errors="replace",
+        timeout=timeout,
+    )
     if not out.exists():
         raise RuntimeError(f"扫描未产出报告(端口 {port}): {proc.stdout[-500:] if proc.stdout else proc.stderr[-500:]}")
     data = json.loads(out.read_text(encoding="utf-8"))

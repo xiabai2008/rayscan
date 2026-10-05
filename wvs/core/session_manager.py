@@ -56,6 +56,7 @@ class SessionManager:
         authenticated: bool = True,
         session_duration: float = 3600.0,
     ):
+        """登记/覆盖一个 host 的会话状态(认证成功后调用)。"""
         state = SessionState(
             host=host,
             cookies=cookies.copy(),
@@ -72,10 +73,12 @@ class SessionManager:
         self._auth_providers[host] = provider
 
     def get_cookies(self, host: str) -> Dict[str, str]:
+        """取该 host 的 cookie 副本(防调用方就地修改破坏状态)。"""
         state = self._sessions.get(host)
         return state.cookies.copy() if state else {}
 
     def get_headers(self, host: str) -> Dict[str, str]:
+        """取该 host 的自定义请求头副本(认证态所需 header,如 Bearer)。"""
         state = self._sessions.get(host)
         return state.headers.copy() if state else {}
 
@@ -87,6 +90,7 @@ class SessionManager:
         return None
 
     def update_csrf_token(self, host: str, token_name: str, token_value: str):
+        """记录 CSRF token(多步流程中 token 会轮换,需随响应更新)。"""
         state = self._sessions.get(host)
         if state:
             state.csrf_token_name = token_name
@@ -221,17 +225,21 @@ class SessionManager:
         return None
 
     def is_authenticated(self, host: str) -> bool:
+        """该 host 会话是否处于已认证状态(不做网络探测)。"""
         state = self._sessions.get(host)
         return state is not None and state.authenticated
 
     def get_state(self, host: str) -> Optional[SessionState]:
+        """取该 host 的完整状态对象(含 CSRF/失败计数/过期时间)。"""
         return self._sessions.get(host)
 
     def remove_session(self, host: str):
+        """丢弃该 host 的会话状态与重登 provider。"""
         self._sessions.pop(host, None)
         self._auth_providers.pop(host, None)
 
     def get_stats(self) -> Dict[str, Any]:
+        """会话统计:活动会话数/已认证数/host 列表。"""
         return {
             "active_sessions": len(self._sessions),
             "authenticated": sum(1 for s in self._sessions.values() if s.authenticated),

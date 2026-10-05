@@ -237,7 +237,14 @@ def test_pack_and_curl_replay_reproduces_evidence(lab_url, tmp_path) -> None:
         curl_line = [ln for ln in replay_sh.splitlines() if ln.startswith("curl ")][0]
         argv = shlex.split(curl_line)
         assert argv[0] == "curl"
-        proc = subprocess.run([CURL, *argv[1:]], capture_output=True, text=True, timeout=60)
+        proc = subprocess.run(
+            [CURL, *argv[1:]],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",  # 靶场响应可能非 UTF-8(GBK/latin-1),避免解码崩测试
+            errors="replace",
+            timeout=60,
+        )
         body = proc.stdout
         vuln = next(v for v in result.vulnerabilities if v.id == entry["id"])
         if find_response_feature(vuln, body) is None:
@@ -249,7 +256,14 @@ def test_pack_and_curl_replay_reproduces_evidence(lab_url, tmp_path) -> None:
 def _replay_cmd(curl_cmd: str) -> str:
     argv = shlex.split(curl_cmd)
     assert argv[0] == "curl"
-    proc = subprocess.run([CURL, *argv[1:]], capture_output=True, text=True, timeout=60)
+    proc = subprocess.run(
+        [CURL, *argv[1:]],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",  # 靶场响应可能非 UTF-8(GBK/latin-1),避免解码崩测试
+        errors="replace",
+        timeout=60,
+    )
     return proc.stdout
 
 

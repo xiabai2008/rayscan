@@ -249,6 +249,7 @@ class ScannerIntegrationsMixin:
     # ── Progress helpers ────────────────────────────────────────
 
     def _print_header(self: "ScannerIntegrationsMixin", target: "ScanTarget") -> None:
+        """打印扫描头部横幅(目标/时间戳)。"""
         sep = "=" * 60
         print(f"\n{sep}")
         print("  RayScan 1.0 — Web Vulnerability Scanner")
@@ -258,6 +259,7 @@ class ScannerIntegrationsMixin:
         print(sep)
 
     def _print_progress(self: "ScannerIntegrationsMixin", done: int, total: int, phase: str) -> None:
+        """打印阶段进度条(百分比 + 当前阶段名)。"""
         if total == 0:
             pct = 0
         else:
@@ -272,6 +274,7 @@ class ScannerIntegrationsMixin:
             self._progress_callback(phase, done, total, pct)
 
     def _print_summary(self: "ScannerIntegrationsMixin", result: "ScanResult") -> None:
+        """打印扫描收尾摘要(端点数/请求数/各级别漏洞数)。"""
         sep = "=" * 60
         print(f"\n{sep}")
         print("  Scan complete")
@@ -290,6 +293,7 @@ class ScannerIntegrationsMixin:
         print(sep)
 
     def get_stats(self: "ScannerIntegrationsMixin") -> Dict[str, object]:
+        """汇总扫描统计字典(含各阶段计数与 errors)。"""
         stats = getattr(self, "_stats", {})
         return {
             **stats,

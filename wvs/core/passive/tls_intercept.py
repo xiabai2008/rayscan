@@ -62,6 +62,7 @@ class CertAuthority:
 
     @property
     def ca_cert_pem(self) -> bytes:
+        """取 CA 证书 PEM(懒初始化 ensure_ca 后可用,未初始化则抛错)。"""
         if self._ca_cert is None:
             raise RuntimeError("CA 尚未初始化,请先调用 ensure_ca()")
         return self._ca_cert.public_bytes(serialization.Encoding.PEM)
@@ -186,6 +187,7 @@ class CertAuthority:
 
     @staticmethod
     def _normalize_host(host: str) -> str:
+        """主机名归一化(小写/去尾点/去 IPv6 方括号)——SAN 与匹配键均依赖此形式。"""
         return host.lower().strip().rstrip(".").lstrip("[").rstrip("]")
 
 

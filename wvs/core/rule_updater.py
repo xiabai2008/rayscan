@@ -38,6 +38,7 @@ class RuleUpdateResult:
     message: str = ""
 
     def to_dict(self) -> dict:
+        """规则源更新结果序列化(名称/路径/是否 git/更新前后模板数/消息)。"""
         return {
             "name": self.name,
             "path": self.path,
@@ -136,6 +137,7 @@ class RuleUpdater:
             ext = cfg["ext"]
 
             def count(base=base, ext=ext) -> int:
+                """按扩展名递归统计规则目录内的模板文件数。"""
                 return len(list(base.rglob(f"*{ext}")))
 
             result.templates_before = count()

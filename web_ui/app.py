@@ -114,6 +114,7 @@ def _resolve_queue_out(raw) -> Path:
 
 @app.route("/")
 def index():
+    """首页(需鉴权):渲染单页 UI 并下发 CSRF token 与版本号。"""
     if not _is_authorized():
         return _redirect_to_login()
     return render_template("index.html", csrf_token=_get_or_create_csrf_token(), version=__version__)
@@ -121,6 +122,7 @@ def index():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    """Token 登录:GET 渲染登录页;POST 用 secrets.compare_digest 定时比较防时序侧信道。"""
     if request.method == "POST":
         submitted = (request.form.get("token") or "").strip()
         if submitted and secrets.compare_digest(submitted, API_TOKEN):
@@ -132,17 +134,20 @@ def login():
 
 @app.route("/logout")
 def logout():
+    """登出:清空 flask session 回登录页。"""
     session.clear()
     return _redirect_to_login()
 
 
 def _redirect_to_login():
+    """302 跳登录页。"""
     from flask import redirect, url_for
 
     return redirect(url_for("login"))
 
 
 def _redirect_to_index():
+    """302 跳首页。"""
     from flask import redirect, url_for
 
     return redirect(url_for("index"))
@@ -150,6 +155,7 @@ def _redirect_to_index():
 
 @app.route("/api/modules")
 def api_modules():
+    """GET 动态模块目录(供 UI 模块列表面板,非硬编码)。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     return jsonify({"modules": payloads.module_catalog()})
@@ -157,6 +163,7 @@ def api_modules():
 
 @app.route("/api/profiles", methods=["GET"])
 def api_profiles():
+    """GET profile 列表。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     return jsonify({"profiles": _profile_manager.list_profiles()})
@@ -164,6 +171,7 @@ def api_profiles():
 
 @app.route("/api/profiles/<name>", methods=["GET"])
 def api_profile_detail(name):
+    """GET 单个 profile 详情(含 builtin 标记,内置项禁止覆盖)。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     profile = _profile_manager.load_profile(name)
@@ -183,6 +191,7 @@ def api_profile_detail(name):
 
 @app.route("/api/profiles", methods=["POST"])
 def api_profile_save():
+    """POST 保存当前配置为新 profile(内置名 409 保护,名称白名单校验)。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     _require_csrf()
@@ -208,6 +217,7 @@ def api_profile_save():
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
+    """POST 发起扫描:应用 profile → 解析模块 → 校验认证/被动队列 → 起 ScanSession。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     _require_csrf()
@@ -239,6 +249,7 @@ def api_scan():
             return jsonify({"error": "没有可用的被动捕获队列，请先在「被动捕获」启动代理"}), 400
 
     def _on_finish(result, elapsed, _payload):
+        """扫描结束回调:把本次发现落进历史记录(供 dashboard/history 面板)。"""
         _record_scan(url, result.vulnerabilities if result else [], elapsed)
 
     scan_session.start(
@@ -253,6 +264,7 @@ def api_scan():
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    """POST 请求停止当前扫描。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     _require_csrf()
@@ -262,6 +274,7 @@ def api_stop():
 
 @app.route("/api/stream")
 def api_stream():
+    """GET SSE 流:订阅扫描事件(log/progress/found/result/done),禁用缓存与代理缓冲。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     return Response(
@@ -273,6 +286,7 @@ def api_stream():
 
 @app.route("/api/passive/start", methods=["POST"])
 def api_passive_start():
+    """POST 启动被动代理(target 必填防全量捕获,队列落 scan_reports/ 限目录)。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     _require_csrf()
@@ -309,6 +323,7 @@ def api_passive_start():
 
 @app.route("/api/passive/stop", methods=["POST"])
 def api_passive_stop():
+    """POST 停止被动代理并回传最终状态。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     _require_csrf()
@@ -321,6 +336,7 @@ def api_passive_stop():
 
 @app.route("/api/passive/status")
 def api_passive_status():
+    """GET 被动代理状态(前端 2s 轮询捕获统计)。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     return jsonify(passive_session.status())
@@ -328,6 +344,7 @@ def api_passive_status():
 
 @app.route("/api/export/<fmt>")
 def api_export(fmt):
+    """GET 导出最近一次结果(json/markdown/csv)。"""
     if not _is_authorized():
         return jsonify({"error": "未授权"}), 401
     result = scan_session._result

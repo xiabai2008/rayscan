@@ -41,6 +41,7 @@ class PassiveScanResult:
     errors: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
+        """代理运行统计快照(捕获数/入队端点数/已扫/漏洞/错误),供 UI 轮询与 CLI 收尾输出。"""
         return {
             "requests_captured": self.requests_captured,
             "endpoints_discovered": self.endpoints_discovered,
@@ -93,6 +94,7 @@ class PassiveProxy:
     # ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
+        """启动 asyncio 服务器(绑定 listen_host:listen_port);重复调用幂等。"""
         self._server = await asyncio.start_server(self._handle_connection, self.listen_host, self.listen_port)
         host, port = self._server.sockets[0].getsockname()
         logger.info("[Passive] 代理已启动: http://%s:%s (Ctrl+C 停止)", host, port)
@@ -106,12 +108,14 @@ class PassiveProxy:
             logger.warning("[Passive] TLS 拦截不可用,HTTPS 流量将仅隧道转发(不检测)")
 
     async def serve_forever(self) -> None:
+        """常驻服务直到 close()(未 start 则先启动)。"""
         if not self._server:
             await self.start()
         async with self._server:
             await self._server.serve_forever()
 
     async def close(self) -> None:
+        """关闭服务器并等待连接收尾(可重复调用)。"""
         if self._server:
             self._server.close()
             await self._server.wait_closed()
@@ -122,6 +126,7 @@ class PassiveProxy:
     # ─────────────────────────────────────────────────────────────
 
     async def _handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """单连接处理:解析请求头 → 目标域过滤 → 入队 → (可选)CONNECT 解密/隧道转发。"""
         try:
             # 读取请求行 + 请求头
             request_line = await reader.readline()
@@ -198,6 +203,7 @@ class PassiveProxy:
             await writer.drain()
 
             async def _pipe(r: asyncio.StreamReader, w: asyncio.StreamWriter) -> None:
+                """双向字节泵(keep-alive 需精确按 Content-Length/chunked/EOF 截断,故不能整块转发)。"""
                 try:
                     while True:
                         data = await r.read(self.buffer_size)

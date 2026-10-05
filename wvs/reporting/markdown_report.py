@@ -22,11 +22,13 @@ class MarkdownReporter:
     SEV_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 
     def generate(self, result: ScanResult, output_path: Path):
+        """生成 Markdown 报告并写入 output_path(自动建父目录)。"""
         content = self._build_markdown(result)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
 
     def _build_markdown(self, result: ScanResult) -> str:
+        """组装完整 Markdown 文本(头部元信息 + 统计表 + 逐条漏洞详情)。"""
         lines = [
             f"# 🔍 RayScan {__version__} 扫描报告",
             "",
@@ -71,6 +73,7 @@ class MarkdownReporter:
         return "\n".join(lines)
 
     def _build_severity_table(self, result: ScanResult) -> str:
+        """按 SEV_ORDER 渲染严重级别统计表(含 TOTAL 行)。"""
         lines = [
             "| 严重级别 | 数量 |",
             "|----------|------|",
@@ -82,6 +85,7 @@ class MarkdownReporter:
         return "\n".join(lines)
 
     def _build_vuln_section(self, v: Vulnerability, i: int) -> list:
+        """渲染单条漏洞的 Markdown 片段(属性表 + 描述/建议/参考)。"""
         badge_map = {
             "critical": "🔴 CRITICAL",
             "high": "🔴 HIGH",

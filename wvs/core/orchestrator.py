@@ -62,9 +62,11 @@ class ScanContext:
         self._data: Dict[str, Any] = {}  # 扩展数据
 
     def get(self, key: str, default: Any = None) -> Any:
+        """读扩展数据(Stage 间传递非标准字段的自定义通道)。"""
         return self._data.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
+        """写扩展数据。"""
         self._data[key] = value
 
 
@@ -76,6 +78,7 @@ class ScanOrchestrator:
         self.stages: List[ScanStage] = stages or []
 
     def add_stage(self, stage: ScanStage) -> None:
+        """追加一个 Stage 到流水线末尾(按添加顺序执行)。"""
         self.stages.append(stage)
 
     async def run(self, ctx: ScanContext) -> None:
