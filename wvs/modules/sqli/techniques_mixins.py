@@ -374,13 +374,13 @@ class SQLiTechniquesMixin:
 
         for i in range(1, min(col_count + 1, 6)):
             columns = ["NULL"] * col_count
-            columns[i - 1] = "'CLAUDE_MARKER'"
+            columns[i - 1] = "'RAYSCAN_MARKER'"
             payload = f"' UNION SELECT {','.join(columns)}--"
 
             test_params = self._inject_param(params, param_name, payload)
             resp = await self._send_request(method, url, test_params, param_type)
 
-            if resp and "CLAUDE_MARKER" in resp.get("text", ""):
+            if resp and "RAYSCAN_MARKER" in resp.get("text", ""):
                 column_types.append("string")
             else:
                 columns[i - 1] = "88888877"

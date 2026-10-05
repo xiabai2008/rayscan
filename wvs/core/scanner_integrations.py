@@ -11,6 +11,7 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Dict, List
 
+from .. import __version__
 from ..core.result_merger import ResultMerger
 from ..models import Vulnerability
 
@@ -252,7 +253,7 @@ class ScannerIntegrationsMixin:
         """打印扫描头部横幅(目标/时间戳)。"""
         sep = "=" * 60
         print(f"\n{sep}")
-        print("  RayScan 1.0 — Web Vulnerability Scanner")
+        print(f"  RayScan {__version__} — Web Vulnerability Scanner")
         print(f"  Target : {target.url}")
         profile_tag = f" [{getattr(self, '_lab_profile', None).name}]" if getattr(self, "_lab_profile", None) else ""
         print(f"  Modules: {', '.join(getattr(self, '_modules', {}).keys()) or 'none'}{profile_tag}")
