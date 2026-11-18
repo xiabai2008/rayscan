@@ -1,6 +1,6 @@
 # 检测模块说明
 
-RayScan 当前注册 **20 个检测模块**，分三个层级：`core`（默认加载）、`optional`（按需启用）、`lite`（`--all-modules` 启用）。
+RayScan 当前注册 **21 个检测模块**，分三个层级：`core`（默认加载）、`optional`（按需启用）、`lite`（`--all-modules` 启用）。
 
 > 分层由代码决定：`ModuleInfo.category`（`wvs/modules/base.py`），未显式标注的模块默认 `lite`。本文与 `wvs/modules/__init__.py` 的注册表保持同步，模块增删请同步更新。
 
@@ -10,14 +10,15 @@ RayScan 当前注册 **20 个检测模块**，分三个层级：`core`（默认�
 |------|------|---------|
 | 🟢 core | `sqli` `xss` | 默认加载 |
 | 🔵 optional | `jspathfinder` | 配置/参数启用 |
-| 🟡 lite | `cmdi` `lfi` `rce` `ssrf` `xxe` `api` `sensitive` `waf` `js_analysis` `oa` `subdomain` `weakpass` `webshell` `idor` `authbypass` `graphql` `mcp` | `--all-modules` |
+| 🟡 lite | `cmdi` `lfi` `rce` `ssrf` `xxe` `api` `sensitive` `waf` `js_analysis` `oa` `subdomain` `weakpass` `webshell` `idor` `authbypass` `graphql` `mcp` `domxss` | `--all-modules` |
 
 ## 模块清单
 
 | 模块 | category | 检测能力 | 覆盖 |
 |------|:--------:|----------|------|
 | `sqli` | core | SQL 注入 8 种：error / union / boolean-blind / time-based / stacked / 二阶 / 宽字节 / OOB | A03:2021 |
-| `xss` | core | 反射型 / 存储型 / Polyglot / mXSS / SSTI（DOM XSS 待 headless，见 Roadmap） | A03:2021 |
+| `xss` | core | 反射型 / 存储型 / Polyglot / mXSS / SSTI | A03:2021 |
+| `domxss` | lite | DOM XSS（Playwright headless 验证，`jsrender` extra） | A03:2021 |
 | `jspathfinder` | optional | JavaScript 端点发现 | — |
 | `oa` | lite | 12 种 OA/中间件专项：泛微/通达/金蝶/蓝凌/致远/用友/禅道/万户/Nacos/Spring/Jenkins/Confluence，三级检测链路 | 多类 |
 | `cmdi` | lite | 命令注入（多分隔符 + time-based 并发） | A03:2021 |
@@ -42,7 +43,6 @@ RayScan 当前注册 **20 个检测模块**，分三个层级：`core`（默认�
 每个 `detector.py` 在导入时通过 `@register_module` / `register_module()` 自动注册到 `ModuleFactory`，注册表是模块加载的**唯一事实源**：
 
 - `wvs.modules.register_all_modules()` — 遍历导入全部 detector，保证注册表完整
-- `wvs.modules.lite.register_lite_modules()` — 单独注册传统 Lite 十件套（cmdi/lfi/rce/ssrf/xxe/sensitive/api/waf/jspathfinder/js_analysis）
 - CLI 通过 `ModuleFactory.list_modules()` 展示模块（`python -m wvs list-modules`）
 
 ## 目录结构
@@ -51,7 +51,6 @@ RayScan 当前注册 **20 个检测模块**，分三个层级：`core`（默认�
 modules/
 ├── base.py                  # DetectionModule 基类 + ModuleFactory 注册表（category 默认 lite）
 ├── __init__.py              # 全量导入 + register_all_modules()
-├── lite/__init__.py         # Lite 子集注册入口
 ├── sqli/                    # detector / payloads / analyzer / techniques_mixins
 ├── xss/                     # detector / payloads / context_analyzer
 ├── oa/                      # detector（含 12 种内容指纹与规则级证据验证）
@@ -67,4 +66,4 @@ modules/
 ## 与 ROADMAP 的关系
 
 - `idor` / `authbypass` 为基础实现；深化方向（多角色对比等）已被 [ADR-0001](../adr/0001-oa-focused-repositioning.md) 冻结，维持现状不扩。
-- DOM XSS（headless 验证）、多引擎聚合、MSF 验证链：见 README Roadmap，均不在当前模块清单内。
+- DOM XSS 由 `domxss` 模块负责（headless 真实执行验证）；多引擎聚合 / MSF 验证链已移除或冻结，见 ADR-0002。

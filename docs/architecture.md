@@ -13,19 +13,15 @@ RayScan/
 │   ├── constants.py           # 全局常量
 │   ├── exceptions.py          # 异常体系
 │   ├── ai/                    # AI 误报复核（client / verifier / report，LLM_API_KEY）
-│   ├── mcp_server.py          # MCP Server（--serve，供 Claude/ChatGPT 调用 scan/list_modules/get_report）
+│   ├── mcp_server.py          # MCP Server（`wvs mcp`，供 Claude/ChatGPT 调用 scan/list_modules/get_report）
 │   ├── core/                  # 扫描引擎
 │   │   ├── scanner.py         # 主扫描器 WAVScanner（阶段编排 + 流式检测 + checkpoint）
 │   │   ├── orchestrator.py    # ScanOrchestrator（Stage 编排器）
 │   │   ├── stages.py          # Stage 实现（WAF / LabAuth / OADetection / Dedup）
 │   │   ├── crawler.py         # 爬虫引擎（+ crawler_parsers.py）
 │   │   ├── session.py         # HTTPPool 会话池（主链路）
-│   │   ├── session_manager.py # 会话生命周期管理（未接入主链路，待处置）
-│   │   ├── scheduler.py       # 任务调度器（未接入主链路，待处置）
-│   │   ├── cache.py           # 缓存系统
 │   │   ├── rate_limiter.py    # 速率限制（自动调节）
 │   │   ├── dedup.py           # 漏洞去重
-│   │   ├── encoding_bypass.py # 编码绕过
 │   │   ├── lab_profiles.py    # 靶机识别（DVWA/Mutillidae 等自动认证）
 │   │   ├── nuclei_template_manager.py  # Nuclei 模板索引/选择
 │   │   ├── poc_source_manager.py       # PoC 源管理
@@ -33,13 +29,13 @@ RayScan/
 │   │   ├── rule_updater.py    # 规则更新
 │   │   ├── oob/               # OOB 检测（dnslog / interactsh / oob_manager）
 │   │   └── passive/           # 被动扫描代理（proxy）
-│   ├── modules/               # 20 个检测模块（见 docs/modules.md）
+│   ├── modules/               # 21 个检测模块（见 docs/modules.md）
 │   ├── integrations/          # 第三方集成
 │   │   ├── nuclei_integration.py       # Nuclei（已接入主流程）
 │   │   ├── sqlmap_integration.py       # sqlmap（独立可用，未接入主流程）
 │   │   ├── ffuf_integration.py         # ffuf（同上）
 │   │   ├── wappalyzer_integration.py   # Wappalyzer（同上）
-│   │   └── awvs/nessus/msf_integration.py  # 商业引擎集成层（Roadmap，未接入）
+│   │   └── awvs/nessus_integration.py      # 商业引擎集成层（仅 multi 命令，未接入主扫描）
 │   ├── exploit/               # 漏洞利用模块（engine + ssrf/xss/xxe exploit）
 │   ├── reporting/             # 报告（console / html / json / csv / markdown）
 │   ├── profiles/              # 扫描 Profile（builtin + loader）
@@ -65,7 +61,7 @@ RayScan/
 │    ├─ Nuclei 阶段（CLI 可用走模板，否则内置回退）     │
 │    └─ Checkpoint（30s 落盘，--resume 恢复）         │
 ├──────────────────────────────────────────────────┤
-│         ModuleFactory 注册表（20 模块）             │  ← 检测层
+│         ModuleFactory 注册表（21 模块）             │  ← 检测层
 │   core: sqli/xss  ·  lite: oa/cmdi/lfi/…  ×18     │
 ├──────────────────────────────────────────────────┤
 │   Integrations: Nuclei(接入) / sqlmap/ffuf/…       │  ← 外部工具
@@ -103,5 +99,4 @@ Nuclei 阶段 ──────────────▶ Dedup 去重合并 �
 ## 已知架构债（详见 docs/TECH_DEBT.md 与 docs/CODE_AUDIT.md）
 
 - `cli.py` 承载过多业务编排（S6 计划下沉到 Stage）
-- `scheduler.py` / `session_manager.py` 未接入主链路
 - `modules/base.py` 职责过重（基类 + 注册表 + 检测辅助 + OOB + 统计）

@@ -2,20 +2,8 @@
 RayScan Core — scanner, crawler, session management, rate limiting, and caching.
 """
 
-from .cache import CacheManager, ScanCache, TargetFingerprinter, cache_scan, get_cached_scan
 from .crawler import DiscoveredEndpoint, WebCrawler
 from .dedup import ResultDeduplicator, prioritize_endpoints
-from .rate_limiter import AdaptiveRateLimiter, IntelligentRateLimiter, RateLimiter, WAFEvasion
-from .scanner import WAVScanner
-from .scheduler import PrioritizedTask, TaskPriority, TaskScheduler
-from .session import HTTPPool
-from .session_manager import SessionManager, SessionState
-
-try:
-    from .poc_generator import PoC, PoCGenerator
-except ImportError:
-    PoCGenerator = None
-    PoC = None
 from .lab_profiles import (
     ALL_PROFILES,
     DVWA_PROFILE,
@@ -42,35 +30,26 @@ from .poc_source_manager import (
     PoCSourceManager,
     get_poc_source_manager,
 )
+from .rate_limiter import AdaptiveRateLimiter, IntelligentRateLimiter, RateLimiter, WAFEvasion
 from .result_merger import (
     MergedVulnerability,
     ResultMerger,
     merge_and_display,
 )
+from .scanner import WAVScanner
+from .session import HTTPPool
 
 __all__ = [
     "HTTPPool",
     "WAVScanner",
     "WebCrawler",
     "DiscoveredEndpoint",
-    "ScanCache",
-    "CacheManager",
-    "TargetFingerprinter",
-    "cache_scan",
-    "get_cached_scan",
     "RateLimiter",
     "AdaptiveRateLimiter",
     "WAFEvasion",
     "IntelligentRateLimiter",
-    "TaskScheduler",
-    "TaskPriority",
-    "PrioritizedTask",
-    "SessionManager",
-    "SessionState",
     "ResultDeduplicator",
     "prioritize_endpoints",
-    "PoCGenerator",
-    "PoC",
     "LabProfile",
     "LabEndpoint",
     "detect_lab_profile",
