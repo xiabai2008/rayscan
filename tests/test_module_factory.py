@@ -169,6 +169,13 @@ class TestLiteMode:
             assert name in scanner._modules, name
             assert isinstance(scanner._modules[name], DetectionModule)
 
+    def test_enable_all_modules_helper_resolves_before_loading(self):
+        """CLI/MCP 共用入口：只置位不重算会仍停留在 core-only。"""
+        scanner = WAVScanner(ConfigManager(), HTTPPool(ConfigManager()))
+        scanner.enable_all_modules()
+        for name in EXPECTED_LITE:
+            assert name in scanner._modules, name
+
 
 class TestCLIBackwardCompat:
     """CLI 模块加载行为向后兼容（对应 wvs/cli.py 的 --modules / --all-modules / --no-modules）。"""

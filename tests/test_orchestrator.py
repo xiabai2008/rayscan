@@ -172,6 +172,65 @@ def test_resume_stage_noop_without_checkpoint() -> None:
     assert ctx.raw_vulns == []
 
 
+def test_resume_stage_preserves_checkpoint_modules_done() -> None:
+    """ResumeStage 不能清空旧 checkpoint 的 modules_done，否则二次 resume 丢跳过集。"""
+    from wvs.core.stages import ResumeStage
+
+    scanner = _make_scanner()
+    scanner.load_module("sqli")
+    scanner.load_module("xss")
+    scanner._resume_checkpoint = {"vulnerabilities": [], "modules_done": ["sqli", "xss"]}
+    ctx = ScanContext(scanner)
+
+    asyncio.run(ResumeStage(scanner).run(ctx))
+
+    assert scanner._modules_done == ["sqli", "xss"]
+    assert scanner._modules == {}
+
+
+def test_crawl_detect_stage_records_completed_modules() -> None:
+    """CrawlDetectStage 完成全部批次后应把模块写入 checkpoint 的 modules_done。"""
+    from wvs.core.crawler import DiscoveredEndpoint
+    from wvs.core.stages import CrawlDetectStage
+    from wvs.models import ScanTarget
+
+    scanner = _make_scanner()
+    ep = DiscoveredEndpoint(url="http://example.com/", method="GET", source_url="http://example.com/", source_depth=1)
+    _stub_crawler(scanner, [ep])
+    scanner.load_module("sqli")
+
+    async def fake_run_module(mod_name, target, batch, concurrency, global_sem):
+        return []
+
+    scanner._run_module_concurrent = fake_run_module
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+
+    asyncio.run(CrawlDetectStage(scanner).run(ctx))
+
+    assert scanner._modules_done == ["sqli"]
+
+
+def test_crawl_detect_stage_does_not_mark_modules_done_on_timeout() -> None:
+    """超时提前收敛时模块只跑了部分批次，不能标记为 done（否则 resume 会漏扫）。"""
+    from wvs.core.crawler import DiscoveredEndpoint
+    from wvs.core.stages import CrawlDetectStage
+    from wvs.models import ScanTarget
+
+    scanner = _make_scanner()
+    ep = DiscoveredEndpoint(url="http://example.com/", method="GET", source_url="http://example.com/", source_depth=1)
+    _stub_crawler(scanner, [ep])
+    scanner.load_module("sqli")
+    scanner._timeout_remaining = lambda: 0.0
+
+    ctx = ScanContext(scanner)
+    ctx.target = ScanTarget(url="http://example.com/")
+
+    asyncio.run(CrawlDetectStage(scanner).run(ctx))
+
+    assert scanner._modules_done == []
+
+
 def _stub_crawler(scanner, crawl_eps):
     """替换 scanner.crawler 为无网络 stub。"""
     from types import SimpleNamespace

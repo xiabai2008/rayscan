@@ -104,6 +104,20 @@ jobs:
       - name: ruff format check
         run: ruff format --check wvs/ tests/ web_ui/
 
+  package:
+    name: Wheel smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build backend
+        run: pip install build
+      - name: Build + install wheel in a clean venv
+        run: python scripts/wheel_smoke.py
+
   types:
     name: Types (mypy budget)
     runs-on: ubuntu-latest

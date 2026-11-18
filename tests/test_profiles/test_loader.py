@@ -1,3 +1,4 @@
+from wvs.config import ConfigManager
 from wvs.profiles import ProfileManager
 from wvs.profiles.builtin import BUILTIN_PROFILES
 
@@ -67,6 +68,23 @@ def test_get_profile_modules():
 
     enabled, disabled = manager.get_profile_modules("sqli-only")
     assert enabled == ["sqli"]
+
+
+def test_apply_to_config_maps_rate_to_max_rps():
+    """Profile 的 rate 必须落到 HTTPPool 实际读取的 max_requests_per_second。"""
+    manager = ProfileManager()
+    config = ConfigManager()
+    assert manager.apply_to_config(config, "gentle") is True
+    assert config.get("max_requests_per_second") == 3
+    assert config.get("rate") == 3
+
+
+def test_gentle_preset_declares_module_scope():
+    manager = ProfileManager()
+    enabled, disabled = manager.get_profile_modules("gentle")
+    assert "sqli" in enabled
+    assert "xss" in enabled
+    assert "oa" in disabled
 
 
 def test_builtin_profiles_all_have_required_fields():

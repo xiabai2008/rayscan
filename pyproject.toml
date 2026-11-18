@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rayscan"
-version = "2.3.0"
+version = "2.3.1"
 description = "RayScan — 开箱即用的 Web 漏洞扫描器 | SQLi/XSS/命令注入/LFI/SSRF/XXE/RCE/API安全 | 多引擎聚合(Nuclei/sqlmap/ffuf)+MSF验证链+Profile扫描配置 | CLI+Web UI双模式"
 readme = "README.md"
 license = {text = "MIT"}
@@ -93,6 +93,11 @@ Issues = "https://github.com/xiabai2008/rayscan/issues"
 where = ["."]
 include = ["wvs*", "web_ui*"]
 exclude = ["tests*", "docs*", "examples*"]
+
+# Runtime UI assets must ship in the wheel; otherwise `pip install rayscan`
+# leaves web_ui/templates missing (the source tree hides this bug).
+[tool.setuptools.package-data]
+web_ui = ["templates/*.html"]
 
 # 单一格式化器 = ruff-format（不再使用 black/isort，避免行宽/风格冲突）
 # T4: lint 配置与 CI 门禁统一（本地 = CI，避免 E402/E501 本地不一致）——

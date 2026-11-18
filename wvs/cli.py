@@ -277,6 +277,8 @@ def cmd_scan(args):
         console.print("[cyan][*] 可解释模式已启用（--explain）[/cyan]")
 
     # 处理 --preset 合规预设
+    preset_enabled: list = []
+    preset_disabled: list = []
     if hasattr(args, "preset") and args.preset:
         from .profiles import ProfileManager
 
@@ -288,8 +290,10 @@ def cmd_scan(args):
             )
             return 1
         manager.apply_to_config(config, args.preset)
+        preset_enabled, preset_disabled = manager.get_profile_modules(args.preset)
         console.print(
-            f"[cyan][*] 已应用预设 '{args.preset}': 速率 {config.get('rate', '?')} req/s, 深度 {config.get('crawl_depth', '?')}[/cyan]"
+            f"[cyan][*] 已应用预设 '{args.preset}': 速率 {config.get('max_requests_per_second', '?')} req/s, "
+            f"深度 {config.get('crawl_depth', '?')}, 模块 {preset_enabled or '默认'}[/cyan]"
         )
         if args.preset == "gentle":
             console.print(
@@ -386,21 +390,21 @@ def cmd_scan(args):
 
     # 加载指定模块
     if hasattr(args, "all_modules") and args.all_modules:
-        scanner._load_all_modules = True
-        # 重新解析启用模块列表：_enabled_modules 在 __init__ 时已按 core-only 解析，
-        # 直接 load_all_modules() 只会加载 core，需在此重算才能包含 lite 模块。
-        scanner._enabled_modules = scanner._resolve_enabled_modules()
-        scanner.load_all_modules()
+        scanner.enable_all_modules()
         console.print(f"[cyan][*] 加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
     elif args.modules:
         for mod in args.modules:
             scanner.load_module(mod)
+    elif preset_enabled:
+        for mod in preset_enabled:
+            scanner.load_module(mod)
+        console.print(f"[cyan][*] 按预设加载模块: {', '.join(scanner._modules.keys())}[/cyan]")
     else:
         scanner.load_all_modules()
 
-    # 过滤禁用的模块（--no-modules）
-    if hasattr(args, "disabled_modules") and args.disabled_modules:
-        disable_set = set(args.disabled_modules)
+    # 过滤禁用的模块（--no-modules / 预设 disabled）
+    disable_set = set(args.disabled_modules or []) | set(preset_disabled)
+    if disable_set:
         for mod_name in list(scanner._modules.keys()):
             if mod_name in disable_set:
                 del scanner._modules[mod_name]
@@ -633,8 +637,7 @@ def cmd_batch(args):
     session = HTTPPool(config)
     scanner = WAVScanner(config, session)
     if hasattr(args, "all_modules") and args.all_modules:
-        scanner._load_all_modules = True
-        scanner.load_all_modules()
+        scanner.enable_all_modules()
         console.print(f"[cyan][*] 批量加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
     else:
         scanner.load_all_modules()
@@ -1590,7 +1593,6 @@ def cmd_check_engines(args):
     from .integrations import (
         AWVSIntegration,
         FfufIntegration,
-        MetasploitIntegration,
         NessusIntegration,
         NucleiIntegration,
         SqlmapIntegration,
@@ -1605,7 +1607,6 @@ def cmd_check_engines(args):
         "sqlmap": SqlmapIntegration(config),
         "ffuf": FfufIntegration(config),
         "Wappalyzer": WappalyzerIntegration(config),
-        "Metasploit": MetasploitIntegration(config),
     }
 
     from rich.table import Table
@@ -1640,8 +1641,7 @@ def cmd_passive(args):
 
     # 模块加载
     if hasattr(args, "all_modules") and args.all_modules:
-        scanner._load_all_modules = True
-        scanner.load_all_modules()
+        scanner.enable_all_modules()
         console.print(f"[cyan][*] 被动扫描加载全部模块（含 lite）: {len(scanner._modules)} 个[/cyan]")
     elif hasattr(args, "modules") and args.modules:
         for mod in args.modules:

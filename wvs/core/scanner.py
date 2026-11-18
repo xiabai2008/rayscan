@@ -296,6 +296,17 @@ class WAVScanner(ScannerIntegrationsMixin):
         for name in self._enabled_modules:
             self.load_module(name)
 
+    def enable_all_modules(self) -> None:
+        """启用并加载 core + lite 模块（`--all-modules`）。
+
+        `_enabled_modules` 在 `__init__` 时已按 core-only 解析；仅把
+        `_load_all_modules` 置 True 再调用 `load_all_modules()` 仍会遍历旧列表，
+        导致 lite 模块永远不加载。这里统一重新解析，供 CLI/MCP 共用。
+        """
+        self._load_all_modules = True
+        self._enabled_modules = self._resolve_enabled_modules()
+        self.load_all_modules()
+
     def _endpoint_base_key(self, url: str, params: Dict) -> str:
         """
         端点去重键：相同路径+参数名视为一个端点
