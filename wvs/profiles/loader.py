@@ -111,7 +111,14 @@ class ProfileManager:
 
         params = profile.get("params", {})
         for key, value in params.items():
-            config_manager.set(key, value)
+            if key == "rate":
+                # Profiles kept the legacy `rate` name; HTTPPool consumes
+                # `max_requests_per_second`. Write both so display/back-compat
+                # still works while the scanner actually honours the preset.
+                config_manager.set("max_requests_per_second", value)
+                config_manager.set("rate", value)
+            else:
+                config_manager.set(key, value)
 
         return True
 

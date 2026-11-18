@@ -42,7 +42,15 @@ def apply_gentle_rate_cap(config: ConfigManager) -> int:
     if gentle_rate <= 0:
         gentle_rate = int(config.get("max_requests_per_second", 10) or 10)
         console.print(f"[yellow][!] gentle 预设不可用,联动速率回退默认上限 {gentle_rate} req/s[/yellow]")
-    current = int(config.get("rate", 10) or 10)
+    # `max_requests_per_second` is authoritative; `rate` is the legacy alias.
+    # Honour whichever is lower so an explicit `--rate 1` still wins.
+    current = int(config.get("max_requests_per_second", 10) or 10)
+    legacy_rate = config.get("rate")
+    if legacy_rate is not None:
+        try:
+            current = min(current, int(legacy_rate))
+        except (TypeError, ValueError):
+            pass
     effective = min(current, gentle_rate)
     config.set("rate", effective)
     config.set("max_requests_per_second", effective)

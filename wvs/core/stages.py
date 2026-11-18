@@ -125,6 +125,9 @@ class ResumeStage(ScanStage):
         resume_cp = getattr(scanner, "_resume_checkpoint", None)
         if not resume_cp:
             return
+        # Preserve modules completed by an earlier run so a second resume does
+        # not lose the skip set when CrawlDetectStage appends newly finished ones.
+        scanner._modules_done = list(dict.fromkeys(resume_cp.get("modules_done", [])))
         for vdict in resume_cp.get("vulnerabilities", []):
             try:
                 v = Vulnerability.from_dict(vdict)
@@ -132,7 +135,7 @@ class ResumeStage(ScanStage):
                 logger.info(f"[resume] 复用已发现漏洞: {v.url} ({v.type.value})")
             except Exception:  # noqa: BLE001
                 logger.debug("[resume] 反序列化漏洞失败,跳过")
-        skip_modules = set(resume_cp.get("modules_done", []))
+        skip_modules = set(scanner._modules_done)
         if skip_modules:
             logger.info(f"[resume] 跳过已完成模块: {sorted(skip_modules)}")
             for m in list(scanner._modules.keys()):
@@ -173,10 +176,11 @@ class CrawlDetectStage(ScanStage):
 
         all_endpoints: List[DiscoveredEndpoint] = []
         all_vulns = ctx.raw_vulns
+        # Snapshot after ResumeStage has removed modules completed by an earlier run.
+        module_names = list(scanner._modules.keys())
 
         async def _crawl_and_detect():
             """爬取+检测循环：爬一批，测一批"""
-            module_names = list(scanner._modules.keys())
             # 全局并发信号量:一次创建,跨模块共享,真正限制总并发(P2-4)
             concurrency = max(1, int(scanner.config.get("concurrent_endpoints", 10)))
             global_sem = asyncio.Semaphore(concurrency)
@@ -199,8 +203,10 @@ class CrawlDetectStage(ScanStage):
                             eps[i].parameters = ep.parameters or eps[i].parameters
                             eps[i].param_types = ep.param_types or eps[i].param_types
 
+                    timed_out = False
                     for batch_idx in range(0, len(eps), BATCH_SIZE):
                         if scanner._timeout_remaining() < 30:
+                            timed_out = True
                             break
                         batch = eps[batch_idx : batch_idx + BATCH_SIZE]
                         for mod_name in module_names:
@@ -224,6 +230,14 @@ class CrawlDetectStage(ScanStage):
                             scanner._try_save_checkpoint(target, all_vulns, eps)
                         except Exception as e:  # noqa: BLE001
                             logger.debug(f"[Scanner] checkpoint save failed: {e}")
+
+                    # Only mark modules as done after every batch finished. A
+                    # timeout break leaves the set untouched so --resume re-runs
+                    # modules that may have seen only part of the endpoint set.
+                    if not timed_out:
+                        completed = [m for m in module_names if m in scanner._modules]
+                        scanner._modules_done = list(dict.fromkeys([*scanner._modules_done, *completed]))
+                        scanner._try_save_checkpoint(target, all_vulns, eps)
 
             except Exception:
                 logger.exception("[Scanner] 爬取失败")

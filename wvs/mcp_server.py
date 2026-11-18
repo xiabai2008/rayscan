@@ -54,8 +54,7 @@ def _build_scanner():
 def _load_modules(scanner, modules: str, all_modules: bool) -> int:
     """按参数加载模块；返回加载数量。"""
     if all_modules:
-        scanner._load_all_modules = True
-        scanner.load_all_modules()
+        scanner.enable_all_modules()
     elif modules:
         for name in [m.strip() for m in modules.split(",") if m.strip()]:
             scanner.load_module(name)
