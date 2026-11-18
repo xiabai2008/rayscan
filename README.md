@@ -1,10 +1,10 @@
-# 🔬 RayScan 2.3.0
+# 🔬 RayScan 2.3.1
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-2.3.0-blue)
+![Version](https://img.shields.io/badge/Version-2.3.1-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![CI](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml/badge.svg)](https://github.com/xiabai2008/rayscan/actions/workflows/ci.yml)
 ![Tests](https://img.shields.io/badge/Tests-497%20collected-brightgreen)
@@ -22,7 +22,7 @@
 > 📈 **v2.3.0 新特性**：被动捕获→主动验证联动（passive --queue-out / scan --from-proxy）· 证据包导出（report --pack，含可复现 curl）· OA 规则外部化（rules/oa YAML）· Nuclei 模板策展 · Web UI 三能力入口（被动捕获 / Profile / 证据链）
 > 📈 **测试覆盖路线图**：当前 497 个测试集中在 SQLi/XSS/RCE/SSRF/OA 等核心检测器。
 > v2.0 新特性：OA专项检测 / WebShell / 弱口令 / 子域名枚举 / Nuclei 模板集成
-> 规划中（roadmap）：多引擎聚合（AWVS/Nessus 集成层已实现，待接入主流程）、Metasploit 验证链、DOM XSS（需 headless 验证）
+> 当前主线：OA 专项规则闭环 + 证据链 + 黄金矩阵。多引擎聚合 / MSF 验证链已移除（见 ADR-0002）；DOM XSS 由 `domxss` 模块提供（`jsrender` extra）。
 
 ```
 # 一条命令：自动分流靶机/实战，流式爬测协同
@@ -58,7 +58,7 @@ python web_ui/app.py
 | 模块 | 检测维度 | 层级 |
 |------|---------|:----:|
 | **SQL 注入** | 8种: error/union/boolean-blind/time-based/stacked/**二阶**/**宽字节**/**OOB** | 🟢 核心 |
-| **XSS** | 5种: reflected/stored/**Polyglot**/**mXSS**/**SSTI**（DOM XSS 待 headless 验证，见 Roadmap）| 🟢 核心 |
+| **XSS** | 5种: reflected/stored/**Polyglot**/**mXSS**/**SSTI**；DOM XSS 由 `domxss` 模块（headless）负责 | 🟢 核心 |
 | **OA 专项** | 12种: 泛微/通达/金蝶/蓝凌/致远/用友/禅道/万户/Nacos/Spring/Jenkins/Confluence | 🟡 Lite |
 | **WebShell** | 路径扫描 + 内容特征 + 启发式检测 | 🟡 Lite |
 | **弱口令** | 表单登录 + phpMyAdmin + Tomcat Manager | 🟡 Lite |
@@ -85,7 +85,7 @@ python web_ui/app.py
 - **流式检测** — 爬取即检测，不等全部爬完（30页实战 / 150页靶机）
 - **双路径自动分流** — 检测到靶机IP/路径则走靶机流程，否则走实战流程
 - **三层降噪** — 内容特征 + 尺寸聚类 + 校准匹配
-- **规划中** — 多引擎聚合（AWVS/Nessus/sqlmap 一键调度）、Metasploit 漏洞验证链
+- **聚焦** — OA 规则闭环与证据质量；多引擎/MSF 不再作为主线（ADR-0002）
 
 ## 🎯 新功能速览
 
@@ -137,12 +137,10 @@ python -m wvs scan https://target.com --no-nuclei
 python -m wvs scan https://target.com --resume
 ```
 
-### 🧭 规划中（Roadmap）
-以下能力已在 `wvs/integrations/` 实现集成层，但**尚未接入主扫描流程**，当前版本不生效：
-- **多引擎聚合** — AWVS / Nessus / sqlmap 一键调度 + 结果去重合并
-- **Metasploit 漏洞验证链** — MSF RPC 自动匹配 exploit 模块验证漏洞真实性
-
-接入完成后将随版本发布启用，详见 [技术演进规划](docs/audit/rayscan-evolution-plan-2026-07-12.md)。
+### 🧭 产品边界（ADR-0002）
+- 主线：中文 OA / 国产中间件专项检测 + Nuclei 兜底 + 证据包工作流。
+- Web UI / AI 复核 / MCP 作为可选能力（extras），不进入核心依赖。
+- 多引擎聚合（AWVS/Nessus/sqlmap/ffuf）与 MSF 验证链不再作为主线，相关死代码已移除。
 
 ## 🎯 靶机验证
 
@@ -410,7 +408,7 @@ asyncio.run(my_scan())
 RayScan/
 ├── wvs/                       # 核心扫描库
 │   ├── core/                  # 扫描引擎（scanner/orchestrator/stages/爬虫/会话/限速/OOB/被动代理）
-│   ├── modules/               # 18 个检测模块（sqli/xss/oa/webshell/weakpass/subdomain…）
+│   ├── modules/               # 21 个检测模块（sqli/xss/oa/webshell/weakpass/subdomain…）
 │   ├── integrations/          # 第三方集成（Nuclei/sqlmap/ffuf/AWVS…）
 │   ├── reporting/             # 报告（HTML/JSON/CSV/Markdown/Console）
 │   ├── profiles/              # 扫描配置 Profile
@@ -448,7 +446,7 @@ RayScan/
 | 版本 | 说明 |
 |------|------|
 | **RayScan 2.1** | **可解释检测 --explain / 被动扫描 passive / 一键演示 demo / 规则管理 rules / IDOR·越权·认证绕过 / gentle 合规预设 / ScanOrchestrator 编排层** |
-| **RayScan 2.0** | **全域升级版 — OA 专项 / WebShell / 弱口令 / 子域名 / Nuclei PoC**（多引擎聚合与 MSF 验证链规划中，见 Roadmap）|
+| **RayScan 2.0** | **全域升级版 — OA 专项 / WebShell / 弱口令 / 子域名 / Nuclei PoC**（多引擎聚合与 MSF 验证链已于 v2.3.1 移除，见 ADR-0002）|
 | **RayScan 1.0** | **正式开源版（基于 WVS v19.2）** |
 | WVS v19 / v19.2 | 扫描引擎重构，集成框架升级 |
 | WVS v18 / v18.4 | 高级检测模块 + 企业级扫描能力 |

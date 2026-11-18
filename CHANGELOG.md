@@ -5,11 +5,36 @@ All notable changes to RayScan (formerly WVS) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**443 collected**（2026-09-09，Orchestrator 迁移分支合并 master T3.3/T3.4 后）。
+> 📏 **数字口径说明**（自 2026-08-24 起）：对外引用的测试数以 CI `pytest --collect-only` 实测为准，不手写。下方历史条目中的测试数为**当时口径**，可能互相不一致，不作为当前状态的依据。当前实测：**497 collected**（2026-11-18，本地 Python 3.12）。
 
 ---
 
-## [Unreleased]
+## [2.3.1] - 2026-11-18
+
+### Fixed — 三个真实回归
+
+- **`--resume` 跳过已完成模块失效**：v2.2 编排器 Stage 迁移丢失 `_modules_done.append`，checkpoint 的 `modules_done` 恒为空。`CrawlDetectStage` 现在只有在全部批次完成后才标记模块；超时提前收敛不标记；`ResumeStage` 保留旧 checkpoint 的跳过集，二次 resume 不丢状态。
+- **`gentle` 预设实际不限速**：Profile 使用遗留键 `rate`，而 `HTTPPool` 读取 `max_requests_per_second`。`ProfileManager.apply_to_config()` 现在同时写入两者；`--preset` 也会应用 Profile 的 `modules.enabled/disabled`。实测 `gentle` = 3 req/s。
+- **`batch/passive/mcp --all-modules` 只加载 core**：新增 `WAVScanner.enable_all_modules()` 统一“置位 + 重新解析 + 加载”，四条入口共用，消除只置位不重算的静默空转。
+
+### Removed — v19.2 / 未接线资产
+
+- 四个 v19 子系统：`core/scheduler.py`、`core/session_manager.py`、`core/cache.py`、`core/encoding_bypass.py`（含 `wvs.core` 导出）。
+- `modules/waf/bypass_payloads.py`（WAF detector 自带签名，未引用）。
+- `modules/lite/`（`register_lite_modules()` 从未被调用）。
+- `integrations/msf_integration.py`（仅 `check-engines` 探活，无扫描路径）。
+- 一次性脚本与个人路径工具：`scripts/fix_*.py`、`_scan_ports.py`、`check_paths.py`、`check_security.py`、`init_dvwa.py`、`scan_dvwa.py`、`scan_k*.py`、`scan_metasploitable2.py`、`set_dvwa_low.py`、`batch_scan_5targets.py`、`analyze_report.py`、`tools/tools/version_backup.py`。
+
+### Added — 架构门禁与发布 smoke
+
+- `tests/test_architecture.py`：禁止 `wvs/core` 依赖 optional 层；已删除的 v19 模块不得复活；模块元数据校验；`--all-modules` 回归；CLI 行数预算（interim 1800）。
+- `scripts/wheel_smoke.py` + CI `Wheel smoke` job：构建 wheel、检查 `web_ui/templates` 是否进包、在全新 venv 安装并运行 `python -m wvs version`。
+- `pyproject.toml` 增加 `web_ui` package-data，修复 `pip install rayscan` 后模板缺失。
+
+### Docs
+
+- 新增 `docs/adr/0002-product-boundary-and-optional-capabilities.md`（Proposed）：明确 Web UI / AI / MCP / Exploit / 多引擎的边界。
+- 同步 `docs/architecture.md`、`docs/modules.md`、`README.md` 的模块数与已移除能力。
 
 ### Added — v2.3 T3.5 Web UI 对齐 CLI（passive / explain / profile 三能力入口）
 
