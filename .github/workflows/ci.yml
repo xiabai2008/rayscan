@@ -71,8 +71,16 @@ jobs:
           python-version: '3.12'
       - name: Install pip-audit
         run: pip install pip-audit
-      - name: Audit locked dependencies
-        run: pip-audit -r requirements.lock.txt
+      - name: Build runtime-only requirements
+        # requirements.lock.txt is a full dev freeze (uv/virtualenv/pre-commit),
+        # which is noisy and does not represent what users install. Audit the
+        # runtime dependency set resolved from pyproject.toml instead.
+        run: |
+          python -m venv /tmp/rayscan-audit
+          /tmp/rayscan-audit/bin/pip install --disable-pip-version-check .
+          /tmp/rayscan-audit/bin/pip freeze | grep -v '^rayscan' > /tmp/runtime-requirements.txt
+      - name: Audit runtime dependencies
+        run: pip-audit -r /tmp/runtime-requirements.txt
 
   hygiene:
     name: Repo hygiene
